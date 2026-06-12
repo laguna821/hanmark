@@ -66,19 +66,19 @@ export class HwpSaveReportModal extends Modal {
 
     if (this.args.generateFull) {
       const genWrap = contentEl.createDiv();
-      genWrap.style.marginTop = "14px";
-      genWrap.style.paddingTop = "12px";
-      genWrap.style.borderTop = "1px solid var(--background-modifier-border)";
+      genWrap.setCssStyles({
+        marginTop: "14px",
+        paddingTop: "12px",
+        borderTop: "1px solid var(--background-modifier-border)"
+      });
       const hint = genWrap.createEl("p", {
         text: "추가·구조 변경 내용까지 반영하려면 (원본 서식 대신 kordoc 기본 서식으로 새 파일 생성):"
       });
-      hint.style.fontSize = "0.9em";
-      hint.style.opacity = "0.8";
+      hint.setCssStyles({ fontSize: "0.9em", opacity: "0.8" });
       const genBtn = genWrap.createEl("button", { text: "➕ 추가 내용까지 넣어 새 한글 파일로 저장" });
       genBtn.classList.add("mod-cta");
       const resultEl = genWrap.createEl("p");
-      resultEl.style.fontSize = "0.9em";
-      resultEl.style.marginTop = "8px";
+      resultEl.setCssStyles({ fontSize: "0.9em", marginTop: "8px" });
       genBtn.onclick = async () => {
         const original = genBtn.textContent || "";
         genBtn.disabled = true;
@@ -104,7 +104,7 @@ export class HwpSaveReportModal extends Modal {
     }
 
     const row = contentEl.createDiv();
-    row.style.marginTop = "14px";
+    row.setCssStyles({ marginTop: "14px" });
     if (this.args.outputPath) {
       const open = row.createEl("button", { text: "📂 폴더에서 보기" });
       open.classList.add("mod-cta");
@@ -117,7 +117,7 @@ export class HwpSaveReportModal extends Modal {
       };
     }
     const close = row.createEl("button", { text: "닫기" });
-    close.style.marginLeft = "8px";
+    close.setCssStyles({ marginLeft: "8px" });
     close.onclick = () => this.close();
   }
 

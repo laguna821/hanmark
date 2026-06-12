@@ -60,7 +60,7 @@ export default class HwpWriterV2Plugin extends LegacyPlugin {
         // save-hwp-roundtrip 명령과 소스는 유지(추후 재개). 내보내기 버튼은 건드리지 않음.
         if (label === LABEL_SAVE) {
           (btn as any).__hwpGatewayWired = true;
-          (btn as HTMLElement).style.display = "none";
+          (btn as HTMLElement).setCssStyles({ display: "none" });
           return;
         }
 

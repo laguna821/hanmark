@@ -99,7 +99,7 @@ function confirm(app: App, title: string, message: string, yesText: string, noTe
     m.titleEl.setText(title);
     message.split("\n").forEach((line) => m.contentEl.createEl("p", { text: line }));
     const row = m.contentEl.createDiv();
-    row.style.marginTop = "12px";
+    row.setCssStyles({ marginTop: "12px" });
     const yes = row.createEl("button", { text: yesText });
     yes.classList.add("mod-cta");
     yes.onclick = () => {
@@ -107,7 +107,7 @@ function confirm(app: App, title: string, message: string, yesText: string, noTe
       m.close();
     };
     const no = row.createEl("button", { text: noText });
-    no.style.marginLeft = "8px";
+    no.setCssStyles({ marginLeft: "8px" });
     no.onclick = () => {
       finish(false);
       m.close();
