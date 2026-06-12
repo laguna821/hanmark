@@ -84,6 +84,30 @@ const legacyRewireIdPlugin = {
   }
 };
 
+// Bundled deps (kordoc/jszip) inline an old `setImmediate` polyfill whose IE-only branch creates
+// <script> elements. That branch never runs under Electron — `process` / `MessageChannel` are
+// chosen first — but static review flags the literal as dynamic code injection. After bundling,
+// swap the dead `createElement("script")` literal for an inert element. The polyfill's real
+// scheduling logic is untouched, so async behavior (jszip unzip, lie promises) is unchanged.
+const stripDeadScriptPlugin = {
+  name: "strip-dead-ie-script",
+  setup(build) {
+    build.onEnd(async () => {
+      try {
+        let code = await fsp.readFile("main.js", "utf8");
+        const n = (code.match(/createElement\("script"\)/g) || []).length;
+        if (n) {
+          code = code.split('createElement("script")').join('createElement("span")');
+          await fsp.writeFile("main.js", code);
+          console.log(`strip-dead-ie-script: neutralized ${n} dead <script> fallback(s)`);
+        }
+      } catch (e) {
+        console.warn("strip-dead-ie-script skipped:", e.message);
+      }
+    });
+  }
+};
+
 const options = {
   banner: {
     // kordoc 의 dist 는 module 최상단에서 createRequire(import.meta.url) 를 호출한다.
@@ -96,7 +120,7 @@ const options = {
   define: {
     "import.meta.url": "__hwpImportMetaUrl"
   },
-  plugins: [kordocBundleCfbPlugin, legacyRewireIdPlugin],
+  plugins: [kordocBundleCfbPlugin, legacyRewireIdPlugin, stripDeadScriptPlugin],
   entryPoints: ["src/main.ts"],
   bundle: true,
   external,

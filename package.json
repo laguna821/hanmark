@@ -1,6 +1,6 @@
 {
   "name": "hanmark",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Bidirectional bridge between Korean word-processor documents and Markdown notes (kordoc import + template export).",
   "main": "main.js",
   "scripts": {
