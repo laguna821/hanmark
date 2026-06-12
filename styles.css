@@ -1,0 +1,1053 @@
+/* ================================================================
+   HWP Writer — Obsidian Plugin Styles
+   마크다운ㅎ글 스타일을 Obsidian에 맞게 구현
+   ================================================================ */
+
+/* ── 변수 ── */
+:root {
+  --hwp-primary: #1a73e8;
+  --hwp-primary-hover: #1557b0;
+  --hwp-toolbar-bg: #38a9ff;
+  --hwp-toolbar-edge: var(--hwp-primary);
+  --hwp-toolbar-border: var(--background-modifier-border);
+  --hwp-toolbar-btn-border: #004d99;
+  --hwp-toolbar-btn-hover: var(--background-modifier-hover);
+  --hwp-toolbar-btn-active: var(--interactive-accent);
+  --hwp-toolbar-btn-text: var(--text-normal);
+  --hwp-toolbar-logo-size: clamp(24px, 3vw, 40px);
+  --hwp-toolbar-logo-gap: clamp(4px, 0.6vw, 10px);
+  --hwp-toolbar-logo-right: clamp(8px, 1.2vw, 16px);
+  --hwp-toolbar-logo-top: clamp(3px, 0.5vw, 7px);
+  --hwp-paper-bg: #ffffff;
+  --hwp-paper-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --hwp-paper-border: #d0d0d0;
+}
+
+.theme-dark {
+  --hwp-paper-bg: #f8f8f8;
+  --hwp-paper-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --hwp-paper-border: #555;
+}
+
+/* ================================================================
+   HWP TOOLBAR — 마크다운 에디터 내부에 삽입되는 DOM 툴바
+   ================================================================ */
+
+.hwp-toolbar-container {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--hwp-toolbar-bg);
+  border-bottom: 2px solid var(--hwp-toolbar-edge);
+  padding: 2px 6px;
+  padding-right: calc(
+    (var(--hwp-toolbar-logo-size) * 2) +
+    var(--hwp-toolbar-logo-gap) +
+    var(--hwp-toolbar-logo-right) +
+    12px
+  );
+  flex-shrink: 0;
+  user-select: none;
+  min-height: unset !important;
+}
+
+.hwp-toolbar-container::before,
+.hwp-toolbar-container::after {
+  content: "";
+  position: absolute;
+  top: var(--hwp-toolbar-logo-top);
+  width: var(--hwp-toolbar-logo-size);
+  height: var(--hwp-toolbar-logo-size);
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.hwp-toolbar-container::before {
+  right: calc(
+    var(--hwp-toolbar-logo-right) +
+    var(--hwp-toolbar-logo-size) +
+    var(--hwp-toolbar-logo-gap)
+  );
+  background-image: var(--hwp-toolbar-logo-hwp, url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2IiB2ZXJzaW9uPSIyLjAiIHZpZXdCb3g9IjAgMCAyNTYgMjU2Ij48cGF0aCBmaWxsPSIjOThEMEY1IiBkPSJNMTI4IDI0Ny45OWg5OC4xODJjMTIuMDUgMCAyMS44MTgtOS43NjggMjEuODE4LTIxLjgxOHYtMzguMTlIMTI4djYwLjAwOFoiLz48cGF0aCBmaWxsPSJ1cmwoI2EpIiBkPSJNMTI4IDE4OC4wMjZoMTIwdi02MC4wMDhIMTI4djYwLjAwOFoiLz48cGF0aCBmaWxsPSJ1cmwoI2IpIiBkPSJNMTI4IDEyOC4wMDhoMTIwVjY4SDEyOHY2MC4wMDhaIi8+PHBhdGggZmlsbD0idXJsKCNjKSIgZD0iTTEyOCA2OC4wMDhoMTIwdi0zOC4xOUMyNDggMTcuNzY4IDIzOC4yMzIgOCAyMjYuMTgyIDhIMTI4djYwLjAwOFoiLz48cGF0aCBmaWxsPSJ1cmwoI2QpIiBkPSJNMTI4IDI0OFY4aDQzLjYzN2MtMy4xMzUgMTguMzItMTAuNTIzIDYzLjY4MS0xNS44NTkgMTEzLjc3LTUuNjY3IDUzLjE4OS04LjI1MSAxMDcuOS05LjAxIDEyNi4yM0gxMjhaIi8+PHBhdGggZmlsbD0idXJsKCNlKSIgZD0iTTM4LjU0NSA4SDEyOHYyNDBIMzguNTQ2Yy04LjEyMiAwLTEyLjE4MyAwLTE1LjQ3LTEuMDY4YTIxLjgxOCAyMS44MTggMCAwIDEtMTQuMDA4LTE0LjAwOUM4IDIyOS42MzcgOCAyMjUuNTc3IDggMjE3LjQ1NFYzOC41NDVjMC04LjEyMiAwLTEyLjE4MyAxLjA2OC0xNS40NjlBMjEuODE5IDIxLjgxOSAwIDAgMSAyMy4wNzYgOS4wNjhDMjYuMzYzIDggMzAuNDI0IDggMzguNTQ2IDhaIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEwNC40NSA1Ni44MjRINzQuMjY5Yy4xMTktMS41MDYuMjM4LTQuMDg0LjIzOC03LjIxN3YtNy4xaC0xMi45N3Y3LjFjMCAzLjEzMy4xNiA1LjcxLjIzOSA3LjIxN0gzMS41NTVWNjkuMDRoMTUuMDNjLTQuODc3IDMuNjEtNy40OTUgOS41OTktNy40OTUgMTcuMTM0IDAgMTQuNDc2IDExLjUwMiAyNi4zMzQgMjguOTEyIDI2LjMzNCAxNy40MSAwIDI4LjkxMy0xMS44MTkgMjguOTEzLTI2LjMzNCAwLTcuNTc1LTMuMDE0LTEzLjc2My03LjQ5Ni0xNy4xMzRoMTUuMDMxVjU2LjgyNFptLTM2LjQ0OCA0My41MDhjLTkuMzk5IDAtMTUuOTQzLTcuMzM4LTE1Ljk0My0xNS45ODMgMC04LjY0NiA2LjU0NC0xNS45ODQgMTUuOTQzLTE1Ljk4NCA5LjQgMCAxNS45NDMgNy4zMzggMTUuOTQzIDE1Ljk4NCAwIDguNjQ1LTYuNTQzIDE1Ljk4My0xNS45NDMgMTUuOTgzWiIvPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iYSIgeDE9IjE4OCIgeDI9IjE4OCIgeTE9IjE4OC4wMjYiIHkyPSIxMjguMDE4IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iIzM3QTVGQSIvPjxzdG9wIG9mZnNldD0iMC4xMTUwMTUiIHN0b3AtY29sb3I9IiM0MkFERkYiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iYiIgeDE9IjE4OCIgeDI9IjE4OCIgeTE9IjEyOC4wMDgiIHkyPSI2OCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiMwMDdCRDkiLz48c3RvcCBvZmZzZXQ9IjAuMTI1MjY3IiBzdG9wLWNvbG9yPSIjMDA4MkU1Ii8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImMiIHgxPSIxODgiIHgyPSIxODgiIHkxPSI2OC4wMDkyIiB5Mj0iOC4wMDExMSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiMwMDQ1OEEiLz48c3RvcCBvZmZzZXQ9IjAuMTE0Njg5IiBzdG9wLWNvbG9yPSIjMDA0RDk5Ii8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImQiIHgxPSIxMzAuNjgzIiB4Mj0iMTU2Ljg0OSIgeTE9IjcwLjYwODYiIHkyPSI3My4yMzI5IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1vcGFjaXR5PSIwLjQ5Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLW9wYWNpdHk9IjAiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0iZSIgeDE9IjY4IiB4Mj0iNjgiIHkxPSI4IiB5Mj0iMjQ4IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iIzQyQURGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzMzQTdGRiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjwvc3ZnPg=="));
+}
+
+.hwp-toolbar-container::after {
+  right: var(--hwp-toolbar-logo-right);
+  background-image: var(--hwp-toolbar-logo-word, url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciICB2aWV3Qm94PSIwIDAgNDggNDgiIHdpZHRoPSIxNDRweCIgaGVpZ2h0PSIxNDRweCIgYmFzZVByb2ZpbGU9ImJhc2ljIj48cGF0aCBmaWxsPSIjMjgzNTkzIiBkPSJNOSwzMy41OTVsMTQuOTExLTE4LjcwNkw0MSwyNnYxMy4zMDZDNDEsNDEuMzQ2LDM5LjM0Niw0MywzNy4zMDYsNDNIMTUuMzMyCUMxMS44MzUsNDMsOSw0MC4xNjQsOSwzNi42NjdDOSwzNi42NjcsOSwzMy41OTUsOSwzMy41OTV6Ii8+PGxpbmVhckdyYWRpZW50IGlkPSJxaDJMVDV0ZWhSREZrTExmYi1vZFdhIiB4MT0iOSIgeDI9IjMzLjUwNiIgeTE9IjM2NC40NDUiIHkyPSIzNjQuNDQ1IiBncmFkaWVudFRyYW5zZm9ybT0idHJhbnNsYXRlKDAgLTMzOS44OSkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM2NmMwZmYiLz48c3RvcCBvZmZzZXQ9Ii4yNiIgc3RvcC1jb2xvcj0iIzAwOTRmMCIvPjwvbGluZWFyR3JhZGllbnQ+PHBhdGggZmlsbD0idXJsKCNxaDJMVDV0ZWhSREZrTExmYi1vZFdhKSIgZD0iTTksMjAuMjA4YzAtMi42MjQsMi4xMjYtNC43NSw0Ljc0OS00Ljc1aDIxLjg1N0w0MSwxMi43Nzh2MTMuNTI3CUM0MSwyOC4zNDYsMzkuMzQ2LDMwLDM3LjMwNiwzMEgxNS4zMzJDMTEuODM1LDMwLDksMzIuODM2LDksMzYuMzMzTDksMjAuMjA4TDksMjAuMjA4eiIvPjxwYXRoIGZpbGw9IiMxZTg4ZTUiIGZpbGwtb3BhY2l0eT0iLjYiIGQ9Ik05LDIwLjIwOGMwLTIuNjI0LDIuMTI2LTQuNzUsNC43NDktNC43NWgyMS44NTdMNDEsMTIuNzc4djEzLjUyNwlDNDEsMjguMzQ2LDM5LjM0NiwzMCwzNy4zMDYsMzBIMTUuMzMyQzExLjgzNSwzMCw5LDMyLjgzNiw5LDM2LjMzM0w5LDIwLjIwOEw5LDIwLjIwOHoiLz48cGF0aCBmaWxsPSIjMDBlNWZmIiBkPSJNOSwxMC4zMzNDOSw2LjgzNiwxMS44MzUsNCwxNS4zMzIsNGgyMS45NzVDMzkuMzQ2LDQsNDEsNS42NTQsNDEsNy42OTR2NS42MTEJQzQxLDE1LjM0NiwzOS4zNDYsMTcsMzcuMzA2LDE3SDE1LjMzMkMxMS44MzUsMTcsOSwxOS44MzYsOSwyMy4zMzNDOSwyMy4zMzMsOSwxMC4zMzMsOSwxMC4zMzN6Ii8+PHBhdGggZmlsbD0iIzE1NjVjMCIgZD0iTTcuNSwyM2gxMGMxLjkzMywwLDMuNSwxLjU2NywzLjUsMy41djEwYzAsMS45MzMtMS41NjcsMy41LTMuNSwzLjVoLTEwQzUuNTY3LDQwLDQsMzguNDMzLDQsMzYuNQl2LTEwQzQsMjQuNTY3LDUuNTY3LDIzLDcuNSwyM3oiLz48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMTguMzI3LDI2LjY0M2wtMi4wOTIsOS43MTNsLTIuNTAxLDAuMDAyTDEyLjUsMzAuNTI5bC0xLjI5Myw1LjgyOUg4LjY4M2wtMi4wMS05LjcxM2gyLjA2MglsMS4yNCw2LjQxbDEuMjMyLTYuNDFoMi41MjhsMS4yOTEsNi40MWwxLjIxLTYuNDFMMTguMzI3LDI2LjY0M0wxOC4zMjcsMjYuNjQzeiIvPjwvc3ZnPg=="));
+}
+
+.hwp-toolbar-main,
+.hwp-toolbar-format {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  min-height: 32px;
+  padding: 2px 0;
+}
+
+.hwp-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.hwp-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--hwp-toolbar-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* 툴바 버튼 */
+.hwp-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 2px 6px;
+  border: 2px solid var(--hwp-toolbar-btn-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--hwp-toolbar-btn-text);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+
+.hwp-toolbar-btn:hover {
+  background: var(--hwp-toolbar-btn-hover);
+}
+
+.hwp-toolbar-btn:active {
+  background: var(--hwp-toolbar-btn-active);
+  color: white;
+}
+
+.hwp-toolbar-btn.is-active {
+  background: var(--hwp-primary);
+  color: white;
+}
+
+.hwp-toolbar-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.hwp-toolbar-btn-label {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: -0.3px;
+}
+
+/* 드롭다운 메뉴 */
+.hwp-toolbar-menu {
+  position: relative;
+}
+
+.hwp-toolbar-menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 170px;
+  max-width: 280px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 2px solid var(--hwp-toolbar-btn-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+}
+
+.hwp-toolbar-menu.is-open .hwp-toolbar-menu-panel {
+  display: flex;
+}
+
+.hwp-toolbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--hwp-toolbar-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+}
+
+.hwp-toolbar-menu-item:hover {
+  background: var(--hwp-toolbar-btn-hover);
+}
+
+.hwp-toolbar-menu-item:active {
+  background: var(--hwp-toolbar-btn-active);
+  color: white;
+}
+
+.hwp-toolbar-menu-divider {
+  height: 1px;
+  background: var(--hwp-toolbar-border);
+  margin: 4px 0;
+}
+
+/* 스타일 드롭다운 */
+.hwp-style-dropdown {
+  height: 26px;
+  padding: 2px 8px;
+  border: 2px solid var(--hwp-toolbar-btn-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.hwp-style-dropdown:focus {
+  border-color: var(--hwp-toolbar-btn-border);
+  outline: none;
+}
+
+/* ================================================================
+   PREVIEW — A4 용지 뷰
+   ================================================================ */
+
+.hwp-preview-container {
+  background: var(--background-secondary);
+  padding: 24px;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.hwp-paper-frame {
+  width: max-content;
+  max-width: 100%;
+}
+
+.hwp-paper {
+  background: var(--hwp-paper-bg);
+  box-shadow: var(--hwp-paper-shadow);
+  border: 1px solid var(--hwp-paper-border);
+  width: var(--hwp-paper-width, 595.3pt);
+  min-height: var(--hwp-paper-height, 841.9pt);
+  padding: var(--hwp-paper-padding, 42.6pt 72pt 49.6pt 72pt);
+  box-sizing: border-box;
+  /* Obsidian 전역 폰트 변수 무시 — HWP 템플릿 폰트가 최우선 */
+  --font-text: unset;
+  --font-text-override: unset;
+  --font-interface: unset;
+  --default-font: unset;
+  font-family: serif;
+  font-size: 10pt !important;
+  line-height: 1.6;
+  color: #1a1a1a;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  display: flex;
+  flex-direction: column;
+}
+
+/* HWP 레벨별 스타일 */
+.hwp-line {
+  margin: 0;
+  padding: 0;
+  /* 인라인 스타일의 font-family가 최우선 되도록 */
+  font-family: inherit !important;
+}
+
+.hwp-line.hwp-empty {
+  height: 1.2em;
+}
+
+.hwp-line.hwp-title {
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.hwp-line.hwp-subtitle {
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.hwp-line.hwp-note {
+  color: #555;
+}
+
+.hwp-preview-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 60px 20px;
+  font-size: 14px;
+}
+
+/* ================================================================
+   SETUP GUIDE MODAL (설치 가이드)
+   ================================================================ */
+
+.hwp-setup-guide {
+  max-width: 640px;
+  padding: 0 8px;
+}
+
+.hwp-setup-guide h1 {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.hwp-setup-subtitle {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.hwp-setup-step {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  border-left: 4px solid var(--hwp-primary);
+}
+
+.hwp-setup-step h2 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.hwp-setup-step p {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.hwp-setup-howto h3 {
+  font-size: 13px;
+  margin: 12px 0 6px;
+  color: var(--text-normal);
+}
+
+.hwp-setup-howto ol {
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.hwp-setup-howto ol li {
+  margin-bottom: 4px;
+}
+
+.hwp-setup-howto a {
+  color: var(--hwp-primary);
+  text-decoration: underline;
+}
+
+.hwp-setup-warning {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-top: 8px;
+  color: #856404;
+}
+
+.theme-dark .hwp-setup-warning {
+  background: #3d3200;
+  border-color: #665200;
+  color: #ffd700;
+}
+
+.hwp-setup-cmd {
+  background: var(--background-primary);
+  border: 1px solid var(--hwp-toolbar-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  font-family: monospace;
+}
+
+.hwp-setup-cmd code {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.hwp-setup-copy-btn {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  border: 1px solid var(--hwp-toolbar-border);
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.hwp-setup-copy-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* 설치 상태 테이블 */
+.hwp-setup-status {
+  margin-bottom: 16px;
+}
+
+.hwp-setup-status h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.hwp-setup-status-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.hwp-setup-status-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--hwp-toolbar-border);
+}
+
+.hwp-setup-status-table td:first-child {
+  font-weight: 600;
+  width: 140px;
+}
+
+.hwp-status-ok {
+  color: #28a745;
+}
+
+.hwp-status-fail {
+  color: #dc3545;
+}
+
+.hwp-status-all-good {
+  background: #d4edda;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #155724;
+}
+
+.theme-dark .hwp-status-all-good {
+  background: #1a3a1a;
+  color: #7ddf7d;
+}
+
+.hwp-setup-done {
+  text-align: center;
+  padding: 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.hwp-setup-done h2 {
+  margin-top: 0;
+}
+
+.hwp-setup-footer {
+  margin-top: 16px;
+  text-align: center;
+}
+
+/* ================================================================
+   TEMPLATE / PRESET / STYLE MODALS
+   ================================================================ */
+
+.hwp-template-picker,
+.hwp-preset-picker {
+  max-width: 560px;
+  padding: 0 8px;
+}
+
+.hwp-template-section {
+  margin-bottom: 12px;
+}
+
+.hwp-template-picker h2,
+.hwp-preset-picker h2 {
+  margin-bottom: 4px;
+}
+
+.hwp-template-picker h3,
+.hwp-preset-picker h3 {
+  font-size: 14px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--hwp-toolbar-border);
+}
+
+/* 스타일 에디터 — 2칸 레이아웃 */
+.hwp-style-editor {
+  max-width: 1200px;
+  width: 90vw;
+  padding: 0 8px;
+}
+
+.hwp-style-editor-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.hwp-style-editor-controls {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.hwp-style-editor-preview {
+  width: 360px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+}
+
+.hwp-style-level-section {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  border-left: 3px solid var(--hwp-primary);
+}
+
+.hwp-style-level-section h3 {
+  margin-top: 0;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.hwp-style-preview-box {
+  background: var(--hwp-paper-bg);
+  border: 1px solid var(--hwp-paper-border);
+  border-radius: 6px;
+  padding: 20px 24px;
+  min-height: 200px;
+  color: #1a1a1a;
+  box-shadow: var(--hwp-paper-shadow);
+}
+
+.hwp-style-preview-line {
+  margin: 0;
+  padding: 2px 0;
+}
+
+/* 좁은 화면에서 1칸으로 */
+@media (max-width: 700px) {
+  .hwp-style-editor-layout {
+    flex-direction: column;
+  }
+
+  .hwp-style-editor-preview {
+    width: 100%;
+    position: relative;
+    order: -1;
+  }
+}
+
+/* ================================================================
+   STATUS BAR INDICATOR
+   ================================================================ */
+
+.hwp-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.hwp-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.hwp-status-dot.connected {
+  background: #28a745;
+}
+
+.hwp-status-dot.disconnected {
+  background: #dc3545;
+}
+
+.docx-preview-container {
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+  background: var(--background-secondary);
+}
+
+.docx-preview-content {
+  min-height: 100%;
+}
+
+.docx-preview-loading,
+.docx-preview-error,
+.docx-preview-warning,
+.docx-preview-empty {
+  padding: 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-primary);
+  margin-bottom: 12px;
+}
+
+.docx-preview-pdf-frame {
+  width: 100%;
+  min-height: 80vh;
+  border: 0;
+}
+
+.word-template-modal-shell {
+  width: min(1360px, 94vw);
+  max-width: min(1360px, 94vw);
+}
+
+.word-template-modal-shell .modal-content {
+  width: min(1360px, 94vw);
+  max-width: min(1360px, 94vw);
+  height: min(88vh, 1050px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.word-template-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.word-template-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-primary);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.word-template-header-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  flex: 1 1 260px;
+}
+
+.word-template-header-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.word-template-template-select {
+  min-width: 180px;
+  width: min(320px, 100%);
+}
+
+.word-template-dirty-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.word-template-dirty-status.is-dirty {
+  color: var(--text-accent);
+}
+
+.word-template-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 2 1 520px;
+  flex-wrap: wrap;
+}
+
+.word-template-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.word-template-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 540px) minmax(360px, 1fr);
+  gap: 16px;
+  align-items: stretch;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.word-template-sidebar,
+.word-template-editor,
+.word-template-preview {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--background-primary);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.word-template-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.word-template-style-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.word-template-editor {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-right: 8px;
+}
+
+.word-template-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.word-style-button {
+  width: 100%;
+  text-align: left;
+  margin: 0;
+}
+
+.word-style-button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.word-template-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+
+.word-template-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.word-template-section h4 {
+  margin: 0;
+}
+
+.word-template-field {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.word-template-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-top: 8px;
+}
+
+.word-template-field-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.word-template-inline-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.word-template-input,
+.word-template-select {
+  min-height: 32px;
+}
+
+.word-template-input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+}
+
+.word-template-input-number {
+  width: 96px;
+}
+
+.word-template-input-color {
+  width: 110px;
+}
+
+.word-template-select {
+  min-width: 120px;
+  max-width: 100%;
+}
+
+.word-template-chip {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  background: var(--background-secondary);
+}
+
+.word-template-chip.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.word-template-color-group {
+  gap: 6px;
+}
+
+.word-template-color-picker {
+  width: 40px;
+  min-width: 40px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+}
+
+.word-font-combobox {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  width: 100%;
+  min-width: 0;
+}
+
+.word-font-combobox-input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  background: var(--background-primary);
+}
+
+.word-font-combobox-toggle {
+  height: 32px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 0 8px 8px 0;
+  background: var(--background-secondary);
+}
+
+.word-font-combobox-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 12;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-primary);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+}
+
+.word-font-combobox.is-open .word-font-combobox-panel {
+  display: flex;
+}
+
+.word-font-option,
+.word-font-option-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.word-font-option:hover,
+.word-font-option.is-highlighted,
+.word-font-option-manual:hover {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+
+.word-font-option-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.word-font-option-sample {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.word-font-empty {
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.word-template-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.word-preview-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.word-preview-tabs .is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.word-template-preview-stage {
+  flex: 1;
+  min-height: 320px;
+  max-height: calc(88vh - 220px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--background-secondary) 0%, var(--background-primary) 100%);
+}
+
+.word-template-preview-paper {
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  color: #111;
+}
+
+@media (max-width: 1320px) {
+  .word-template-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .word-template-preview {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 980px) {
+  .word-template-modal-shell,
+  .word-template-modal-shell .modal-content {
+    width: min(96vw, 96vw);
+    max-width: min(96vw, 96vw);
+  }
+
+  .word-template-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .word-template-field {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .word-template-field-label {
+    padding-top: 0;
+  }
+}
+
+
+
+/* HWP Writer toolbar skin settings */
+.hwp-toolbar-skin-tabs {
+  margin: 12px 0 18px;
+}
+
+.hwp-toolbar-skin-tab-list {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.hwp-toolbar-skin-tab {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  padding: 5px 10px;
+}
+
+.hwp-toolbar-skin-tab.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.hwp-toolbar-skin-tab-panel {
+  border-left: 3px solid var(--background-modifier-border);
+  padding-left: 12px;
+}
+
+.hwp-toolbar-skin-tab-panel h4 {
+  margin: 0 0 6px;
+}
+
+.hwp-toolbar-skin-hex-input {
+  font-family: var(--font-monospace);
+  text-transform: uppercase;
+  width: 90px;
+}

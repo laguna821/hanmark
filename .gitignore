@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output (shipped only as GitHub Release assets)
+main.js
+main.js.map
+dist-plugin/
+release/
+
+# Smoke tests / scratch
+_smoke/
+*.bundle.cjs
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Internal dev/handover notes (not for the public repo)
+PUBLISH-HANDOVER.md
+READ-ME-FIRST.md

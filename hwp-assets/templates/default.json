@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 2,
+  "id": "default",
+  "name": "Default HWPX",
+  "description": "Default HWPX template profile",
+  "styleReuseMode": "reuse-and-patch",
+  "baseReferenceHwpx": "default.hwpx",
+  "page": {
+    "paper": "A4",
+    "orientation": "portrait",
+    "widthPt": 595.3,
+    "heightPt": 841.9,
+    "marginTopPt": 72,
+    "marginRightPt": 72,
+    "marginBottomPt": 72,
+    "marginLeftPt": 72,
+    "headerMarginPt": 36,
+    "footerMarginPt": 36
+  },
+  "styles": {
+    "body": {
+      "type": "paragraph",
+      "hwpStyleName": "바탕글",
+      "aliases": [
+        "body",
+        "Normal"
+      ],
+      "fontFamily": "Malgun Gothic",
+      "fontSizePt": 11,
+      "bold": false,
+      "italic": false,
+      "color": "#000000",
+      "align": "justify",
+      "lineSpacingPercent": 160,
+      "firstLineIndentPt": 0,
+      "marginLeftPt": 0,
+      "marginRightPt": 0,
+      "spacingBeforePt": 0,
+      "spacingAfterPt": 0
+    },
+    "heading1": {
+      "type": "paragraph",
+      "hwpStyleName": "제목 1",
+      "aliases": [
+        "heading1",
+        "Heading 1"
+      ],
+      "fontFamily": "Malgun Gothic",
+      "fontSizePt": 18,
+      "bold": true,
+      "italic": false,
+      "color": "#000000",
+      "align": "center",
+      "lineSpacingPercent": 160,
+      "firstLineIndentPt": 0,
+      "marginLeftPt": 0,
+      "marginRightPt": 0,
+      "spacingBeforePt": 12,
+      "spacingAfterPt": 8,
+      "keepWithNext": true
+    },
+    "heading2": {
+      "type": "paragraph",
+      "hwpStyleName": "제목 2",
+      "aliases": [
+        "heading2",
+        "Heading 2"
+      ],
+      "fontFamily": "Malgun Gothic",
+      "fontSizePt": 15,
+      "bold": true,
+      "italic": false,
+      "color": "#000000",
+      "align": "left",
+      "lineSpacingPercent": 160,
+      "firstLineIndentPt": 0,
+      "marginLeftPt": 0,
+      "marginRightPt": 0,
+      "spacingBeforePt": 10,
+      "spacingAfterPt": 6,
+      "keepWithNext": true
+    },
+    "quote": {
+      "type": "paragraph",
+      "hwpStyleName": "인용문",
+      "aliases": [
+        "quote",
+        "Block Text"
+      ],
+      "fontFamily": "Malgun Gothic",
+      "fontSizePt": 9.5,
+      "bold": false,
+      "italic": false,
+      "color": "#000000",
+      "align": "left",
+      "lineSpacingPercent": 150,
+      "firstLineIndentPt": 0,
+      "marginLeftPt": 18,
+      "marginRightPt": 18,
+      "spacingBeforePt": 0,
+      "spacingAfterPt": 0
+    },
+    "emphasisRed": {
+      "type": "character",
+      "hwpStyleName": "붉은강조",
+      "aliases": [
+        "emphasisRed",
+        "red-emphasis"
+      ],
+      "fontFamily": "Malgun Gothic",
+      "fontSizePt": 11,
+      "bold": true,
+      "italic": false,
+      "underline": false,
+      "strikeout": false,
+      "color": "#C00000",
+      "charSpacingPercent": -5,
+      "charWidthPercent": 100
+    },
+    "footnote": {
+      "type": "paragraph",
+      "hwpStyleName": "각주",
+      "aliases": [
+        "footnote",
+        "Footnote"
+      ],
+      "fontFamily": "Malgun Gothic",
+      "fontSizePt": 9,
+      "bold": false,
+      "italic": false,
+      "color": "#000000",
+      "align": "left",
+      "lineSpacingPercent": 130,
+      "firstLineIndentPt": 0,
+      "marginLeftPt": 0,
+      "marginRightPt": 0,
+      "spacingBeforePt": 0,
+      "spacingAfterPt": 0
+    },
+    "caption": {
+      "type": "paragraph",
+      "hwpStyleName": "캡션",
+      "aliases": [
+        "caption"
+      ],
+      "fontFamily": "Malgun Gothic",
+      "fontSizePt": 9,
+      "bold": false,
+      "italic": false,
+      "color": "#555555",
+      "align": "center",
+      "lineSpacingPercent": 160,
+      "firstLineIndentPt": 0,
+      "marginLeftPt": 0,
+      "marginRightPt": 0,
+      "spacingBeforePt": 0,
+      "spacingAfterPt": 0
+    }
+  },
+  "tables": {
+    "default": {
+      "type": "table",
+      "hwpStyleName": "표 기본",
+      "aliases": [
+        "default",
+        "table"
+      ],
+      "width": "content",
+      "repeatHeader": false,
+      "splitRow": true,
+      "borderStyle": "solid",
+      "borderWidthPt": 0.5,
+      "cellPaddingPt": 3,
+      "treatAsChar": true
+    },
+    "journal": {
+      "type": "table",
+      "hwpStyleName": "논문 표",
+      "aliases": [
+        "journal"
+      ],
+      "width": "page",
+      "repeatHeader": true,
+      "splitRow": true,
+      "borderStyle": "solid",
+      "borderWidthPt": 0.4,
+      "cellPaddingPt": 2,
+      "treatAsChar": true
+    }
+  },
+  "images": {
+    "default": {
+      "maxWidth": "150mm",
+      "treatAsChar": true,
+      "captionStyle": "caption"
+    }
+  },
+  "diagnostics": {
+    "strictFonts": false,
+    "warnTableOverflow": true,
+    "warnMissingImages": true,
+    "warnPageOverflow": true
+  }
+}

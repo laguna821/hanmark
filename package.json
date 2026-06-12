@@ -1,0 +1,27 @@
+{
+  "name": "hanmark",
+  "version": "1.0.0",
+  "description": "Bidirectional bridge between Korean word-processor documents and Markdown notes (kordoc import + template export).",
+  "main": "main.js",
+  "scripts": {
+    "gen-assets": "node scripts/gen-embedded-assets.mjs",
+    "dev": "node scripts/gen-embedded-assets.mjs && node esbuild.config.mjs",
+    "build": "node scripts/gen-embedded-assets.mjs && tsc --noEmit --skipLibCheck && node esbuild.config.mjs production"
+  },
+  "keywords": ["hwp", "hwpx", "docx", "markdown", "kordoc"],
+  "license": "MIT",
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.10",
+    "jszip": "^3.10.1",
+    "kordoc": "^3.0.1",
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.25.1",
+    "obsidian": "^1.5.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.2"
+  }
+}
