@@ -263,6 +263,41 @@
   flex-direction: column;
 }
 
+/* ── 미리보기 종이의 테마 색 격리 ──
+   문서 미리보기는 종이처럼 고정색이어야 하는데, Obsidian 테마가 strong/b/h1~h6와 여러 색
+   변수를 통해 액센트(키) 컬러를 새어보낸다. 두 겹으로 차단한다.
+   1) 테마 변수 pin — var() 기반 테마 규칙을 specificity 무관하게 무력화(currentColor로 해소).
+   2) 요소 색 리셋 — 정확히 (0,1,1) specificity 유지. 프리뷰 컨테이너가 주입하는 인라인
+      <style>이 문서 순서로 이기므로, 템플릿에서 추출된 비검정 제목색은 그대로 살아남는다.
+      !important나 이중-클래스 셀렉터는 절대 쓰지 않는다(추출된 색을 덮어버린다). */
+.hwp-paper,
+.word-template-preview-paper {
+  --h1-color: currentColor;
+  --h2-color: currentColor;
+  --h3-color: currentColor;
+  --h4-color: currentColor;
+  --h5-color: currentColor;
+  --h6-color: currentColor;
+  --bold-color: currentColor;
+  --italic-color: currentColor;
+  --bold-weight: bold;
+  --code-normal: currentColor;
+}
+.hwp-paper {
+  --text-normal: #1a1a1a;
+}
+.word-template-preview-paper {
+  --text-normal: #111;
+}
+.hwp-paper :is(h1, h2, h3, h4, h5, h6, strong, b, em, mark, code),
+.word-template-preview-paper :is(h1, h2, h3, h4, h5, h6, strong, b, em, mark, code) {
+  color: inherit;
+}
+.hwp-paper :is(strong, b),
+.word-template-preview-paper :is(strong, b) {
+  font-weight: bold;
+}
+
 /* HWP 레벨별 스타일 */
 .hwp-line {
   margin: 0;
