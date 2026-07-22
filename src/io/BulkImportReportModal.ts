@@ -25,6 +25,8 @@ export class BulkImportReportModal extends Modal {
     contentEl.createEl("p", {
       text: `✅ 성공 ${ok.length} · ⚠️ 경고 ${warned.length} · ❌ 실패 ${failed.length}  (총 ${this.args.results.length}개)`
     });
+    const imageCount = ok.reduce((sum, result) => sum + (result.images ?? 0), 0);
+    if (imageCount) contentEl.createEl("p", { text: `🖼️ 첨부 폴더에 저장한 이미지: ${imageCount}개` });
 
     if (failed.length) {
       contentEl.createEl("p", { text: "❌ 실패한 파일:" });
