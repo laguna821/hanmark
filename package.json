@@ -7,7 +7,7 @@
     "gen-assets": "node scripts/gen-embedded-assets.mjs",
     "dev": "node scripts/gen-embedded-assets.mjs && node esbuild.config.mjs",
     "build": "node scripts/gen-embedded-assets.mjs && tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "lint": "eslint src package.json manifest.json --max-warnings 0",
     "check-bundle": "node scripts/check-bundle.mjs",
     "check-release": "node scripts/check-release.mjs",
