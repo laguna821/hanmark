@@ -1,14 +1,10 @@
-// Generates src/io/embeddedAssets.ts — the legacy export & preview features read these data
-// files from the plugin folder via fs, but community installs only ship main.js/manifest/
-// styles. We base64-embed the (~21KB) assets so main.js can unpack them on load.
+// Generates src/io/embeddedAssets.ts. DOCX export/preview reads these two support files from
+// the plugin folder, while community installs normally ship only main.js/manifest/styles.
 // Run automatically by `npm run build` / `npm run dev`.
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
 const ASSETS = [
-  "blank.hwpx",
-  "hwp-assets/reference-hwpx/default.hwpx",
-  "hwp-assets/templates/default.json",
   "word-assets/Convert-WordToPdf.ps1",
   "word-assets/docx_style_map.lua"
 ];

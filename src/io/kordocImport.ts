@@ -6,8 +6,9 @@ import type { HwpSourceContract, HwpSourceFormat } from "./frontmatter";
 import { renderSourceCallout } from "./sourceCallout";
 import { sha256Bytes } from "./hash";
 import { BulkImportReportModal } from "./BulkImportReportModal";
+import { persistImportedImages } from "./importImages";
 
-const KORDOC_VERSION: string = (VERSION as unknown as string) || "3.0.1";
+const KORDOC_VERSION: string = (VERSION as unknown as string) || "4.2.5";
 const IMPORT_EXTENSIONS = ["hwp", "hwpx", "hwpml", "docx", "pdf", "xlsx", "xls"];
 const KNOWN_FORMATS = new Set<string>(["hwpx", "hwp", "hwp3", "hwpml", "docx", "pdf", "xlsx", "xls"]);
 /** Ask for confirmation before bulk-converting at least this many files. */
@@ -18,6 +19,7 @@ export interface ImportResult {
   ok: boolean;
   rel?: string;
   warnings?: number;
+  images?: number;
   file?: string;
   error?: string;
 }
@@ -132,12 +134,13 @@ async function importOne(app: App, absPath: string, reserved: Set<string>): Prom
         .trim() || "불러온 문서";
     const rel = uniqueNotePath(app, preferredFolder(app), base, reserved);
 
-    const noteBody = renderSourceCallout(contract) + res.markdown.trim() + "\n";
+    const persisted = await persistImportedImages(app, rel, res.markdown.trim(), res.images);
+    const noteBody = renderSourceCallout(contract) + persisted.markdown.trim() + "\n";
     const file = (await app.vault.create(rel, noteBody)) as TFile;
     await app.fileManager.processFrontMatter(file, (fm: any) => Object.assign(fm, contract));
 
-    const warnings = Array.isArray(res.warnings) ? res.warnings.length : 0;
-    return { ok: true, rel, warnings };
+    const warnings = (Array.isArray(res.warnings) ? res.warnings.length : 0) + persisted.warnings.length;
+    return { ok: true, rel, warnings, images: persisted.saved };
   } catch (e: any) {
     console.error("[hwp-writer] import failed:", absPath, e);
     return { ok: false, file: fileName, error: e?.message || String(e) };
@@ -216,7 +219,11 @@ export async function importDocument(app: App, _plugin?: any): Promise<void> {
       if (r.ok) {
         const file = app.vault.getAbstractFileByPath(r.rel);
         if (file instanceof TFile) await app.workspace.getLeaf(true).openFile(file);
-        new Notice(`불러오기 완료: ${r.rel}${r.warnings ? ` (경고 ${r.warnings}건)` : ""}`);
+        new Notice(
+          `불러오기 완료: ${r.rel}${r.images ? ` · 이미지 ${r.images}개 저장` : ""}${
+            r.warnings ? ` (경고 ${r.warnings}건)` : ""
+          }`
+        );
       } else {
         new Notice(`불러오기 실패: ${r.error}`);
       }
