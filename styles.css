@@ -23,6 +23,424 @@
   --hwp-paper-border: #d0d0d0;
 }
 
+/* ── HanMark 2.x: bundled Kordoc export center and quick HWPX preview ── */
+.hanmark-export-modal {
+  width: min(680px, calc(100vw - 48px));
+  max-width: 680px;
+}
+
+.hanmark-export-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 8px 0 14px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-export-tabs button {
+  border-color: transparent;
+  background: transparent;
+}
+
+.hanmark-export-tabs button.is-active {
+  border-color: var(--interactive-accent);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.hanmark-compact-engine-line {
+  margin: 6px 0 12px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-export-template-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-export-template-row select {
+  min-width: 0;
+  width: 100%;
+}
+
+.hanmark-export-template-row small {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+
+.hanmark-export-primary-actions,
+.hanmark-export-gongmun-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.hanmark-export-primary-actions button:first-child {
+  flex: 1;
+}
+
+.hanmark-export-gongmun-row {
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.hanmark-export-gongmun-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.hanmark-other-export-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hanmark-other-export-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-other-export-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hanmark-other-export-row small {
+  color: var(--text-muted);
+}
+
+.hanmark-engine-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 18px;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--color-green) 42%, var(--background-modifier-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-green) 8%, var(--background-secondary));
+}
+
+.hanmark-engine-status strong {
+  color: var(--color-green);
+}
+
+.hanmark-engine-status span {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.hanmark-export-card {
+  margin: 10px 0;
+  padding: 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-export-card h4,
+.hanmark-export-card p {
+  margin-top: 0;
+}
+
+.hanmark-export-card p {
+  color: var(--text-muted);
+}
+
+.hanmark-export-utilities,
+.hanmark-advanced-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 18px;
+}
+
+.hanmark-table-style,
+.hanmark-document-style {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--interactive-accent);
+  background: var(--background-secondary-alt);
+}
+
+.hanmark-table-style h3,
+.hanmark-table-style p,
+.hanmark-document-style h3,
+.hanmark-document-style p {
+  margin-top: 0;
+}
+
+.hanmark-settings-document-style,
+.hanmark-settings-table-style {
+  margin-bottom: 18px;
+}
+
+.hanmark-document-style-modal {
+  max-width: 780px;
+}
+
+.hanmark-document-style-role,
+.hanmark-document-style-page {
+  margin: 14px 0;
+  padding: 8px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-document-style-role {
+  padding: 0;
+  overflow: hidden;
+}
+
+.hanmark-document-style-role.is-open {
+  padding: 0 14px 8px;
+  border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+}
+
+.hanmark-document-style-role-toggle {
+  display: flex;
+  justify-content: space-between;
+  width: calc(100% + 28px);
+  margin: 0 -14px;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+  text-align: left;
+}
+
+.hanmark-document-style-role:not(.is-open) .hanmark-document-style-role-toggle {
+  width: 100%;
+  margin: 0;
+}
+
+.hanmark-document-style-role-toggle:hover {
+  background: var(--background-modifier-hover);
+}
+
+.hanmark-document-style-role-chevron {
+  color: var(--text-muted);
+}
+
+.hanmark-template-manager {
+  width: min(760px, calc(100vw - 48px));
+  max-width: 760px;
+  max-height: 78vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.hanmark-template-group {
+  margin-top: 14px;
+}
+
+.hanmark-template-group h3 {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.hanmark-template-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-bottom-width: 0;
+  cursor: pointer;
+}
+
+.hanmark-template-row:first-of-type {
+  border-radius: 10px 10px 0 0;
+}
+
+.hanmark-template-row:last-child {
+  border-bottom-width: 1px;
+  border-radius: 0 0 10px 10px;
+}
+
+.hanmark-template-row:only-of-type {
+  border-radius: 10px;
+}
+
+.hanmark-template-row.is-selected {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-secondary));
+}
+
+.hanmark-template-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hanmark-template-info small {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hanmark-template-active {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-template-actions,
+.hanmark-template-add,
+.hanmark-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.hanmark-template-add {
+  padding-top: 14px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.hanmark-docx-settings {
+  margin: 12px 0 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-docx-settings > summary {
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+}
+
+@media (max-width: 600px) {
+  .hanmark-export-modal,
+  .hanmark-template-manager {
+    width: calc(100vw - 24px);
+  }
+
+  .hanmark-other-export-row {
+    grid-template-columns: 1fr;
+  }
+
+  .hanmark-other-export-row button {
+    width: 100%;
+  }
+}
+
+.hanmark-document-style-role h3,
+.hanmark-document-style-page h3 {
+  margin-bottom: 4px;
+}
+
+.hanmark-advanced-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.hanmark-modal-close {
+  margin-top: 12px;
+}
+
+.hanmark-advanced-settings {
+  margin: 18px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-advanced-settings > summary {
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-quick-preview {
+  height: 100%;
+  overflow: auto;
+  background: var(--background-secondary);
+}
+
+.hanmark-preview-caution {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: color-mix(in srgb, var(--color-yellow) 13%, var(--background-primary));
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-preview-stage {
+  padding: 14px;
+}
+
+.hanmark-preview-loading,
+.hanmark-preview-error {
+  padding: 18px;
+  border-radius: 8px;
+  background: var(--background-primary);
+}
+
+.hanmark-preview-error {
+  color: var(--text-error);
+}
+
+.hanmark-preview-summary {
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-preview-warnings {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-preview-paper {
+  margin: 0 auto;
+  max-width: 900px;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
+  background: white;
+}
+
+.hanmark-preview-paper svg {
+  display: block;
+}
+
+
 .theme-dark {
   --hwp-paper-bg: #f8f8f8;
   --hwp-paper-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
@@ -1085,4 +1503,62 @@
   font-family: var(--font-monospace);
   text-transform: uppercase;
   width: 90px;
+}
+
+/* HanMark 작업창: Obsidian의 작은 기본 모달 제한을 풀고 데스크톱 작업창처럼 사용한다. */
+.modal.hanmark-resizable-workspace-modal {
+  position: relative;
+  width: 94vw !important;
+  height: 90vh !important;
+  min-width: min(760px, calc(100vw - 16px)) !important;
+  min-height: min(560px, calc(100vh - 16px)) !important;
+  max-width: calc(100vw - 16px) !important;
+  max-height: calc(100vh - 16px) !important;
+  resize: both;
+  overflow: hidden !important;
+}
+
+.modal.hanmark-resizable-workspace-modal::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid var(--text-faint);
+  border-bottom: 2px solid var(--text-faint);
+  pointer-events: none;
+}
+
+.modal.hanmark-resizable-workspace-modal > .modal-content,
+.modal.hanmark-resizable-workspace-modal .modal-content.hanmark-export-modal,
+.modal.hanmark-resizable-workspace-modal .modal-content.hanmark-template-manager,
+.modal.hanmark-resizable-workspace-modal .modal-content.hanmark-document-style-modal {
+  box-sizing: border-box;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: auto !important;
+  resize: none;
+}
+
+.hanmark-window-size-hint {
+  display: block;
+  margin: -4px 0 10px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+@media (max-width: 800px), (max-height: 650px) {
+  .modal.hanmark-resizable-workspace-modal {
+    width: calc(100vw - 8px) !important;
+    height: calc(100vh - 8px) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: calc(100vw - 8px) !important;
+    max-height: calc(100vh - 8px) !important;
+  }
 }

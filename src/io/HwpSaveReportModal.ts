@@ -12,7 +12,6 @@ export interface SaveReportArgs {
   skipped?: PatchSkipLike[];
   verification?: any;
   outputPath?: string;
-  backupPath?: string;
   note?: string;
   /**
    * If provided, renders a "➕ 추가 내용까지 넣어 새 한글 파일로 저장" button.
@@ -62,8 +61,6 @@ export class HwpSaveReportModal extends Modal {
     }
 
     if (this.args.outputPath) contentEl.createEl("p", { text: `결과 파일: ${this.args.outputPath}` });
-    if (this.args.backupPath) contentEl.createEl("p", { text: `원본 백업: ${this.args.backupPath}` });
-
     if (this.args.generateFull) {
       const genWrap = contentEl.createDiv();
       genWrap.setCssStyles({

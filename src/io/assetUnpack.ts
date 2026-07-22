@@ -3,11 +3,10 @@ import * as nodePath from "node:path";
 import { EMBEDDED_ASSETS } from "./embeddedAssets";
 
 /**
- * Community installs ship only main.js / manifest.json / styles.css, so the legacy export &
- * preview features — which read blank.hwpx, hwp-assets/ and word-assets/ from the plugin
- * folder via fs — would be missing their data files. We base64-embed those (~21KB) assets in
- * main.js and write any that are absent into the plugin folder on load. Existing files are
- * left untouched, so a user can customize an asset and it won't be clobbered on the next load.
+ * Community installs ship only main.js / manifest.json / styles.css, so the optional DOCX
+ * exporter/preview would be missing its Lua and Word-to-PDF support files. We base64-embed those
+ * small assets in main.js and write any that are absent into the plugin folder on load. Existing
+ * files are left untouched, so a user can customize an asset without it being overwritten.
  *
  * The target dir mirrors the legacy core's own getPluginDir():
  *   <vault>/<configDir>/plugins/<manifest.id>
@@ -31,6 +30,6 @@ export async function unpackBundledAssets(plugin: any): Promise<void> {
       await fs.writeFile(abs, Buffer.from(asset.b64, "base64"));
     }
   } catch (e) {
-    console.warn("[hwp-writer] bundled asset unpack failed:", e);
+    console.warn("[hanmark] bundled DOCX asset unpack failed:", e);
   }
 }
