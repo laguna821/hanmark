@@ -1,4 +1,4 @@
-import { App, TFile, normalizePath } from "obsidian";
+import { App, normalizePath } from "obsidian";
 import type { ExtractedImage } from "kordoc";
 import { rewriteImportedImageReference } from "./imageLinks";
 
@@ -49,7 +49,7 @@ export async function persistImportedImages(
         image.data.byteOffset,
         image.data.byteOffset + image.data.byteLength
       ) as ArrayBuffer;
-      const file = (await app.vault.createBinary(attachmentPath, buffer)) as TFile;
+      const file = await app.vault.createBinary(attachmentPath, buffer);
       const embed = `!${app.fileManager.generateMarkdownLink(file, notePath)}`;
       const result = rewriteImportedImageReference(rewritten, image.filename, embed);
       rewritten = result.markdown;

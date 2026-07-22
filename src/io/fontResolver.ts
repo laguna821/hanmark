@@ -29,7 +29,8 @@ function quotedLocal(family: string): string {
 }
 
 async function browserFontAvailable(family: string): Promise<boolean> {
-  const FontFaceConstructor = (globalThis as any).FontFace;
+  const host = typeof activeWindow !== "undefined" ? activeWindow : undefined;
+  const FontFaceConstructor = (host as (Window & { FontFace?: typeof FontFace }) | undefined)?.FontFace;
   if (typeof FontFaceConstructor !== "function") return true;
   try {
     const face = new FontFaceConstructor("__hanmark_font_probe__", quotedLocal(family));
@@ -56,13 +57,15 @@ export async function resolveDocumentStyleFonts(
   options: FontResolverOptions = {}
 ): Promise<{ profile: DocumentStyleProfile; substitutions: FontSubstitution[] }> {
   const profile = normalizeDocumentStyleProfile(input);
-  const platform = options.platform ?? process.platform;
+  // Runtime callers pass Obsidian's Platform-derived value. The neutral default
+  // keeps the pure conversion library executable in Node-based unit tests.
+  const platform = options.platform ?? "linux";
   const available = options.available ?? browserFontAvailable;
   const cache = new Map<string, Promise<boolean>>();
   const canUse = (family: string): Promise<boolean> => {
     const key = family.trim().toLocaleLowerCase();
     let pending = cache.get(key);
-    if (!pending) {
+    if (pending === undefined) {
       pending = Promise.resolve(available(family)).catch(() => false);
       cache.set(key, pending);
     }

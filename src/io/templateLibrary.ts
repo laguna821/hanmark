@@ -61,7 +61,11 @@ function clone<T>(value: T): T {
 }
 
 function cleanName(value: unknown, fallback = "사용자 템플릿"): string {
-  const cleaned = String(value || "").replace(/[\x00-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+  const source = typeof value === "string" || typeof value === "number" ? String(value) : "";
+  const cleaned = Array.from(source, (character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127 ? " " : character;
+  }).join("").replace(/\s+/g, " ").trim().slice(0, 100);
   return cleaned || fallback;
 }
 

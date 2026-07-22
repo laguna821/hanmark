@@ -43,7 +43,7 @@ export function readSourceContract(app: App, file: TFile): HwpSourceContract | n
 
 /** Remove a leading YAML frontmatter block (--- … ---). */
 export function stripFrontmatter(md: string): string {
-  const m = md.match(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+  const m = md.match(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n?/);
   return m ? md.slice(m[0].length) : md;
 }
 

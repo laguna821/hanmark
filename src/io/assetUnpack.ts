@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import * as nodePath from "node:path";
+import { FileSystemAdapter, Platform, type Plugin } from "obsidian";
 import { EMBEDDED_ASSETS } from "./embeddedAssets";
 
 /**
@@ -11,11 +12,12 @@ import { EMBEDDED_ASSETS } from "./embeddedAssets";
  * The target dir mirrors the legacy core's own getPluginDir():
  *   <vault>/<configDir>/plugins/<manifest.id>
  */
-export async function unpackBundledAssets(plugin: any): Promise<void> {
+export async function unpackBundledAssets(plugin: Plugin): Promise<void> {
   try {
-    const adapter: any = plugin.app.vault.adapter;
-    const base: string = adapter?.basePath || adapter?.getBasePath?.() || "";
-    if (!base) return;
+    if (!Platform.isDesktopApp) return;
+    const adapter = plugin.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) return;
+    const base = adapter.getBasePath();
     const pluginDir = nodePath.join(base, plugin.app.vault.configDir, "plugins", plugin.manifest.id);
 
     for (const asset of EMBEDDED_ASSETS) {

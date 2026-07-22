@@ -40,7 +40,7 @@ async function cachedLoad(key: string, load: () => Promise<LoadedImage>): Promis
   const cached = cacheGet(key);
   if (cached) return cached;
   const pending = inflight.get(key);
-  if (pending) return pending;
+  if (pending !== undefined) return pending;
   const promise = load()
     .then((value) => {
       cacheSet(key, value);

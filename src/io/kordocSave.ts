@@ -1,4 +1,4 @@
-import { App, MarkdownView, Modal, Notice, TFile, normalizePath } from "obsidian";
+import { App, FileSystemAdapter, MarkdownView, Modal, Notice, Platform, TFile, normalizePath } from "obsidian";
 import { promises as fs } from "node:fs";
 import * as nodePath from "node:path";
 import { patchHwpx, patchHwp, validateHwpx } from "kordoc";
@@ -12,6 +12,12 @@ import { activeTableProfile } from "./tableStyle";
 import { ImageResolutionError, type ImageFailure, type ImageProgress } from "./imageAssets";
 import { createObsidianImageLoader } from "./obsidianImageLoader";
 import { activeDocumentStyle } from "./documentStyleSettings";
+
+function runtimePlatform(): NodeJS.Platform {
+  if (Platform.isWin) return "win32";
+  if (Platform.isMacOS) return "darwin";
+  return "linux";
+}
 
 function stamp(): string {
   const d = new Date();
@@ -105,6 +111,7 @@ async function generateBody(
         ? { preset: options.gongmunPreset ?? "report" }
         : undefined,
     documentStyle: options.mode === "quick-hwpx" ? activeDocumentStyle(plugin) : undefined,
+    fontResolver: { platform: runtimePlatform() },
     images: {
       loader: createObsidianImageLoader(app, file),
       allowFailures: allowImageFailures,
@@ -263,9 +270,10 @@ export async function exportKordocHwpx(
 
 function revealPathFor(app: App, relative: string): string | undefined {
   try {
-    const adapter: any = app.vault.adapter;
-    const base = adapter?.basePath || adapter?.getBasePath?.() || "";
-    return base ? nodePath.join(base, relative) : undefined;
+    if (!Platform.isDesktopApp) return undefined;
+    const adapter = app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) return undefined;
+    return nodePath.join(adapter.getBasePath(), relative);
   } catch {
     return undefined;
   }

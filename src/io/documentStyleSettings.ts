@@ -1,4 +1,4 @@
-import { Notice } from "obsidian";
+import { Notice, Platform } from "obsidian";
 import { promises as fs } from "node:fs";
 import * as nodePath from "node:path";
 import { hwpxToProfile, unknownFontWarnings, validateHwpx } from "kordoc";
@@ -139,6 +139,10 @@ export async function saveDocumentStyle(plugin: any, profile: DocumentStyleProfi
 }
 
 export async function importDocumentStyle(plugin: any): Promise<boolean> {
+  if (!Platform.isDesktopApp) {
+    new Notice("HWPX 템플릿 파일 가져오기는 데스크톱에서만 사용할 수 있습니다.");
+    return false;
+  }
   const path = await pickHwpxFile("새 HWPX 템플릿으로 가져올 파일 선택");
   if (!path) return false;
   const data = await fs.readFile(path);

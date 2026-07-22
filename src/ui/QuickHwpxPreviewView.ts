@@ -1,4 +1,4 @@
-import { ItemView, MarkdownView, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownView, Platform, WorkspaceLeaf } from "obsidian";
 import type { FormatProfile } from "kordoc";
 import { extractEditableBody } from "../io/frontmatter";
 import { renderQuickHwpxPreview } from "../io/kordocEngine";
@@ -37,20 +37,37 @@ function cacheKey(
   return (hash >>> 0).toString(16);
 }
 
-function sanitizeSvg(svg: string): string {
+function parseSanitizedSvg(svg: string): XMLDocument {
   const document = new DOMParser().parseFromString(svg, "image/svg+xml");
-  document.querySelectorAll("script, foreignObject").forEach((node) => node.remove());
+  if (document.querySelector("parsererror") || document.documentElement.localName !== "svg") {
+    throw new Error("Kordoc이 유효한 SVG 미리보기를 반환하지 않았습니다.");
+  }
+  document.querySelectorAll("script, foreignObject, iframe, object, embed, link, meta").forEach((node) => node.remove());
   document.querySelectorAll("*").forEach((node) => {
     for (const attribute of Array.from(node.attributes)) {
       const name = attribute.name.toLowerCase();
       const value = attribute.value.trim().toLowerCase();
       if (name.startsWith("on")) node.removeAttribute(attribute.name);
-      if ((name === "href" || name === "xlink:href") && !value.startsWith("#") && !value.startsWith("data:image/")) {
+      if ((name === "href" || name === "xlink:href" || name === "src") &&
+          !value.startsWith("#") && !value.startsWith("data:image/")) {
         node.removeAttribute(attribute.name);
       }
+      if (name === "style" && /url\s*\(/i.test(value)) node.removeAttribute(attribute.name);
     }
   });
+  return document;
+}
+
+function sanitizeSvg(svg: string): string {
+  const document = parseSanitizedSvg(svg);
   return new XMLSerializer().serializeToString(document.documentElement);
+}
+
+function appendSanitizedSvg(container: HTMLElement, svg: string): SVGElement {
+  const parsed = parseSanitizedSvg(svg);
+  const imported = container.ownerDocument.importNode(parsed.documentElement, true);
+  container.appendChild(imported);
+  return imported as unknown as SVGElement;
 }
 
 export class QuickHwpxPreviewView extends ItemView {
@@ -130,6 +147,9 @@ export class QuickHwpxPreviewView extends ItemView {
         const result = await renderQuickHwpxPreview(markdown, {
           profile,
           documentStyle,
+          fontResolver: {
+            platform: Platform.isWin ? "win32" : Platform.isMacOS ? "darwin" : "linux"
+          },
           images: {
             loader: createObsidianImageLoader(this.app, view.file),
             allowFailures: true,
@@ -192,13 +212,10 @@ export class QuickHwpxPreviewView extends ItemView {
       warnings.slice(0, 20).forEach((warning) => list.createEl("li", { text: warning }));
     }
     const paper = this.previewEl.createDiv({ cls: "hanmark-preview-paper" });
-    paper.innerHTML = entry.svg;
-    const svg = paper.querySelector("svg");
-    if (svg) {
-      svg.setAttribute("width", "100%");
-      svg.setAttribute("height", "auto");
-      svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
-    }
+    const svg = appendSanitizedSvg(paper, entry.svg);
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", "auto");
+    svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
   }
 
   async onClose(): Promise<void> {

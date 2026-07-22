@@ -280,7 +280,8 @@ export async function resolveMarkdownImages(
 }
 
 function missingLabel(token: ImageToken): string {
-  const clean = (token.alt || token.source.split("/").pop() || "이미지").replace(/[\[\]\r\n]/g, " ").trim();
+  const clean = (token.alt || token.source.split("/").pop() || "이미지")
+    .replace(/\[/g, " ").replace(/\]/g, " ").replace(/[\r\n]/g, " ").trim();
   return `[이미지 누락: ${clean || "이미지"}]`;
 }
 
@@ -294,7 +295,8 @@ export function rewriteMarkdownForResolvedImages(
     const asset = bySource.get(token.source);
     if (asset) {
       if (token.kind === "markdown") return token.raw.replace(token.source, asset.safeName);
-      const alt = (token.alt || "이미지").replace(/[\[\]\r\n]/g, " ").trim() || "이미지";
+      const alt = (token.alt || "이미지")
+        .replace(/\[/g, " ").replace(/\]/g, " ").replace(/[\r\n]/g, " ").trim() || "이미지";
       return `![${alt}](${asset.safeName})`;
     }
     return failedSources.has(token.source) ? missingLabel(token) : token.raw;

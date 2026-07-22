@@ -145,7 +145,7 @@ export class HwpxTemplateManagerModal extends Modal {
         info.createEl("small", {
           text: `${details}${item.tableStyle?.tables?.length ? ` · 표 ${item.tableStyle.tables.length}개` : ""}`
         });
-        if (item.id === activeDocumentTemplate(this.plugin).id) row.createEl("span", { text: "사용 중", cls: "hanmark-template-active" });
+        if (item.id === activeDocumentTemplate(this.plugin).id) row.createSpan({ text: "사용 중", cls: "hanmark-template-active" });
         row.onclick = (event) => {
           if ((event.target as HTMLElement).tagName === "INPUT") return;
           this.selectedId = item.id;

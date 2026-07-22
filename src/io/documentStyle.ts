@@ -138,7 +138,10 @@ function childValue(element: Element | undefined, childName: string): number | u
 
 function cleanText(value: unknown, max = 100): string | undefined {
   if (typeof value !== "string") return undefined;
-  const cleaned = value.replace(/[\x00-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+  const cleaned = Array.from(value, (character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127 ? " " : character;
+  }).join("").replace(/\s+/g, " ").trim().slice(0, max);
   return cleaned || undefined;
 }
 

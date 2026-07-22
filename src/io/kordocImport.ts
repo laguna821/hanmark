@@ -1,4 +1,4 @@
-import { App, Modal, Notice, TFile, normalizePath } from "obsidian";
+import { App, FileSystemAdapter, Modal, Notice, Platform, TFile, normalizePath } from "obsidian";
 import { promises as fs } from "node:fs";
 import * as nodePath from "node:path";
 import { parse, detectFormat, VERSION } from "kordoc";
@@ -48,7 +48,7 @@ function pickFiles(): Promise<string[]> {
     /* fall through to <input type=file> */
   }
   return new Promise((resolve) => {
-    const input = document.createElement("input");
+    const input = createEl("input");
     input.type = "file";
     input.multiple = true;
     input.accept = IMPORT_EXTENSIONS.map((e) => "." + e).join(",");
@@ -136,7 +136,7 @@ async function importOne(app: App, absPath: string, reserved: Set<string>): Prom
 
     const persisted = await persistImportedImages(app, rel, res.markdown.trim(), res.images);
     const noteBody = renderSourceCallout(contract) + persisted.markdown.trim() + "\n";
-    const file = (await app.vault.create(rel, noteBody)) as TFile;
+    const file = await app.vault.create(rel, noteBody);
     await app.fileManager.processFrontMatter(file, (fm: any) => Object.assign(fm, contract));
 
     const warnings = (Array.isArray(res.warnings) ? res.warnings.length : 0) + persisted.warnings.length;
@@ -193,9 +193,10 @@ function confirmBulk(app: App, count: number): Promise<boolean> {
 
 function revealPathFor(app: App, rel: string): string | undefined {
   try {
-    const adapter: any = app.vault.adapter;
-    const base: string = adapter?.basePath || adapter?.getBasePath?.() || "";
-    return base ? nodePath.join(base, rel) : undefined;
+    if (!Platform.isDesktopApp) return undefined;
+    const adapter = app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) return undefined;
+    return nodePath.join(adapter.getBasePath(), rel);
   } catch {
     return undefined;
   }

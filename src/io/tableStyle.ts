@@ -33,7 +33,7 @@ export function pickHwpxFile(title = "스타일을 가져올 HWPX 선택"): Prom
   }
 
   return new Promise((resolve) => {
-    const input = document.createElement("input");
+    const input = createEl("input");
     input.type = "file";
     input.accept = ".hwpx";
     input.onchange = () => {
