@@ -14,7 +14,6 @@ type HanmarkExportActionResult =
   | void;
 
 export interface HanmarkExportActions {
-  sourcePatchAvailable: () => boolean;
   activeTemplateId: () => string;
   templateChoices: () => Array<{ id: string; name: string }>;
   activeTemplateSummary: () => string;
@@ -28,7 +27,6 @@ export interface HanmarkExportActions {
     mode: "quick-hwpx" | "gongmun-hwpx",
     preset?: GongmunPreset
   ) => Promise<HanmarkExportActionResult>;
-  patchSource: () => Promise<HanmarkExportActionResult>;
   runOther: (
     mode: "docx" | "html"
   ) => Promise<HanmarkExportActionResult>;
@@ -357,14 +355,6 @@ export class HanmarkExportModal extends Modal {
       "공문서 HWPX",
       "보고서·계획서 등 공문서 프리셋을 적용합니다."
     );
-    this.variantButton(
-      variants,
-      "source-patch",
-      "원본 형식 보존",
-      "가져온 HWP/HWPX 원본을 유지하고 별도 수정본을 만듭니다.",
-      !this.actions.sourcePatchAvailable()
-    );
-
     if (this.hwpxVariant === "gongmun") {
       const gongmun = root.createDiv({ cls: "hanmark-export-option-row" });
       const label = gongmun.createEl("label", {
@@ -390,7 +380,7 @@ export class HanmarkExportModal extends Modal {
       cls: "hanmark-export-secondary-action",
       attr: { type: "button" }
     });
-    preview.disabled = this.busy || this.hwpxVariant === "source-patch";
+    preview.disabled = this.busy;
     preview.onclick = async () => {
       await this.actions.openPreview();
       this.close();
@@ -552,10 +542,7 @@ export class HanmarkExportModal extends Modal {
     });
     execute.disabled =
       this.busy ||
-      (this.format === "pdf" && !this.actions.exportPdf) ||
-      (this.format === "hwpx" &&
-        this.hwpxVariant === "source-patch" &&
-        !this.actions.sourcePatchAvailable());
+      (this.format === "pdf" && !this.actions.exportPdf);
     execute.onclick = () => void this.run();
 
     const close = footer.createEl("button", {
@@ -572,7 +559,6 @@ export class HanmarkExportModal extends Modal {
     if (this.format === "html") return "HTML 내보내기";
     if (this.format === "pdf") return "PDF 설정 열기";
     if (this.hwpxVariant === "gongmun") return "공문서 HWPX 내보내기";
-    if (this.hwpxVariant === "source-patch") return "원본 형식 수정본 만들기";
     return "HWPX 내보내기";
   }
 
@@ -588,9 +574,6 @@ export class HanmarkExportModal extends Modal {
       // the resizable HanMark workspace modal.
       super.close();
       return this.actions.exportPdf?.();
-    }
-    if (this.hwpxVariant === "source-patch") {
-      return this.actions.patchSource();
     }
     if (this.hwpxVariant === "gongmun") {
       return this.actions.exportKordoc(

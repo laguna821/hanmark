@@ -35,10 +35,13 @@ import {
 } from "./io/frontmatter";
 import { importDocument } from "./io/kordocImport";
 import {
+  createCleanLegacyImportCopy,
+  hasHanmarkSourceMetadata
+} from "./io/legacyImportMigration";
+import {
   exportKordocHwpx,
   exportKordocHwpxWithOutcome,
-  patchSourceExperimental,
-  patchSourceExperimentalWithOutcome
+  patchSourceExperimental
 } from "./io/kordocSave";
 import {
   revealVaultOutputUserInitiated,
@@ -110,7 +113,7 @@ function registerHeadingCommand(plugin: Plugin, level: number): void {
 }
 
 /**
- * HanMark 2.4.4 runtime.
+ * HanMark 2.4.5 runtime.
  *
  * HWPX is generated in-process by Kordoc. The single external process boundary
  * is used only after an explicit user action: optional Pandoc/Word conversion
@@ -292,8 +295,32 @@ export default class HanmarkPlugin extends Plugin {
     });
     this.addCommand({
       id: "patch-hwp-experimental",
-      name: "원본 형식 보존 수정본 만들기",
-      callback: () => void patchSourceExperimental(this.app, this)
+      name: "고급·레거시: 원본 형식 보존 수정본 만들기",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const contract = file ? readSourceContract(this.app, file) : null;
+        const available =
+          contract?.["hwp-source-format"] === "hwp" ||
+          contract?.["hwp-source-format"] === "hwpx";
+        if (available && !checking) {
+          void patchSourceExperimental(this.app, this);
+        }
+        return available;
+      }
+    });
+    this.addCommand({
+      id: "create-clean-markdown-copy",
+      name: "레거시 가져오기 노트를 일반 Markdown 사본으로 만들기",
+      checkCallback: (checking) => {
+        const view = this.currentMarkdownView();
+        const available = Boolean(
+          view?.file && hasHanmarkSourceMetadata(view.editor.getValue())
+        );
+        if (available && !checking) {
+          void this.createCleanLegacyMarkdownCopy();
+        }
+        return available;
+      }
     });
     this.addCommand({
       id: "quick-hwpx-preview",
@@ -394,14 +421,6 @@ export default class HanmarkPlugin extends Plugin {
     new HanmarkExportModal(
       this.app,
       {
-        sourcePatchAvailable: () => {
-          const file = this.app.workspace.getActiveFile();
-          const contract = file ? readSourceContract(this.app, file) : null;
-          return (
-            contract?.["hwp-source-format"] === "hwp" ||
-            contract?.["hwp-source-format"] === "hwpx"
-          );
-        },
         activeTemplateId: () => activeTemplateId(this),
         templateChoices: () =>
           availableDocumentTemplates(this).map(({ id, name }) => ({ id, name })),
@@ -424,8 +443,6 @@ export default class HanmarkPlugin extends Plugin {
             mode,
             gongmunPreset: preset
           }),
-        patchSource: () =>
-          patchSourceExperimentalWithOutcome(this.app, this),
         runOther: (mode) => this.runOtherExport(mode),
         openPreview: () => this.toggleQuickPreview(false),
         openDocxPreview: () => this.toggleDocxPreview(false),
@@ -594,12 +611,33 @@ export default class HanmarkPlugin extends Plugin {
         existing.forEach((leaf) => leaf.detach());
       } else {
         this.app.workspace.setActiveLeaf(existing[0], { focus: true });
+        if (existing[0].view instanceof DocxPreviewView) {
+          await existing[0].view.showUserInitiatedPreview();
+        }
       }
       return;
     }
     const leaf = this.app.workspace.getLeaf("split", "vertical");
     await leaf.setViewState({ type: DOCX_PREVIEW_VIEW_TYPE, active: true });
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
+    if (leaf.view instanceof DocxPreviewView) {
+      await leaf.view.showUserInitiatedPreview();
+    }
+  }
+
+  private async createCleanLegacyMarkdownCopy(): Promise<void> {
+    const file = this.app.workspace.getActiveFile();
+    if (!file || file.extension.toLowerCase() !== "md") {
+      new Notice("정리할 HanMark 레거시 Markdown 노트를 여세요.");
+      return;
+    }
+    try {
+      const result = await createCleanLegacyImportCopy(this.app, file);
+      await this.app.workspace.getLeaf().openFile(result.file);
+      new Notice(`일반 Markdown 사본을 만들었습니다: ${result.file.path}`);
+    } catch (error) {
+      new Notice(`일반 Markdown 사본 만들기 실패: ${errorMessage(error)}`);
+    }
   }
 
   private refreshPreviews(): void {

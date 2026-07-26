@@ -1,30 +1,15 @@
 import { App, Modal, Notice, TFile, normalizePath } from "obsidian";
-import { parse, detectFormat, VERSION } from "kordoc";
-import type { HwpSourceContract, HwpSourceFormat } from "./frontmatter";
-import { renderSourceCallout } from "./sourceCallout";
-import { sha256Bytes } from "./hash";
+import { parse } from "kordoc";
 import { BulkImportReportModal } from "./BulkImportReportModal";
 import { persistImportedImages } from "./importImages";
 import {
   bytesAsArrayBuffer,
   createFileGateway,
   splitFilename,
-  type FileGateway,
   type SelectedExternalFile
 } from "./fileGateway";
 
-const KORDOC_VERSION = typeof VERSION === "string" ? VERSION : "4.2.5";
 const IMPORT_EXTENSIONS = ["hwp", "hwpx", "hwpml", "docx", "pdf", "xlsx", "xls"];
-const KNOWN_FORMATS = new Set<string>([
-  "hwpx",
-  "hwp",
-  "hwp3",
-  "hwpml",
-  "docx",
-  "pdf",
-  "xlsx",
-  "xls"
-]);
 /** Ask for confirmation before bulk-converting at least this many files. */
 const BULK_CONFIRM_THRESHOLD = 25;
 
@@ -36,19 +21,6 @@ export interface ImportResult {
   images?: number;
   file?: string;
   error?: string;
-}
-
-/** Prefer Kordoc's magic-byte detection; fall back to the file extension. */
-function resolveFormat(buffer: ArrayBuffer, extension: string): HwpSourceFormat {
-  try {
-    const detected = String(detectFormat(buffer) || "").toLowerCase();
-    if (KNOWN_FORMATS.has(detected)) return detected as HwpSourceFormat;
-  } catch {
-    // Fall back to the selected file's extension.
-  }
-  const normalized = extension.replace(/^\./, "").toLowerCase();
-  if (KNOWN_FORMATS.has(normalized)) return normalized as HwpSourceFormat;
-  return "hwpx";
 }
 
 function preferredFolder(app: App): string {
@@ -75,33 +47,15 @@ function uniqueNotePath(app: App, folder: string, base: string, reserved: Set<st
 async function importOne(
   app: App,
   selected: SelectedExternalFile,
-  gateway: FileGateway,
   reserved: Set<string>
 ): Promise<ImportResult> {
   try {
     const arrayBuffer = bytesAsArrayBuffer(selected.bytes);
     const parsedName = splitFilename(selected.name);
-    const format = resolveFormat(arrayBuffer, parsedName.extension);
     const result = await parse(arrayBuffer);
     if (result.success === false) {
       throw new Error(result.error || "문서를 파싱하지 못했습니다.");
     }
-
-    const digest = sha256Bytes(selected.bytes);
-    const cacheId = await gateway.cacheSource(selected.bytes, {
-      hash: digest,
-      byteLength: selected.bytes.byteLength,
-      sourceName: selected.name
-    });
-    const contract: HwpSourceContract = {
-      "hwp-source": (selected.displayPath || selected.name).replace(/\\/g, "/"),
-      "hwp-source-cache": cacheId,
-      "hwp-source-format": format,
-      "hwp-source-hash": `sha256:${digest}`,
-      "hwp-source-bytes": selected.bytes.byteLength,
-      "hwp-imported-at": new Date().toISOString(),
-      "hwp-kordoc": KORDOC_VERSION
-    };
 
     const base = parsedName.stem
       .replace(/[\\/:*?"<>|#^[\]]/g, "_")
@@ -113,11 +67,7 @@ async function importOne(
       result.markdown.trim(),
       result.images
     );
-    const noteBody = renderSourceCallout(contract) + persisted.markdown.trim() + "\n";
-    const file = await app.vault.create(relative, noteBody);
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      Object.assign(frontmatter, contract);
-    });
+    await app.vault.create(relative, persisted.markdown.trim() + "\n");
 
     const warnings = (result.warnings?.length ?? 0) + persisted.warnings.length;
     return { ok: true, rel: relative, warnings, images: persisted.saved };
@@ -196,7 +146,7 @@ export async function importDocument(app: App, plugin?: unknown): Promise<void> 
   if (selectedFiles.length === 1) {
     const progress = new Notice("문서를 변환하는 중…", 0);
     try {
-      const result = await importOne(app, selectedFiles[0], gateway, reserved);
+      const result = await importOne(app, selectedFiles[0], reserved);
       if (result.ok) {
         const file = app.vault.getAbstractFileByPath(result.rel ?? "");
         if (file instanceof TFile) await app.workspace.getLeaf(true).openFile(file);
@@ -225,7 +175,7 @@ export async function importDocument(app: App, plugin?: unknown): Promise<void> 
   let done = 0;
   try {
     await runPool(selectedFiles, limit, async (selected, index) => {
-      results[index] = await importOne(app, selected, gateway, reserved);
+      results[index] = await importOne(app, selected, reserved);
       done++;
       progress.setMessage(`변환 중 ${done}/${selectedFiles.length}…`);
     });

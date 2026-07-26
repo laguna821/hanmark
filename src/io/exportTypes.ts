@@ -4,7 +4,6 @@ import type { GongmunPreset } from "kordoc";
 export type HanmarkExportMode =
   | "quick-hwpx"
   | "gongmun-hwpx"
-  | "source-patch"
   | "docx"
   | "html";
 
@@ -14,8 +13,7 @@ export type HanmarkExportFormat = "hwpx" | "docx" | "html" | "pdf";
 /** HWPX-specific choices shown after the HWPX format card is selected. */
 export type HwpxExportVariant =
   | "quick"
-  | "gongmun"
-  | "source-patch";
+  | "gongmun";
 
 /**
  * A presentation-neutral result returned to the export center.

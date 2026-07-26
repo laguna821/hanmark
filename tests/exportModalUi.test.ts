@@ -21,7 +21,7 @@ test("unified export modal keeps format-specific options and one active footer",
 
   assert.match(source, /"quick"/u);
   assert.match(source, /"gongmun"/u);
-  assert.match(source, /"source-patch"/u);
+  assert.doesNotMatch(source, /"source-patch"|sourcePatchAvailable|patchSource/u);
   assert.match(source, /cls: "hanmark-export-variant-grid"/u);
   assert.match(source, /"aria-pressed": String\(selected\)/u);
   assert.match(source, /this\.actions\.openPreview\(\)/u);

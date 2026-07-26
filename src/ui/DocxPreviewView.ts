@@ -18,6 +18,7 @@ import type {
   WordTemplateSpec
 } from "../legacy-port/wordTypes";
 import {
+  calculateDocxPreviewFitPercent,
   isUserInitiatedFastPreviewTrigger,
   UserInitiatedDocxPackagePreview,
   type FastDocxPreviewTrigger
@@ -185,6 +186,8 @@ export class DocxPreviewView extends ItemView {
   >;
   private previewEl: HTMLElement | null = null;
   private modeSelect: HTMLSelectElement | null = null;
+  private statusEl: HTMLElement | null = null;
+  private resizeObserver: ResizeObserver | null = null;
   private renderVersion = 0;
   private objectUrl: string | null = null;
   private renderedSourceKey: string | null = null;
@@ -219,6 +222,16 @@ export class DocxPreviewView extends ItemView {
     toolbar.createSpan({
       cls: "hanmark-docx-preview-label",
       text: "DOCX 미리보기"
+    });
+    this.statusEl = toolbar.createSpan({
+      cls: "hanmark-docx-preview-status",
+      text: "간이 미리보기",
+      attr: {
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true",
+        "data-state": "semantic"
+      }
     });
 
     const mode = toolbar.createEl("select", {
@@ -256,6 +269,7 @@ export class DocxPreviewView extends ItemView {
     this.previewEl = content.createDiv({
       cls: "hanmark-docx-preview-content docx-preview-content"
     });
+    this.installPreviewFitObserver();
     this.registerEvent(
       this.app.workspace.on("editor-change", () => {
         if (this.options.getPreviewMode() === "word-pdf") {
@@ -275,17 +289,28 @@ export class DocxPreviewView extends ItemView {
         }
       })
     );
+    await this.handleFastPreviewTrigger("view-open");
+  }
+
+  /**
+   * Starts the external preview only after the caller has received a direct
+   * user gesture. Workspace restoration calls onOpen(), but never this method.
+   */
+  async showUserInitiatedPreview(): Promise<void> {
     if (this.options.getPreviewMode() === "word-pdf") {
-      this.renderExactPreviewPrompt();
-    } else {
-      await this.handleFastPreviewTrigger("view-open");
+      await this.renderExactPreview();
+      return;
     }
+    await this.handleFastPreviewTrigger("explicit-open");
   }
 
   async onClose(): Promise<void> {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.revokeObjectUrl();
     this.previewEl = null;
     this.modeSelect = null;
+    this.statusEl = null;
     this.renderedSourceKey = null;
   }
 
@@ -313,92 +338,87 @@ export class DocxPreviewView extends ItemView {
     );
   }
 
-  private renderExactPreviewPrompt(): void {
-    const preview = this.previewEl;
-    if (!preview) return;
-    this.renderVersion += 1;
-    this.renderedSourceKey = null;
-    this.revokeObjectUrl();
-    preview.empty();
-    preview.createDiv({
-      cls: "hanmark-docx-preview-note",
-      text:
-        "Windows Word PDF 미리보기는 외부 Word 변환을 사용합니다. " +
-        "위의 ‘새로 고침’을 눌렀을 때만 실행됩니다."
-    });
+  private setPreviewStatus(
+    text: "생성 중" | "실제 DOCX" | "간이 미리보기" | "변경됨" | "Word PDF",
+    state: "building" | "actual" | "semantic" | "stale" | "exact"
+  ): void {
+    if (!this.statusEl) return;
+    this.statusEl.setText(text);
+    this.statusEl.dataset.state = state;
   }
 
-  private renderFastPreviewPrompt(message?: string): void {
+  private installPreviewFitObserver(): void {
+    const preview = this.previewEl;
+    if (!preview || typeof ResizeObserver === "undefined") return;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => this.updatePreviewFit());
+    this.resizeObserver.observe(preview);
+  }
+
+  private updatePreviewFit(): void {
     const preview = this.previewEl;
     if (!preview) return;
-    this.renderVersion += 1;
-    this.renderedSourceKey = null;
-    this.revokeObjectUrl();
-    preview.empty();
-    const source = this.source();
-    if (!source) {
-      preview.createDiv({
-        cls: "hanmark-docx-preview-empty",
-        text: "DOCX로 미리 볼 Markdown 문서를 여세요."
-      });
+    preview.dataset.fit = "100";
+    const page = preview.querySelector<HTMLElement>(
+      ".docx-preview-docx section.docx, .hanmark-docx-preview-paper"
+    );
+    if (!page) return;
+
+    const view = preview.ownerDocument.defaultView;
+    const previewStyle = view?.getComputedStyle(preview);
+    const horizontalPadding =
+      Number.parseFloat(previewStyle?.paddingLeft ?? "0") +
+      Number.parseFloat(previewStyle?.paddingRight ?? "0");
+    let pageWidth = page.getBoundingClientRect().width;
+    const wrapper = page.closest<HTMLElement>(".docx-wrapper");
+    if (wrapper) {
+      const wrapperStyle = view?.getComputedStyle(wrapper);
+      pageWidth +=
+        Number.parseFloat(wrapperStyle?.paddingLeft ?? "0") +
+        Number.parseFloat(wrapperStyle?.paddingRight ?? "0");
+    }
+    preview.dataset.fit = String(
+      calculateDocxPreviewFitPercent(
+        Math.max(0, preview.clientWidth - horizontalPadding),
+        pageWidth
+      )
+    );
+  }
+
+  private schedulePreviewFit(): void {
+    const view = this.previewEl?.ownerDocument.defaultView;
+    if (view) {
+      view.requestAnimationFrame(() => this.updatePreviewFit());
       return;
     }
-    if (!source.markdown.trim()) {
-      preview.createDiv({
-        cls: "hanmark-docx-preview-empty",
-        text: "문서에 내용을 입력한 뒤 ‘새로 고침’을 누르세요."
-      });
-      return;
-    }
-    if (message) {
-      preview.createDiv({
-        cls: "hanmark-docx-preview-warning",
-        text: message
-      });
-    }
-    preview.createDiv({
-      cls: "hanmark-docx-preview-note",
-      text:
-        "빠른 미리보기는 실제 Pandoc DOCX 패키지를 화면에 렌더링합니다. " +
-        "외부 변환은 위의 ‘새로 고침’을 눌렀을 때만 실행됩니다."
-    });
+    this.updatePreviewFit();
   }
 
   private markExactPreviewStale(): void {
-    const preview = this.previewEl;
-    if (!preview) return;
-    const existing = preview.querySelector(".hanmark-docx-preview-stale");
-    if (existing) return;
     this.renderVersion += 1;
-    preview.querySelector(".hanmark-docx-preview-loading")?.remove();
-    const notice = createDiv({
-      cls: "hanmark-docx-preview-warning hanmark-docx-preview-stale",
-      text: "문서 또는 템플릿이 바뀌었습니다. ‘새로 고침’을 눌러 Word PDF를 다시 만드세요."
-    });
-    preview.prepend(notice);
+    this.previewEl?.removeAttribute("aria-busy");
+    this.setPreviewStatus("변경됨", "stale");
   }
 
   private markFastPreviewStale(): void {
-    const preview = this.previewEl;
-    if (!preview) return;
-    const existing = preview.querySelector(".hanmark-docx-preview-stale");
-    if (existing) return;
     this.renderVersion += 1;
-    preview.querySelector(".hanmark-docx-preview-loading")?.remove();
-    const notice = createDiv({
-      cls: "hanmark-docx-preview-warning hanmark-docx-preview-stale",
-      text: "문서 또는 템플릿이 바뀌었습니다. ‘새로 고침’을 눌러 실제 DOCX를 다시 만드세요."
-    });
-    preview.prepend(notice);
+    this.previewEl?.removeAttribute("aria-busy");
+    this.setPreviewStatus("변경됨", "stale");
   }
 
   private async handleFastPreviewTrigger(
     trigger: FastDocxPreviewTrigger
   ): Promise<void> {
     if (!isUserInitiatedFastPreviewTrigger(trigger)) {
-      if (trigger === "view-open") this.renderFastPreviewPrompt();
-      else this.markFastPreviewStale();
+      if (trigger === "document-change") {
+        this.markFastPreviewStale();
+      } else {
+        await this.renderSemanticFallback();
+      }
       return;
+    }
+    if (trigger === "mode-selection") {
+      await this.renderSemanticFallback();
     }
     await this.renderFastPreviewUserInitiated(trigger);
   }
@@ -423,60 +443,63 @@ export class DocxPreviewView extends ItemView {
   }
 
   private async renderFastPreviewUserInitiated(
-    trigger: "toolbar-refresh" | "mode-selection"
+    trigger: "explicit-open" | "toolbar-refresh" | "mode-selection"
   ): Promise<void> {
     const preview = this.previewEl;
     if (!preview) return;
     const source = this.source();
     if (!source || !source.markdown.trim()) {
-      this.renderFastPreviewPrompt();
+      await this.renderSemanticFallback();
       return;
     }
+    if (!this.fastPreview.canHandle(trigger)) return;
     const version = ++this.renderVersion;
     this.renderedSourceKey = this.sourceKey(source);
     this.revokeObjectUrl();
-    preview.empty();
-    preview.createDiv({
-      cls: "hanmark-docx-preview-loading",
-      text: "실제 DOCX 미리보기를 만드는 중…"
-    });
+    preview.setAttribute("aria-busy", "true");
+    this.setPreviewStatus("생성 중", "building");
 
     try {
       const rendered = createDiv({ cls: "docx-preview-docx" });
       await this.options.preparePreviewFonts?.(this.containerEl.ownerDocument);
       if (!this.previewEl || version !== this.renderVersion) return;
-      await this.fastPreview.handle(trigger, {
+      const upgraded = await this.fastPreview.handle(trigger, {
         source,
         action: createUserInitiatedAction("toolbar"),
         container: rendered
       });
       if (!this.previewEl || version !== this.renderVersion) return;
+      if (!upgraded) {
+        preview.removeAttribute("aria-busy");
+        return;
+      }
       preview.empty();
-      preview.createDiv({
-        cls: "hanmark-docx-preview-note",
-        text:
-          "Pandoc이 만든 실제 DOCX 패키지를 렌더링했습니다. " +
-          "Word 버전에 따라 쪽 나눔은 조금 다를 수 있습니다."
-      });
       preview.append(rendered);
+      preview.removeAttribute("aria-busy");
+      this.setPreviewStatus("실제 DOCX", "actual");
+      this.schedulePreviewFit();
     } catch (error) {
       if (!this.previewEl || version !== this.renderVersion) return;
-      await this.renderSemanticFallback(
-        `실제 DOCX 미리보기를 만들 수 없어 간이 미리보기로 전환했습니다: ${toErrorMessage(error)}`
+      preview.removeAttribute("aria-busy");
+      new Notice(
+        `실제 DOCX 미리보기를 만들 수 없어 간이 미리보기를 유지합니다: ${toErrorMessage(error)}`
       );
+      await this.renderSemanticFallback();
     }
   }
 
-  private async renderSemanticFallback(message?: string): Promise<void> {
+  private async renderSemanticFallback(): Promise<void> {
     const preview = this.previewEl;
     if (!preview) return;
     const version = ++this.renderVersion;
     const source = this.source();
     this.renderedSourceKey = this.sourceKey(source);
     this.revokeObjectUrl();
-    preview.empty();
+    preview.removeAttribute("aria-busy");
+    this.setPreviewStatus("간이 미리보기", "semantic");
 
     if (!source) {
+      preview.empty();
       preview.createDiv({
         cls: "hanmark-docx-preview-empty",
         text: "DOCX로 미리 볼 Markdown 문서를 여세요."
@@ -484,36 +507,24 @@ export class DocxPreviewView extends ItemView {
       return;
     }
     if (!source.markdown.trim()) {
+      preview.empty();
       preview.createDiv({
         cls: "hanmark-docx-preview-empty",
         text: "문서에 내용을 입력하면 미리보기가 표시됩니다."
       });
       return;
     }
-    if (message) {
-      preview.createDiv({
-        cls: "hanmark-docx-preview-warning",
-        text: message
-      });
-    }
-    const note = preview.createDiv({
-      cls: "hanmark-docx-preview-note",
-      text:
-        "간이 미리보기는 Markdown과 Word 템플릿 스타일을 브라우저에서 표시합니다. " +
-        "실제 DOCX의 쪽 나눔과 완전히 같지 않습니다."
+    const staged = createDiv({
+      cls: "hanmark-docx-preview-stage"
     });
-    note.setAttribute("role", "note");
+    const paper = staged.createDiv({
+      cls: "hanmark-docx-preview-paper word-template-preview-paper"
+    });
+    const rendered = paper.createDiv({
+      cls: "markdown-preview-view hanmark-docx-preview-markdown"
+    });
 
     try {
-      const template = await this.options.templateStore.readActiveTemplate();
-      await this.options.preparePreviewFonts?.(this.containerEl.ownerDocument);
-      if (!this.previewEl || version !== this.renderVersion) return;
-      const paper = preview.createDiv({
-        cls: "hanmark-docx-preview-paper word-template-preview-paper"
-      });
-      const rendered = paper.createDiv({
-        cls: "markdown-preview-view hanmark-docx-preview-markdown"
-      });
       await MarkdownRenderer.render(
         this.app,
         source.markdown,
@@ -522,7 +533,6 @@ export class DocxPreviewView extends ItemView {
         this
       );
       if (!this.previewEl || version !== this.renderVersion) return;
-      applyWordTemplatePreview(paper, rendered, template);
     } catch (error) {
       if (!this.previewEl || version !== this.renderVersion) return;
       preview.empty();
@@ -530,7 +540,26 @@ export class DocxPreviewView extends ItemView {
         cls: "hanmark-docx-preview-error",
         text: `DOCX 미리보기 실패: ${toErrorMessage(error)}`
       });
+      new Notice(`DOCX 간이 미리보기 실패: ${toErrorMessage(error)}`);
+      return;
     }
+
+    try {
+      const template = await this.options.templateStore.readActiveTemplate();
+      await this.options.preparePreviewFonts?.(this.containerEl.ownerDocument);
+      if (!this.previewEl || version !== this.renderVersion) return;
+      applyWordTemplatePreview(paper, rendered, template);
+    } catch (error) {
+      if (!this.previewEl || version !== this.renderVersion) return;
+      new Notice(
+        `Word 템플릿 스타일을 적용하지 못해 기본 간이 미리보기를 표시합니다: ${toErrorMessage(error)}`
+      );
+    }
+
+    if (!this.previewEl || version !== this.renderVersion) return;
+    preview.empty();
+    while (staged.firstChild) preview.append(staged.firstChild);
+    this.schedulePreviewFit();
   }
 
   private async renderExactPreview(): Promise<void> {
@@ -538,25 +567,23 @@ export class DocxPreviewView extends ItemView {
     if (!preview) return;
     const source = this.source();
     if (!source) {
-      this.renderFastPreviewPrompt();
+      await this.renderSemanticFallback();
       return;
     }
     if (!Platform.isWin || !Platform.isDesktopApp) {
       await this.setPreviewMode("fast-docx");
-      await this.renderSemanticFallback(
+      new Notice(
         "Windows Word PDF 미리보기는 Windows 데스크톱에서만 사용할 수 있습니다."
       );
+      await this.renderSemanticFallback();
       return;
     }
 
     const version = ++this.renderVersion;
     this.renderedSourceKey = this.sourceKey(source);
     this.revokeObjectUrl();
-    preview.empty();
-    preview.createDiv({
-      cls: "hanmark-docx-preview-loading",
-      text: "Word PDF 미리보기를 만드는 중…"
-    });
+    preview.setAttribute("aria-busy", "true");
+    this.setPreviewStatus("생성 중", "building");
 
     try {
       const result =
@@ -566,6 +593,7 @@ export class DocxPreviewView extends ItemView {
         );
       if (!this.previewEl || version !== this.renderVersion) return;
       preview.empty();
+      preview.removeAttribute("aria-busy");
       const blob = new Blob([result.pdfBytes.slice().buffer], {
         type: "application/pdf"
       });
@@ -577,12 +605,16 @@ export class DocxPreviewView extends ItemView {
           src: this.objectUrl
         }
       });
+      this.setPreviewStatus("Word PDF", "exact");
+      preview.dataset.fit = "100";
     } catch (error) {
       if (!this.previewEl || version !== this.renderVersion) return;
+      preview.removeAttribute("aria-busy");
       await this.setPreviewMode("fast-docx");
-      await this.renderSemanticFallback(
-        `Word PDF 미리보기를 만들 수 없어 빠른 미리보기로 전환했습니다: ${toErrorMessage(error)}`
+      new Notice(
+        `Word PDF 미리보기를 만들 수 없어 간이 미리보기를 유지합니다: ${toErrorMessage(error)}`
       );
+      await this.renderSemanticFallback();
     }
   }
 

@@ -12,6 +12,7 @@ export type DocxPackageRenderer = (
 ) => Promise<unknown>;
 
 export type FastDocxPreviewTrigger =
+  | "explicit-open"
   | "view-open"
   | "document-change"
   | "active-document-change"
@@ -29,6 +30,23 @@ export interface FastDocxPreviewRequest<TSource, TAction> {
   container: HTMLElement;
 }
 
+/** Returns a page-fit zoom in stable 5% steps without reflowing DOCX pages. */
+export function calculateDocxPreviewFitPercent(
+  availableWidth: number,
+  pageWidth: number
+): number {
+  if (
+    !Number.isFinite(availableWidth) ||
+    !Number.isFinite(pageWidth) ||
+    availableWidth <= 0 ||
+    pageWidth <= 0
+  ) {
+    return 100;
+  }
+  const stepped = Math.floor(((availableWidth / pageWidth) * 100) / 5) * 5;
+  return Math.min(100, Math.max(40, stepped));
+}
+
 /**
  * External DOCX generation is deliberately limited to direct UI gestures.
  *
@@ -38,8 +56,12 @@ export interface FastDocxPreviewRequest<TSource, TAction> {
  */
 export function isUserInitiatedFastPreviewTrigger(
   trigger: FastDocxPreviewTrigger
-): trigger is "toolbar-refresh" | "mode-selection" {
-  return trigger === "toolbar-refresh" || trigger === "mode-selection";
+): trigger is "explicit-open" | "toolbar-refresh" | "mode-selection" {
+  return (
+    trigger === "explicit-open" ||
+    trigger === "toolbar-refresh" ||
+    trigger === "mode-selection"
+  );
 }
 
 /**
@@ -65,6 +87,8 @@ export async function renderDocxPackage(
  * cannot accidentally make view-open or document-change run an executable.
  */
 export class UserInitiatedDocxPackagePreview<TSource, TAction> {
+  private explicitOpenHandled = false;
+
   constructor(
     private readonly build: (
       source: TSource,
@@ -76,13 +100,24 @@ export class UserInitiatedDocxPackagePreview<TSource, TAction> {
     ) => Promise<void> = renderDocxPackage
   ) {}
 
+  canHandle(trigger: FastDocxPreviewTrigger): boolean {
+    return (
+      isUserInitiatedFastPreviewTrigger(trigger) &&
+      (trigger !== "explicit-open" || !this.explicitOpenHandled)
+    );
+  }
+
   async handle(
     trigger: FastDocxPreviewTrigger,
     request?: FastDocxPreviewRequest<TSource, TAction>
   ): Promise<boolean> {
-    if (!isUserInitiatedFastPreviewTrigger(trigger)) return false;
+    if (!this.canHandle(trigger)) return false;
     if (!request) {
       throw new Error("A user-initiated DOCX preview request is required.");
+    }
+    if (trigger === "explicit-open") {
+      if (this.explicitOpenHandled) return false;
+      this.explicitOpenHandled = true;
     }
     const prepared = await this.build(request.source, request.action);
     await this.render(prepared.bytes, request.container);

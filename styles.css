@@ -1360,13 +1360,87 @@
 
 .docx-preview-container {
   height: 100%;
-  overflow: auto;
-  padding: 16px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--background-secondary);
 }
 
+.hanmark-docx-preview-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.hanmark-docx-preview-label {
+  font-weight: 700;
+}
+
+.hanmark-docx-preview-status {
+  margin-right: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-docx-preview-status[data-state="actual"],
+.hanmark-docx-preview-status[data-state="exact"] {
+  border-color: var(--interactive-accent);
+  color: var(--text-accent);
+}
+
+.hanmark-docx-preview-status[data-state="building"] {
+  color: var(--text-normal);
+}
+
+.hanmark-docx-preview-status[data-state="stale"] {
+  border-color: var(--text-warning);
+  color: var(--text-warning);
+}
+
 .docx-preview-content {
-  min-height: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  --hanmark-docx-preview-zoom: 1;
+}
+
+.hanmark-docx-preview-content[data-fit="40"] { --hanmark-docx-preview-zoom: .4; }
+.hanmark-docx-preview-content[data-fit="45"] { --hanmark-docx-preview-zoom: .45; }
+.hanmark-docx-preview-content[data-fit="50"] { --hanmark-docx-preview-zoom: .5; }
+.hanmark-docx-preview-content[data-fit="55"] { --hanmark-docx-preview-zoom: .55; }
+.hanmark-docx-preview-content[data-fit="60"] { --hanmark-docx-preview-zoom: .6; }
+.hanmark-docx-preview-content[data-fit="65"] { --hanmark-docx-preview-zoom: .65; }
+.hanmark-docx-preview-content[data-fit="70"] { --hanmark-docx-preview-zoom: .7; }
+.hanmark-docx-preview-content[data-fit="75"] { --hanmark-docx-preview-zoom: .75; }
+.hanmark-docx-preview-content[data-fit="80"] { --hanmark-docx-preview-zoom: .8; }
+.hanmark-docx-preview-content[data-fit="85"] { --hanmark-docx-preview-zoom: .85; }
+.hanmark-docx-preview-content[data-fit="90"] { --hanmark-docx-preview-zoom: .9; }
+.hanmark-docx-preview-content[data-fit="95"] { --hanmark-docx-preview-zoom: .95; }
+.hanmark-docx-preview-content[data-fit="100"] { --hanmark-docx-preview-zoom: 1; }
+
+.hanmark-docx-preview-content .docx-preview-docx .docx-wrapper,
+.hanmark-docx-preview-content .hanmark-docx-preview-paper {
+  zoom: var(--hanmark-docx-preview-zoom);
+}
+
+.hanmark-docx-preview-content .hanmark-docx-preview-paper {
+  transform-origin: top center;
+}
+
+.hanmark-docx-preview-content .docx-preview-docx,
+.hanmark-docx-preview-content .hanmark-docx-preview-stage {
+  min-width: max-content;
 }
 
 .docx-preview-loading,

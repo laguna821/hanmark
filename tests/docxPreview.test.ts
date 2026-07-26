@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
+  calculateDocxPreviewFitPercent,
   isUserInitiatedFastPreviewTrigger,
   renderDocxPackage,
   UserInitiatedDocxPackagePreview,
@@ -36,7 +38,7 @@ test("DOCX lifecycle events never invoke the external DOCX builder", async () =>
   assert.equal(renders, 0);
 });
 
-test("toolbar refresh and mode selection render a generated DOCX package", async () => {
+test("explicit open upgrades once while manual refresh remains repeatable", async () => {
   const source = { markdown: "# 실제 DOCX" };
   const action = { source: "toolbar" };
   const container = {} as HTMLElement;
@@ -53,6 +55,15 @@ test("toolbar refresh and mode selection render a generated DOCX package", async
     }
   );
 
+  assert.equal(isUserInitiatedFastPreviewTrigger("explicit-open"), true);
+  assert.equal(
+    await runtime.handle("explicit-open", { source, action, container }),
+    true
+  );
+  assert.equal(
+    await runtime.handle("explicit-open", { source, action, container }),
+    false
+  );
   for (const trigger of ["toolbar-refresh", "mode-selection"] as const) {
     assert.equal(isUserInitiatedFastPreviewTrigger(trigger), true);
     assert.equal(
@@ -60,10 +71,19 @@ test("toolbar refresh and mode selection render a generated DOCX package", async
       true
     );
   }
-  assert.equal(calls.length, 2);
-  assert.equal(rendered.length, 2);
+  assert.equal(calls.length, 3);
+  assert.equal(rendered.length, 3);
   assert.strictEqual(rendered[0]?.bytes, builtBytes);
   assert.strictEqual(rendered[0]?.container, container);
+});
+
+test("DOCX page fit is clamped to 40-100% in 5% steps", () => {
+  assert.equal(calculateDocxPreviewFitPercent(1_000, 800), 100);
+  assert.equal(calculateDocxPreviewFitPercent(799, 800), 95);
+  assert.equal(calculateDocxPreviewFitPercent(641, 800), 80);
+  assert.equal(calculateDocxPreviewFitPercent(319, 800), 40);
+  assert.equal(calculateDocxPreviewFitPercent(0, 800), 100);
+  assert.equal(calculateDocxPreviewFitPercent(800, Number.NaN), 100);
 });
 
 test("DOCX package renderer preserves the 2.4.2 page rendering contract", async () => {
@@ -100,4 +120,35 @@ test("DOCX package renderer preserves the 2.4.2 page rendering contract", async 
     inWrapper: true,
     renderAltChunks: false
   });
+});
+
+test("explicit UI open is wired after view creation and responsive fit is CSS-scoped", async () => {
+  const [main, view, css] = await Promise.all([
+    readFile("src/main.ts", "utf8"),
+    readFile("src/ui/DocxPreviewView.ts", "utf8"),
+    readFile("styles.css", "utf8")
+  ]);
+
+  assert.match(
+    main,
+    /await leaf\.setViewState\([\s\S]*?leaf\.view\.showUserInitiatedPreview\(\)/u
+  );
+  assert.match(
+    main,
+    /existing\[0\]\.view\.showUserInitiatedPreview\(\)/u
+  );
+  const onOpenBlock = view.slice(
+    view.indexOf("async onOpen()"),
+    view.indexOf("async showUserInitiatedPreview()")
+  );
+  assert.doesNotMatch(onOpenBlock, /explicit-open/u);
+  assert.match(view, /role:\s*"status"[\s\S]*?"data-state":\s*"semantic"/u);
+  assert.match(view, /new ResizeObserver\(\(\) => this\.updatePreviewFit\(\)\)/u);
+  for (let fit = 40; fit <= 100; fit += 5) {
+    assert.match(css, new RegExp(`data-fit="${fit}"`, "u"));
+  }
+  assert.match(
+    css,
+    /\.docx-preview-docx \.docx-wrapper,[\s\S]*?\.hanmark-docx-preview-paper[\s\S]*?zoom:/u
+  );
 });
