@@ -1,0 +1,78 @@
+name: Publish verified plugin
+
+on:
+  push:
+    tags: ["2.4.3"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --omit=optional
+      - run: npm audit --omit=dev --omit=optional
+      - run: npm run check
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install without optional native modules
+        run: npm ci --omit=optional
+      - name: Verify runtime dependency audit
+        run: npm audit --omit=dev --omit=optional
+      - name: Verify, test, and build
+        run: npm run check
+      - name: Verify tag and manifest version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node -e "const manifest=require('./manifest.json'); if (manifest.version !== process.env.RELEASE_TAG) throw new Error('Tag '+process.env.RELEASE_TAG+' does not match manifest '+manifest.version)"
+      - name: Prepare the three Community release assets
+        run: |
+          mkdir -p release
+          cp main.js manifest.json styles.css release/
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 3
+      - name: Attest release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            release/main.js
+            release/manifest.json
+            release/styles.css
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          release/main.js release/manifest.json release/styles.css
+          --verify-tag
+          --title "HanMark 2.4.3 — Community review hardening / 자동심사 안전성 개선"
+          --notes-file "release-notes/2.4.3.md"

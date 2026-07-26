@@ -1,7 +1,7 @@
 {
   "id": "hanmark",
   "name": "HanMark",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "minAppVersion": "1.5.7",
   "description": "Export styled, image-inclusive HWPX with reusable templates and bundled Kordoc. No Python setup required.",
   "author": "Achmage",

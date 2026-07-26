@@ -2,11 +2,15 @@ name: Verify plugin
 
 on:
   push:
-    branches: ["2.4.2"]
+    branches: ["2.4.3"]
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -16,10 +20,11 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
       - run: npm ci --omit=optional
+      - run: npm audit --omit=dev --omit=optional
       - run: npm run check
