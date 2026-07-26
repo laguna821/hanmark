@@ -73,7 +73,7 @@ export interface ExtendedHeadingMarker {
 }
 
 function localName(node: Node): string {
-  return (node as any).localName || node.nodeName.split(":").pop() || node.nodeName;
+  return node.nodeName.split(":").pop() || node.nodeName;
 }
 
 function elements(root: Document | Element, name: string): Element[] {
@@ -158,8 +158,12 @@ function color(value: unknown): string | undefined {
   return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : undefined;
 }
 
-function normalizeCharacter(input: any): CharacterStyleProfile | undefined {
-  if (!input || typeof input !== "object") return undefined;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeCharacter(input: unknown): CharacterStyleProfile | undefined {
+  if (!isRecord(input)) return undefined;
   const result: CharacterStyleProfile = {};
   const fontFamily = cleanText(input.fontFamily, 80);
   const latinFontFamily = cleanText(input.latinFontFamily, 80);
@@ -179,10 +183,10 @@ function normalizeCharacter(input: any): CharacterStyleProfile | undefined {
   return Object.keys(result).length ? result : undefined;
 }
 
-function normalizeParagraph(input: any): ParagraphStyleProfile | undefined {
-  if (!input || typeof input !== "object") return undefined;
+function normalizeParagraph(input: unknown): ParagraphStyleProfile | undefined {
+  if (!isRecord(input)) return undefined;
   const result: ParagraphStyleProfile = {};
-  const alignment = String(input.alignment || "").toUpperCase();
+  const alignment = typeof input.alignment === "string" ? input.alignment.toUpperCase() : "";
   if (ALIGNMENTS.has(alignment)) result.alignment = alignment as ParagraphStyleProfile["alignment"];
   const lineSpacingPercent = bounded(input.lineSpacingPercent, 70, 400, true);
   const firstLineIndentHu = bounded(input.firstLineIndentHu, -100_000, 100_000, true);
@@ -200,8 +204,8 @@ function normalizeParagraph(input: any): ParagraphStyleProfile | undefined {
   return Object.keys(result).length ? result : undefined;
 }
 
-function normalizePage(input: any): PageStyleProfile | undefined {
-  if (!input || typeof input !== "object" || !input.margins) return undefined;
+function normalizePage(input: unknown): PageStyleProfile | undefined {
+  if (!isRecord(input) || !isRecord(input.margins)) return undefined;
   const widthHu = bounded(input.widthHu, 10_000, 200_000, true);
   const heightHu = bounded(input.heightHu, 10_000, 200_000, true);
   const top = bounded(input.margins.top, 0, 100_000, true);
@@ -209,12 +213,14 @@ function normalizePage(input: any): PageStyleProfile | undefined {
   const left = bounded(input.margins.left, 0, 100_000, true);
   const right = bounded(input.margins.right, 0, 100_000, true);
   if ([widthHu, heightHu, top, bottom, left, right].some((value) => value === undefined)) return undefined;
-  if ((left as number) + (right as number) >= (widthHu as number)) return undefined;
-  if ((top as number) + (bottom as number) >= (heightHu as number)) return undefined;
+  if (left === undefined || right === undefined || widthHu === undefined) return undefined;
+  if (top === undefined || bottom === undefined || heightHu === undefined) return undefined;
+  if (left + right >= widthHu) return undefined;
+  if (top + bottom >= heightHu) return undefined;
   const page: PageStyleProfile = {
-    widthHu: widthHu as number,
-    heightHu: heightHu as number,
-    margins: { top: top as number, bottom: bottom as number, left: left as number, right: right as number }
+    widthHu,
+    heightHu,
+    margins: { top, bottom, left, right }
   };
   if (input.landscape === "WIDELY" || input.landscape === "NARROWLY") page.landscape = input.landscape;
   const gutterType = cleanText(input.gutterType, 30);
@@ -226,13 +232,13 @@ function normalizePage(input: any): PageStyleProfile | undefined {
   return page;
 }
 
-export function normalizeDocumentStyleProfile(input: any): DocumentStyleProfile {
-  if (!input || typeof input !== "object") throw new Error("문서 스타일 프로필이 비어 있습니다.");
+export function normalizeDocumentStyleProfile(input: unknown): DocumentStyleProfile {
+  if (!isRecord(input)) throw new Error("문서 스타일 프로필이 비어 있습니다.");
   const sourceSchemaVersion = Number(input.schemaVersion) || 1;
   const roles: DocumentStyleProfile["roles"] = {};
   for (const role of ROLE_KEYS) {
-    const raw = input.roles?.[role];
-    if (!raw || typeof raw !== "object") continue;
+    const raw = isRecord(input.roles) ? input.roles[role] : undefined;
+    if (!isRecord(raw)) continue;
     const character = normalizeCharacter(raw.character);
     const paragraph = normalizeParagraph(raw.paragraph);
     const styleName = cleanText(raw.styleName, 80);
@@ -247,8 +253,8 @@ export function normalizeDocumentStyleProfile(input: any): DocumentStyleProfile 
     }
   }
   if (sourceSchemaVersion < 3 && roles.h4) {
-    if (!roles.h5) roles.h5 = JSON.parse(JSON.stringify(roles.h4));
-    if (!roles.h6) roles.h6 = JSON.parse(JSON.stringify(roles.h4));
+    if (!roles.h5) roles.h5 = structuredClone(roles.h4);
+    if (!roles.h6) roles.h6 = structuredClone(roles.h4);
     if (roles.h5) roles.h5.styleName = "제목 5";
     if (roles.h6) roles.h6.styleName = "제목 6";
   }
@@ -265,9 +271,13 @@ export function normalizeDocumentStyleProfile(input: any): DocumentStyleProfile 
 function fontMaps(header: Document): Map<string, Map<string, string>> {
   const result = new Map<string, Map<string, string>>();
   for (const fontface of elements(header, "fontface")) {
-    const language = fontface.getAttribute("lang").toUpperCase();
+    const language = (fontface.getAttribute("lang") ?? "").toUpperCase();
     const fonts = new Map<string, string>();
-    for (const font of directElements(fontface, "font")) fonts.set(font.getAttribute("id"), font.getAttribute("face"));
+    for (const font of directElements(fontface, "font")) {
+      const id = font.getAttribute("id");
+      const face = font.getAttribute("face");
+      if (id && face) fonts.set(id, face);
+    }
     result.set(language, fonts);
   }
   return result;
@@ -409,7 +419,10 @@ function canonicalHwpxFontFace(family: string): string {
 function configuredFontfaces(header: Document): Array<{ script: (typeof SCRIPT_KEYS)[number]; group: Element }> {
   const groups = elements(header, "fontface");
   return SCRIPT_KEYS.flatMap((script) => {
-    const group = groups.find((candidate) => candidate.getAttribute("lang").toUpperCase() === SCRIPT_LANGUAGE[script]);
+    const group = groups.find(
+      (candidate) =>
+        (candidate.getAttribute("lang") ?? "").toUpperCase() === SCRIPT_LANGUAGE[script]
+    );
     return group ? [{ script, group }] : [];
   });
 }
@@ -444,8 +457,12 @@ function ensureUnifiedFont(header: Document, rawFamily: string): string {
   const commonIds = configured
     .map(({ group }) => new Set(
       directElements(group, "font")
-        .filter((font) => font.getAttribute("face").trim().toLocaleLowerCase() === normalized)
+        .filter(
+          (font) =>
+            (font.getAttribute("face") ?? "").trim().toLocaleLowerCase() === normalized
+        )
         .map((font) => font.getAttribute("id"))
+        .filter((id): id is string => id !== null)
     ))
     .reduce<string[]>((ids, current, index) => index === 0 ? [...current] : ids.filter((id) => current.has(id)), []);
   if (commonIds.length) return commonIds.sort((left, right) => Number(left) - Number(right))[0];
@@ -456,7 +473,10 @@ function ensureUnifiedFont(header: Document, rawFamily: string): string {
   ) + 1;
   const familyTemplate = configured
     .flatMap(({ group }) => directElements(group, "font"))
-    .find((font) => font.getAttribute("face").trim().toLocaleLowerCase() === normalized);
+    .find(
+      (font) =>
+        (font.getAttribute("face") ?? "").trim().toLocaleLowerCase() === normalized
+    );
 
   for (const { group } of configured) {
     let fonts = directElements(group, "font");

@@ -1,6 +1,7 @@
 import { App, normalizePath } from "obsidian";
 import type { ExtractedImage } from "kordoc";
 import { rewriteImportedImageReference } from "./imageLinks";
+import { errorMessage } from "../utils/errors";
 
 export interface PersistImagesResult {
   markdown: string;
@@ -45,10 +46,7 @@ export async function persistImportedImages(
         await app.fileManager.getAvailablePathForAttachment(requested, notePath)
       );
       await ensureParentFolders(app, attachmentPath);
-      const buffer = image.data.buffer.slice(
-        image.data.byteOffset,
-        image.data.byteOffset + image.data.byteLength
-      ) as ArrayBuffer;
+      const buffer = image.data.slice().buffer;
       const file = await app.vault.createBinary(attachmentPath, buffer);
       const embed = `!${app.fileManager.generateMarkdownLink(file, notePath)}`;
       const result = rewriteImportedImageReference(rewritten, image.filename, embed);
@@ -57,8 +55,8 @@ export async function persistImportedImages(
       if (result.replacements === 0) {
         warnings.push(`이미지는 저장했지만 본문 참조를 찾지 못했습니다: ${image.filename}`);
       }
-    } catch (error: any) {
-      warnings.push(`이미지 저장 실패 (${image.filename}): ${error?.message || String(error)}`);
+    } catch (error: unknown) {
+      warnings.push(`이미지 저장 실패 (${image.filename}): ${errorMessage(error)}`);
     }
   }
 

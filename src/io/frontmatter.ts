@@ -17,6 +17,11 @@ export type HwpSourceFormat =
  */
 export interface HwpSourceContract {
   "hwp-source": string; // original absolute path (forward-slash normalized)
+  /**
+   * SHA-keyed copy held in HanMark's private plugin cache. Optional so notes
+   * imported by HanMark 2.4.2 and earlier continue to open unchanged.
+   */
+  "hwp-source-cache"?: string;
   "hwp-source-format": HwpSourceFormat; // routing key: hwpx|hwp -> patch, else -> generate
   "hwp-source-hash": string; // "sha256:…" of original bytes at import time
   "hwp-source-bytes": number; // original byte length (cheap pre-check)
@@ -24,20 +29,49 @@ export interface HwpSourceContract {
   "hwp-kordoc": string; // kordoc version that produced the markdown
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSourceFormat(value: unknown): value is HwpSourceFormat {
+  return (
+    value === "hwpx" ||
+    value === "hwp" ||
+    value === "hwp3" ||
+    value === "hwpml" ||
+    value === "docx" ||
+    value === "pdf" ||
+    value === "xlsx" ||
+    value === "xls"
+  );
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 /** Read the source contract from a note's frontmatter, or null if absent/incomplete. */
 export function readSourceContract(app: App, file: TFile): HwpSourceContract | null {
-  const fm = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (!fm) return null;
+  const raw: unknown = app.metadataCache.getFileCache(file)?.frontmatter;
+  if (!isRecord(raw)) return null;
+  const fm = raw;
   const src = fm["hwp-source"];
   const fmt = fm["hwp-source-format"];
-  if (typeof src !== "string" || !src || typeof fmt !== "string" || !fmt) return null;
+  if (typeof src !== "string" || !src || !isSourceFormat(fmt)) return null;
   return {
     "hwp-source": src,
-    "hwp-source-format": fmt as HwpSourceFormat,
-    "hwp-source-hash": String(fm["hwp-source-hash"] ?? ""),
-    "hwp-source-bytes": Number(fm["hwp-source-bytes"] ?? 0),
-    "hwp-imported-at": String(fm["hwp-imported-at"] ?? ""),
-    "hwp-kordoc": String(fm["hwp-kordoc"] ?? "")
+    "hwp-source-cache": typeof fm["hwp-source-cache"] === "string"
+      ? fm["hwp-source-cache"]
+      : undefined,
+    "hwp-source-format": fmt,
+    "hwp-source-hash": stringValue(fm["hwp-source-hash"]),
+    "hwp-source-bytes": numberValue(fm["hwp-source-bytes"]),
+    "hwp-imported-at": stringValue(fm["hwp-imported-at"]),
+    "hwp-kordoc": stringValue(fm["hwp-kordoc"])
   };
 }
 

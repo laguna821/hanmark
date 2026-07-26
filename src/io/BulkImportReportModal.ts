@@ -3,7 +3,7 @@ import type { ImportResult } from "./kordocImport";
 
 export interface BulkReportArgs {
   results: ImportResult[];
-  /** Absolute path to reveal in the OS file manager (e.g. the first created note). */
+  /** Optional display-only location of the first created note. */
   revealPath?: string;
 }
 
@@ -48,17 +48,7 @@ export class BulkImportReportModal extends Modal {
 
     const row = contentEl.createDiv();
     row.setCssStyles({ marginTop: "14px" });
-    if (this.args.revealPath) {
-      const open = row.createEl("button", { text: "📂 폴더에서 보기" });
-      open.classList.add("mod-cta");
-      open.onclick = () => {
-        try {
-          (window as any).require("electron").shell.showItemInFolder(this.args.revealPath);
-        } catch {
-          /* best-effort — folder reveal is optional */
-        }
-      };
-    }
+    if (this.args.revealPath) row.createEl("small", { text: this.args.revealPath });
     const close = row.createEl("button", { text: "닫기" });
     close.setCssStyles({ marginLeft: "8px" });
     close.onclick = () => this.close();

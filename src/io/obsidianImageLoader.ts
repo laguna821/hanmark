@@ -28,8 +28,8 @@ function cacheSet(key: string, value: LoadedImage): void {
   cache.set(key, value);
   cacheBytes += bytes;
   while (cacheBytes > MAX_CACHE_BYTES && cache.size > 1) {
-    const oldest = cache.keys().next().value as string | undefined;
-    if (!oldest) break;
+    const oldest: unknown = cache.keys().next().value;
+    if (typeof oldest !== "string") break;
     const removed = cache.get(oldest);
     cache.delete(oldest);
     if (removed) cacheBytes -= byteLength(removed);

@@ -1,4 +1,5 @@
 import { App, Modal, Notice } from "obsidian";
+import { errorMessage, isRecord } from "../utils/errors";
 
 export interface PatchSkipLike {
   reason?: string;
@@ -10,7 +11,7 @@ export interface SaveReportArgs {
   title: string;
   applied?: number;
   skipped?: PatchSkipLike[];
-  verification?: any;
+  verification?: unknown;
   outputPath?: string;
   note?: string;
   /**
@@ -50,18 +51,22 @@ export class HwpSaveReportModal extends Modal {
       if (skipped.length > 50) ul.createEl("li", { text: `… 외 ${skipped.length - 50}건` });
     }
 
-    if (this.args.verification) {
-      const v: any = this.args.verification;
-      const stats = v.stats ?? v;
+    if (this.args.verification !== undefined) {
+      const verification = this.args.verification;
+      const stats = isRecord(verification) && verification.stats !== undefined
+        ? verification.stats
+        : verification;
       try {
-        contentEl.createEl("p", { text: `🔎 검증: ${JSON.stringify(stats).slice(0, 400)}` });
+        const serialized = JSON.stringify(stats);
+        if (serialized) contentEl.createEl("p", { text: `🔎 검증: ${serialized.slice(0, 400)}` });
       } catch {
         /* ignore non-serializable verification payloads */
       }
     }
 
     if (this.args.outputPath) contentEl.createEl("p", { text: `결과 파일: ${this.args.outputPath}` });
-    if (this.args.generateFull) {
+    const generateFull = this.args.generateFull;
+    if (generateFull) {
       const genWrap = contentEl.createDiv();
       genWrap.setCssStyles({
         marginTop: "14px",
@@ -81,19 +86,15 @@ export class HwpSaveReportModal extends Modal {
         genBtn.disabled = true;
         genBtn.textContent = "생성 중…";
         try {
-          const savedPath = await this.args.generateFull!();
+          const savedPath = await generateFull();
           const name = savedPath.split(/[\\/]/).pop() || savedPath;
           new Notice(`새 한글 파일 생성: ${name}`);
           resultEl.setText(`✅ ${savedPath}`);
           genBtn.textContent = "✓ 생성 완료";
-          try {
-            (window as any).require("electron").shell.showItemInFolder(savedPath);
-          } catch {
-            /* ignore — folder reveal is best-effort */
-          }
-        } catch (e: any) {
-          new Notice(`새 파일 생성 실패: ${e?.message || String(e)}`);
-          resultEl.setText(`⚠️ ${e?.message || String(e)}`);
+        } catch (error: unknown) {
+          const message = errorMessage(error);
+          new Notice(`새 파일 생성 실패: ${message}`);
+          resultEl.setText(`⚠️ ${message}`);
           genBtn.disabled = false;
           genBtn.textContent = original;
         }
@@ -102,19 +103,7 @@ export class HwpSaveReportModal extends Modal {
 
     const row = contentEl.createDiv();
     row.setCssStyles({ marginTop: "14px" });
-    if (this.args.outputPath) {
-      const open = row.createEl("button", { text: "📂 폴더에서 보기" });
-      open.classList.add("mod-cta");
-      open.onclick = () => {
-        try {
-          (window as any).require("electron").shell.showItemInFolder(this.args.outputPath);
-        } catch {
-          new Notice("폴더를 열 수 없습니다.");
-        }
-      };
-    }
     const close = row.createEl("button", { text: "닫기" });
-    close.setCssStyles({ marginLeft: "8px" });
     close.onclick = () => this.close();
   }
 

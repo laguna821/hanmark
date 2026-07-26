@@ -23,17 +23,27 @@ const ALIASES: Record<string, string[]> = {
   "맑은 고딕": ["맑은 고딕", "Malgun Gothic"],
   "휴먼명조": ["휴먼명조", "Human Myeongjo", "HumanMyungjo"]
 };
+const DOCUMENT_STYLE_ROLES: DocumentStyleRole[] = [
+  "body",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "quote",
+  "code",
+  "list"
+];
 
 function quotedLocal(family: string): string {
   return `local("${family.replace(/["\\]/g, "\\$&")}")`;
 }
 
 async function browserFontAvailable(family: string): Promise<boolean> {
-  const host = typeof activeWindow !== "undefined" ? activeWindow : undefined;
-  const FontFaceConstructor = (host as (Window & { FontFace?: typeof FontFace }) | undefined)?.FontFace;
-  if (typeof FontFaceConstructor !== "function") return true;
+  if (typeof FontFace !== "function") return true;
   try {
-    const face = new FontFaceConstructor("__hanmark_font_probe__", quotedLocal(family));
+    const face = new FontFace("__hanmark_font_probe__", quotedLocal(family));
     await face.load();
     return face.status === "loaded";
   } catch {
@@ -73,9 +83,12 @@ export async function resolveDocumentStyleFonts(
   };
 
   const substitutions = new Map<string, FontSubstitution>();
-  for (const [role, style] of Object.entries(profile.roles) as Array<[DocumentStyleRole, any]>) {
+  for (const role of DOCUMENT_STYLE_ROLES) {
+    const style = profile.roles[role];
+    const character = style?.character;
+    if (!character) continue;
     for (const field of ["fontFamily", "latinFontFamily"] as const) {
-      const requested = style?.character?.[field];
+      const requested = character[field];
       if (!requested) continue;
       const candidates = ALIASES[requested] ?? [requested];
       let satisfied = false;
@@ -87,7 +100,7 @@ export async function resolveDocumentStyleFonts(
       }
       if (satisfied) continue;
       const replacement = fallbackFont(requested, platform);
-      style.character[field] = replacement;
+      character[field] = replacement;
       const key = `${requested}\u0000${replacement}`;
       const item = substitutions.get(key) ?? { requested, replacement, roles: [] };
       if (!item.roles.includes(role)) item.roles.push(role);

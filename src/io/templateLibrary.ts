@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { FormatProfile } from "kordoc";
 import {
   normalizeDocumentStyleProfile,
@@ -44,6 +43,11 @@ export interface HanmarkTemplateItem {
   sourceName?: string;
 }
 
+export interface TemplateLibraryHost {
+  settings: Record<string, unknown>;
+  saveSettings: () => Promise<void>;
+}
+
 const BUILTIN_PRESET: Record<BuiltInTemplateId, HanmarkDocumentStylePresetId> = {
   "builtin:kordoc-default": "kordoc-default",
   "builtin:korean-communication": "korean-communication",
@@ -57,7 +61,7 @@ const PRESET_BUILTIN: Record<"kordoc-default" | "korean-communication" | "youth-
 };
 
 function clone<T>(value: T): T {
-  return value === undefined ? value : JSON.parse(JSON.stringify(value)) as T;
+  return value === undefined ? value : structuredClone(value);
 }
 
 function cleanName(value: unknown, fallback = "사용자 템플릿"): string {
@@ -69,13 +73,17 @@ function cleanName(value: unknown, fallback = "사용자 템플릿"): string {
   return cleaned || fallback;
 }
 
-function validTableStyle(value: unknown): value is FormatProfile {
-  return Boolean(value && typeof value === "object" && Array.isArray((value as any).tables));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizedRecord(value: any, fallbackId?: string): HanmarkTemplateRecord | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const id = String(value.id || fallbackId || "").trim();
+function validTableStyle(value: unknown): value is FormatProfile {
+  return isRecord(value) && Array.isArray(value.tables);
+}
+
+function normalizedRecord(value: unknown, fallbackId?: string): HanmarkTemplateRecord | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = (typeof value.id === "string" ? value.id : fallbackId ?? "").trim();
   if (!id || isBuiltInTemplateId(id)) return undefined;
   let documentStyle: DocumentStyleProfile | undefined;
   if (value.documentStyle) {
@@ -105,7 +113,7 @@ function normalizedRecord(value: any, fallbackId?: string): HanmarkTemplateRecor
 }
 
 export function isBuiltInTemplateId(value: unknown): value is BuiltInTemplateId {
-  return typeof value === "string" && (BUILTIN_TEMPLATE_IDS as readonly string[]).includes(value);
+  return typeof value === "string" && BUILTIN_TEMPLATE_IDS.some((id) => id === value);
 }
 
 export function emptyTemplateLibrary(): HanmarkTemplateLibrary {
@@ -114,13 +122,13 @@ export function emptyTemplateLibrary(): HanmarkTemplateLibrary {
 
 export function normalizeTemplateLibrary(value: unknown): HanmarkTemplateLibrary {
   const result = emptyTemplateLibrary();
-  if (!value || typeof value !== "object") return result;
-  const input = value as any;
-  for (const [key, raw] of Object.entries(input.customTemplates || {})) {
+  if (!isRecord(value)) return result;
+  const customTemplates = isRecord(value.customTemplates) ? value.customTemplates : {};
+  for (const [key, raw] of Object.entries(customTemplates)) {
     const record = normalizedRecord(raw, key);
     if (record) result.customTemplates[record.id] = record;
   }
-  const activeId = String(input.activeId || "");
+  const activeId = typeof value.activeId === "string" ? value.activeId : "";
   if (isBuiltInTemplateId(activeId) || result.customTemplates[activeId]) result.activeId = activeId;
   return result;
 }
@@ -139,7 +147,7 @@ function uniqueMigratedId(library: HanmarkTemplateLibrary): string {
   return id;
 }
 
-function removeLegacyTemplateSettings(settings: any): boolean {
+function removeLegacyTemplateSettings(settings: Record<string, unknown>): boolean {
   let changed = false;
   for (const key of [
     "hanmarkDocumentStyle",
@@ -159,10 +167,11 @@ function removeLegacyTemplateSettings(settings: any): boolean {
 }
 
 /** Idempotently migrate the former single document/table style slots. */
-export function migrateTemplateLibrarySettingsInMemory(settings: any): boolean {
-  if (!settings || typeof settings !== "object") return false;
+export function migrateTemplateLibrarySettingsInMemory(settings: unknown): boolean {
+  if (!isRecord(settings)) return false;
   let changed = false;
-  const hasLibrary = settings.hanmarkTemplateLibrary?.schemaVersion === 1;
+  const hasLibrary = isRecord(settings.hanmarkTemplateLibrary) &&
+    settings.hanmarkTemplateLibrary.schemaVersion === 1;
   const library = normalizeTemplateLibrary(settings.hanmarkTemplateLibrary);
 
   if (!hasLibrary) {
@@ -178,8 +187,8 @@ export function migrateTemplateLibrarySettingsInMemory(settings: any): boolean {
     if (settings.hanmarkDocumentStyle) {
       try {
         oldDocumentStyle = normalizeDocumentStyleProfile(settings.hanmarkDocumentStyle);
-      } catch (error) {
-        console.warn("[hanmark] ignored invalid legacy document style during migration:", error);
+      } catch {
+        oldDocumentStyle = undefined;
       }
     }
     const oldTableStyle = validTableStyle(settings.hanmarkTableProfile) ? clone(settings.hanmarkTableProfile) : undefined;
@@ -191,7 +200,9 @@ export function migrateTemplateLibrarySettingsInMemory(settings: any): boolean {
         : builtInDocumentStyleProfile(BUILTIN_PRESET[builtInId]);
       const documentStyle = oldDocumentStyle || builtInDocumentStyle;
       const baseName = oldDocumentStyle?.name || DOCUMENT_STYLE_PRESET_LABELS[BUILTIN_PRESET[builtInId]];
-      const tableName = String(settings.hanmarkTableProfileName || "").trim();
+      const tableName = typeof settings.hanmarkTableProfileName === "string"
+        ? settings.hanmarkTableProfileName.trim()
+        : "";
       const name = oldTableStyle && oldPreset !== "custom" && tableName
         ? `${baseName} + ${tableName}`
         : baseName || tableName || "이전 사용자 템플릿";
@@ -218,9 +229,9 @@ export function migrateTemplateLibrarySettingsInMemory(settings: any): boolean {
   return removeLegacyTemplateSettings(settings) || changed;
 }
 
-export function getTemplateLibrary(plugin: any): HanmarkTemplateLibrary {
-  const normalized = normalizeTemplateLibrary(plugin?.settings?.hanmarkTemplateLibrary);
-  if (plugin?.settings) plugin.settings.hanmarkTemplateLibrary = normalized;
+export function getTemplateLibrary(plugin: TemplateLibraryHost): HanmarkTemplateLibrary {
+  const normalized = normalizeTemplateLibrary(plugin.settings.hanmarkTemplateLibrary);
+  plugin.settings.hanmarkTemplateLibrary = normalized;
   return normalized;
 }
 
@@ -234,7 +245,7 @@ export function builtInTemplateItem(id: BuiltInTemplateId): HanmarkTemplateItem 
   };
 }
 
-export function listTemplateItems(plugin: any): HanmarkTemplateItem[] {
+export function listTemplateItems(plugin: TemplateLibraryHost): HanmarkTemplateItem[] {
   const library = getTemplateLibrary(plugin);
   const builtIns = BUILTIN_TEMPLATE_IDS.map((id) => builtInTemplateItem(id));
   const custom = Object.values(library.customTemplates)
@@ -243,7 +254,7 @@ export function listTemplateItems(plugin: any): HanmarkTemplateItem[] {
   return [...builtIns, ...custom];
 }
 
-export function activeTemplateItem(plugin: any): HanmarkTemplateItem {
+export function activeTemplateItem(plugin: TemplateLibraryHost): HanmarkTemplateItem {
   const library = getTemplateLibrary(plugin);
   if (isBuiltInTemplateId(library.activeId)) return builtInTemplateItem(library.activeId);
   const record = library.customTemplates[library.activeId];
@@ -252,7 +263,7 @@ export function activeTemplateItem(plugin: any): HanmarkTemplateItem {
   return builtInTemplateItem("builtin:kordoc-default");
 }
 
-export function availableTemplateName(plugin: any, requested: string, exceptId?: string): string {
+export function availableTemplateName(plugin: TemplateLibraryHost, requested: string, exceptId?: string): string {
   const base = cleanName(requested);
   const used = new Set(
     listTemplateItems(plugin)
@@ -266,14 +277,14 @@ export function availableTemplateName(plugin: any, requested: string, exceptId?:
 }
 
 export function newTemplateRecord(
-  plugin: any,
+  plugin: TemplateLibraryHost,
   name: string,
   documentStyle?: DocumentStyleProfile,
   tableStyle?: FormatProfile,
   sourceName?: string
 ): HanmarkTemplateRecord {
   const now = new Date().toISOString();
-  const id = `custom:${randomUUID()}`;
+  const id = `custom:${crypto.randomUUID()}`;
   const availableName = availableTemplateName(plugin, name);
   const normalizedDocumentStyle = documentStyle ? normalizeDocumentStyleProfile(documentStyle) : undefined;
   if (normalizedDocumentStyle) normalizedDocumentStyle.name = availableName;
@@ -288,7 +299,7 @@ export function newTemplateRecord(
   };
 }
 
-export function putTemplateRecord(plugin: any, raw: HanmarkTemplateRecord): HanmarkTemplateRecord {
+export function putTemplateRecord(plugin: TemplateLibraryHost, raw: HanmarkTemplateRecord): HanmarkTemplateRecord {
   const library = getTemplateLibrary(plugin);
   const existing = library.customTemplates[raw.id];
   const normalized = normalizedRecord({
@@ -303,7 +314,7 @@ export function putTemplateRecord(plugin: any, raw: HanmarkTemplateRecord): Hanm
   return clone(normalized);
 }
 
-export function deleteTemplateRecordInMemory(plugin: any, id: string): boolean {
+export function deleteTemplateRecordInMemory(plugin: TemplateLibraryHost, id: string): boolean {
   if (isBuiltInTemplateId(id)) return false;
   const library = getTemplateLibrary(plugin);
   if (!library.customTemplates[id]) return false;
@@ -313,7 +324,7 @@ export function deleteTemplateRecordInMemory(plugin: any, id: string): boolean {
   return true;
 }
 
-export function setActiveTemplateInMemory(plugin: any, id: string): HanmarkTemplateItem {
+export function setActiveTemplateInMemory(plugin: TemplateLibraryHost, id: string): HanmarkTemplateItem {
   const library = getTemplateLibrary(plugin);
   if (!isBuiltInTemplateId(id) && !library.customTemplates[id]) throw new Error("선택한 HWPX 템플릿을 찾을 수 없습니다.");
   library.activeId = id;
@@ -321,10 +332,10 @@ export function setActiveTemplateInMemory(plugin: any, id: string): HanmarkTempl
   return activeTemplateItem(plugin);
 }
 
-export function templateDocumentStyle(plugin: any): DocumentStyleProfile | undefined {
+export function templateDocumentStyle(plugin: TemplateLibraryHost): DocumentStyleProfile | undefined {
   return activeTemplateItem(plugin).documentStyle;
 }
 
-export function templateTableStyle(plugin: any): FormatProfile | undefined {
+export function templateTableStyle(plugin: TemplateLibraryHost): FormatProfile | undefined {
   return activeTemplateItem(plugin).tableStyle;
 }

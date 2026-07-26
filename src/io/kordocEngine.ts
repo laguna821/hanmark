@@ -132,7 +132,7 @@ export function markExtendedHeadings(
     const match = /^(\s{0,3})(#{5,6})([ \t]+)(.*)$/.exec(line);
     if (!match) return line;
     const level = match[2].length as 5 | 6;
-    if (!profile.roles[`h${level}` as "h5" | "h6"]) return line;
+    if (!profile.roles[`h${level}`]) return line;
     const token = `\uE000${nonce}_${level}_${markers.length}\uE001`;
     markers.push({ token, level });
     return `${match[1]}${match[2]}${match[3]}${token}${match[4]}`;

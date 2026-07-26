@@ -1,37 +1,65 @@
-import { promises as fs } from "node:fs";
-import * as nodePath from "node:path";
-import { FileSystemAdapter, Platform, type Plugin } from "obsidian";
+import { normalizePath, type DataAdapter, type Plugin } from "obsidian";
 import { EMBEDDED_ASSETS } from "./embeddedAssets";
+
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function decodeBase64(value: string): Uint8Array {
+  const cleaned = value.replace(/\s+/g, "").replace(/=+$/, "");
+  const output = new Uint8Array(Math.floor((cleaned.length * 6) / 8));
+  let bits = 0;
+  let bitCount = 0;
+  let offset = 0;
+  for (const character of cleaned) {
+    const digit = BASE64_ALPHABET.indexOf(character);
+    if (digit < 0) throw new Error("Bundled asset contains invalid base64 data.");
+    bits = (bits << 6) | digit;
+    bitCount += 6;
+    if (bitCount >= 8) {
+      bitCount -= 8;
+      output[offset++] = (bits >> bitCount) & 0xff;
+    }
+  }
+  return output.subarray(0, offset);
+}
+
+function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer;
+}
+
+async function ensureAdapterFolder(adapter: DataAdapter, path: string): Promise<void> {
+  let current = "";
+  for (const segment of normalizePath(path).split("/")) {
+    if (!segment) continue;
+    current = current ? `${current}/${segment}` : segment;
+    if (await adapter.exists(current)) continue;
+    try {
+      await adapter.mkdir(current);
+    } catch (error) {
+      if (!(await adapter.exists(current))) throw error;
+    }
+  }
+}
 
 /**
  * Community installs ship only main.js / manifest.json / styles.css, so the optional DOCX
- * exporter/preview would be missing its Lua and Word-to-PDF support files. We base64-embed those
- * small assets in main.js and write any that are absent into the plugin folder on load. Existing
- * files are left untouched, so a user can customize an asset without it being overwritten.
- *
- * The target dir mirrors the legacy core's own getPluginDir():
- *   <vault>/<configDir>/plugins/<manifest.id>
+ * exporter/preview would otherwise miss its support files. Small bundled assets are written
+ * through Obsidian's vault adapter and existing files are never overwritten.
  */
 export async function unpackBundledAssets(plugin: Plugin): Promise<void> {
   try {
-    if (!Platform.isDesktopApp) return;
     const adapter = plugin.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) return;
-    const base = adapter.getBasePath();
-    const pluginDir = nodePath.join(base, plugin.app.vault.configDir, "plugins", plugin.manifest.id);
+    const pluginDir = normalizePath(
+      `${plugin.app.vault.configDir}/plugins/${plugin.manifest.id}`
+    );
 
     for (const asset of EMBEDDED_ASSETS) {
-      const abs = nodePath.join(pluginDir, ...asset.rel.split("/"));
-      try {
-        await fs.access(abs);
-        continue; // already present — never overwrite
-      } catch {
-        /* missing — fall through and write it */
-      }
-      await fs.mkdir(nodePath.dirname(abs), { recursive: true });
-      await fs.writeFile(abs, Buffer.from(asset.b64, "base64"));
+      const relative = normalizePath(`${pluginDir}/${asset.rel}`);
+      if (await adapter.exists(relative)) continue;
+      const parent = relative.split("/").slice(0, -1).join("/");
+      await ensureAdapterFolder(adapter, parent);
+      await adapter.writeBinary(relative, asArrayBuffer(decodeBase64(asset.b64)));
     }
-  } catch (e) {
-    console.warn("[hanmark] bundled DOCX asset unpack failed:", e);
+  } catch {
+    // Best-effort: the DOCX UI reports missing support files if adapter writes are blocked.
   }
 }

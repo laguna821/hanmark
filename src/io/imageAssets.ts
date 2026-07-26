@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { errorMessage } from "../utils/errors";
 
 export interface LoadedImage {
   data: Uint8Array | ArrayBuffer;
@@ -261,11 +262,11 @@ export async function resolveMarkdownImages(
         });
         completed++;
         options.onProgress?.({ completed, total: references.length, source: reference.source, status: "embedded" });
-      } catch (error: any) {
+      } catch (error: unknown) {
         failures.push({
           ...reference,
           stage: "resolve",
-          message: error?.message || String(error)
+          message: errorMessage(error)
         });
         completed++;
         options.onProgress?.({ completed, total: references.length, source: reference.source, status: "failed" });

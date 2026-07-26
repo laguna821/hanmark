@@ -1,7 +1,10 @@
-import { Notice, Platform } from "obsidian";
-import { promises as fs } from "node:fs";
-import * as nodePath from "node:path";
-import { hwpxToProfile, unknownFontWarnings, validateHwpx } from "kordoc";
+import { Notice } from "obsidian";
+import {
+  hwpxToProfile,
+  unknownFontWarnings,
+  validateHwpx,
+  type FormatProfile
+} from "kordoc";
 import {
   documentStyleSummary,
   extractDocumentStyleProfile,
@@ -23,15 +26,22 @@ import {
   setActiveTemplateInMemory,
   templateDocumentStyle,
   type HanmarkTemplateItem,
-  type HanmarkTemplateRecord
+  type HanmarkTemplateRecord,
+  type TemplateLibraryHost
 } from "./templateLibrary";
+import { bytesAsArrayBuffer } from "./fileGateway";
+import type { HanmarkSettingsPlugin } from "./tableStyle";
 
-export function migrateDocumentStyleSettingsInMemory(plugin: any): boolean {
+export function migrateDocumentStyleSettingsInMemory(
+  plugin?: Pick<TemplateLibraryHost, "settings">
+): boolean {
   return migrateTemplateLibrarySettingsInMemory(plugin?.settings);
 }
 
 /** Compatibility view for older callers; custom profiles map to `custom`. */
-export function activeDocumentStylePreset(plugin: any): HanmarkDocumentStylePresetId {
+export function activeDocumentStylePreset(
+  plugin: TemplateLibraryHost
+): HanmarkDocumentStylePresetId {
   const id = getTemplateLibrary(plugin).activeId;
   if (id === "builtin:korean-communication") return "korean-communication";
   if (id === "builtin:youth-studies") return "youth-studies";
@@ -39,33 +49,41 @@ export function activeDocumentStylePreset(plugin: any): HanmarkDocumentStylePres
   return "custom";
 }
 
-export function activeDocumentStyle(plugin: any): DocumentStyleProfile | undefined {
+export function activeDocumentStyle(
+  plugin: TemplateLibraryHost
+): DocumentStyleProfile | undefined {
   return templateDocumentStyle(plugin);
 }
 
-export function activeDocumentStyleName(plugin: any): string {
+export function activeDocumentStyleName(plugin: TemplateLibraryHost): string {
   return activeTemplateItem(plugin).name;
 }
 
-export function activeTemplateId(plugin: any): string {
+export function activeTemplateId(plugin: TemplateLibraryHost): string {
   return getTemplateLibrary(plugin).activeId;
 }
 
-export function availableDocumentTemplates(plugin: any): HanmarkTemplateItem[] {
+export function availableDocumentTemplates(plugin: TemplateLibraryHost): HanmarkTemplateItem[] {
   return listTemplateItems(plugin);
 }
 
-export function activeDocumentTemplate(plugin: any): HanmarkTemplateItem {
+export function activeDocumentTemplate(plugin: TemplateLibraryHost): HanmarkTemplateItem {
   return activeTemplateItem(plugin);
 }
 
-export async function setActiveDocumentTemplate(plugin: any, id: string): Promise<HanmarkTemplateItem> {
+export async function setActiveDocumentTemplate(
+  plugin: HanmarkSettingsPlugin,
+  id: string
+): Promise<HanmarkTemplateItem> {
   const item = setActiveTemplateInMemory(plugin, id);
   await plugin.saveSettings();
   return item;
 }
 
-export async function setDocumentStylePreset(plugin: any, preset: HanmarkDocumentStylePresetId): Promise<void> {
+export async function setDocumentStylePreset(
+  plugin: HanmarkSettingsPlugin,
+  preset: HanmarkDocumentStylePresetId
+): Promise<void> {
   const id = preset === "korean-communication"
     ? "builtin:korean-communication"
     : preset === "youth-studies"
@@ -78,10 +96,10 @@ export async function setDocumentStylePreset(plugin: any, preset: HanmarkDocumen
 }
 
 export async function createDocumentTemplate(
-  plugin: any,
+  plugin: HanmarkSettingsPlugin,
   name: string,
   documentStyle?: DocumentStyleProfile,
-  tableStyle?: any,
+  tableStyle?: FormatProfile,
   sourceName?: string
 ): Promise<HanmarkTemplateRecord> {
   const record = newTemplateRecord(plugin, name, documentStyle, tableStyle, sourceName);
@@ -91,7 +109,10 @@ export async function createDocumentTemplate(
   return saved;
 }
 
-export async function duplicateDocumentTemplate(plugin: any, id: string): Promise<HanmarkTemplateRecord> {
+export async function duplicateDocumentTemplate(
+  plugin: HanmarkSettingsPlugin,
+  id: string
+): Promise<HanmarkTemplateRecord> {
   const source = listTemplateItems(plugin).find((item) => item.id === id);
   if (!source) throw new Error("복제할 HWPX 템플릿을 찾을 수 없습니다.");
   return createDocumentTemplate(
@@ -103,7 +124,11 @@ export async function duplicateDocumentTemplate(plugin: any, id: string): Promis
   );
 }
 
-export async function renameDocumentTemplate(plugin: any, id: string, name: string): Promise<HanmarkTemplateRecord> {
+export async function renameDocumentTemplate(
+  plugin: HanmarkSettingsPlugin,
+  id: string,
+  name: string
+): Promise<HanmarkTemplateRecord> {
   if (isBuiltInTemplateId(id)) throw new Error("내장 템플릿은 이름을 바꿀 수 없습니다. 먼저 복제하세요.");
   const library = getTemplateLibrary(plugin);
   const current = library.customTemplates[id];
@@ -113,13 +138,19 @@ export async function renameDocumentTemplate(plugin: any, id: string, name: stri
   return saved;
 }
 
-export async function deleteDocumentTemplate(plugin: any, id: string): Promise<boolean> {
+export async function deleteDocumentTemplate(
+  plugin: HanmarkSettingsPlugin,
+  id: string
+): Promise<boolean> {
   const deleted = deleteTemplateRecordInMemory(plugin, id);
   if (deleted) await plugin.saveSettings();
   return deleted;
 }
 
-export async function saveDocumentStyle(plugin: any, profile: DocumentStyleProfile): Promise<HanmarkTemplateRecord> {
+export async function saveDocumentStyle(
+  plugin: HanmarkSettingsPlugin,
+  profile: DocumentStyleProfile
+): Promise<HanmarkTemplateRecord> {
   const normalized = normalizeDocumentStyleProfile(profile);
   const active = activeTemplateItem(plugin);
   let record: HanmarkTemplateRecord;
@@ -138,19 +169,18 @@ export async function saveDocumentStyle(plugin: any, profile: DocumentStyleProfi
   return saved;
 }
 
-export async function importDocumentStyle(plugin: any): Promise<boolean> {
-  if (!Platform.isDesktopApp) {
-    new Notice("HWPX 템플릿 파일 가져오기는 데스크톱에서만 사용할 수 있습니다.");
-    return false;
-  }
-  const path = await pickHwpxFile("새 HWPX 템플릿으로 가져올 파일 선택");
-  if (!path) return false;
-  const data = await fs.readFile(path);
-  const view = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  const validation = await validateHwpx(view);
-  const sourceName = nodePath.basename(path);
-  const profile = await extractDocumentStyleProfile(view, sourceName);
-  const format = validation.ok ? await hwpxToProfile(Buffer.from(view)) : { tables: [] };
+export async function importDocumentStyle(plugin: HanmarkSettingsPlugin): Promise<boolean> {
+  const selected = await pickHwpxFile(
+    plugin.app,
+    plugin,
+    "새 HWPX 템플릿으로 가져올 파일 선택"
+  );
+  if (!selected) return false;
+  const buffer = bytesAsArrayBuffer(selected.bytes);
+  const validation = await validateHwpx(buffer);
+  const sourceName = selected.name;
+  const profile = await extractDocumentStyleProfile(selected.bytes, sourceName);
+  const format = validation.ok ? await hwpxToProfile(buffer) : { tables: [] };
   const tableStyle = format.tables.length ? format : undefined;
   const record = await createDocumentTemplate(plugin, profile.name || sourceName, profile, tableStyle, sourceName);
 
@@ -167,13 +197,13 @@ export async function importDocumentStyle(plugin: any): Promise<boolean> {
 }
 
 /** Older command compatibility: delete only the active custom template. */
-export async function clearDocumentStyle(plugin: any): Promise<void> {
+export async function clearDocumentStyle(plugin: HanmarkSettingsPlugin): Promise<void> {
   const active = activeTemplateItem(plugin);
   if (active.builtIn) return;
   if (await deleteDocumentTemplate(plugin, active.id)) new Notice("사용자 HWPX 템플릿을 삭제하고 Kordoc 기본으로 전환했습니다.");
 }
 
-/** Kept as an inert compatibility hook until legacy-main.cjs is removed in 3.0. */
-export async function synchronizeLegacyTemplateCache(_plugin: any): Promise<boolean> {
+/** Inert compatibility hook retained for callers from HanMark 2.4.2 and earlier. */
+export async function synchronizeLegacyTemplateCache(_plugin: unknown): Promise<boolean> {
   return false;
 }
