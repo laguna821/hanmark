@@ -47,9 +47,9 @@ describe("HanMark unified export center", () => {
     assert.match(modal, /"aria-describedby": descriptionId/u);
     assert.match(
       modal,
-      /cls: "hanmark-export-variant-grid",[\s\S]{0,120}?role: "radiogroup"/u
+      /cls: "hanmark-export-variant-grid",[\s\S]{0,120}?role: "group"/u
     );
-    assert.match(modal, /role: "radio",\s*"aria-checked": String\(selected\)/u);
+    assert.match(modal, /"aria-pressed": String\(selected\)/u);
   });
 
   it("delegates PDF to Obsidian and explains that it is not HWPX-template output", async () => {
@@ -69,7 +69,7 @@ describe("HanMark unified export center", () => {
     );
     assert.match(
       modal,
-      /if \(this\.format === "pdf"\) \{[\s\S]{0,240}?this\.close\(\);[\s\S]{0,120}?this\.actions\.exportPdf/u
+      /if \(this\.format === "pdf"\) \{[\s\S]{0,240}?super\.close\(\);[\s\S]{0,120}?this\.actions\.exportPdf/u
     );
   });
 

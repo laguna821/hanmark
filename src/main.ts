@@ -112,8 +112,9 @@ function registerHeadingCommand(plugin: Plugin, level: number): void {
 /**
  * HanMark 2.4.4 runtime.
  *
- * HWPX is generated in-process by Kordoc. The only external process boundary is
- * the optional, user-triggered Pandoc/Word path used by advanced DOCX features.
+ * HWPX is generated in-process by Kordoc. The single external process boundary
+ * is used only after an explicit user action: optional Pandoc/Word conversion
+ * or revealing a newly saved Vault result in the operating-system file manager.
  */
 export default class HanmarkPlugin extends Plugin {
   settings: HanmarkSettings = { ...DEFAULT_HANMARK_SETTINGS };
@@ -537,6 +538,7 @@ export default class HanmarkPlugin extends Plugin {
       },
       createUserInitiatedAction("modal")
     );
+    new Notice("파일 관리자에서 결과 위치를 열었습니다.");
   }
 
   private async toggleQuickPreview(closeWhenOpen = true): Promise<void> {

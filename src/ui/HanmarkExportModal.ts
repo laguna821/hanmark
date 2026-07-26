@@ -292,8 +292,9 @@ export class HanmarkExportModal extends Modal {
           "aria-describedby": descriptionId
         }
       });
+      button.disabled = this.busy;
       button.appendChild(createOfficeIcon(card.id));
-      const copy = button.createDiv({ cls: "hanmark-export-format-copy" });
+      const copy = button.createSpan({ cls: "hanmark-export-format-copy" });
       copy.createEl("strong", { text: card.title });
       copy.createEl("small", {
         text: card.description,
@@ -340,7 +341,7 @@ export class HanmarkExportModal extends Modal {
     const variants = root.createDiv({
       cls: "hanmark-export-variant-grid",
       attr: {
-        role: "radiogroup",
+        role: "group",
         "aria-label": "HWPX 생성 방식"
       }
     });
@@ -408,8 +409,7 @@ export class HanmarkExportModal extends Modal {
       cls: `hanmark-export-variant${selected ? " is-selected" : ""}`,
       attr: {
         type: "button",
-        role: "radio",
-        "aria-checked": String(selected)
+        "aria-pressed": String(selected)
       }
     });
     button.createEl("strong", { text: title });
@@ -546,7 +546,7 @@ export class HanmarkExportModal extends Modal {
   private renderFooter(root: HTMLElement): void {
     const footer = root.createDiv({ cls: "hanmark-export-footer" });
     const execute = footer.createEl("button", {
-      text: this.primaryActionLabel(),
+      text: this.busy ? "처리 중…" : this.primaryActionLabel(),
       cls: "mod-cta hanmark-export-primary-button",
       attr: { type: "button" }
     });
@@ -556,7 +556,7 @@ export class HanmarkExportModal extends Modal {
       (this.format === "hwpx" &&
         this.hwpxVariant === "source-patch" &&
         !this.actions.sourcePatchAvailable());
-    execute.onclick = () => void this.run(execute);
+    execute.onclick = () => void this.run();
 
     const close = footer.createEl("button", {
       text: "닫기",
@@ -586,7 +586,7 @@ export class HanmarkExportModal extends Modal {
     if (this.format === "pdf") {
       // Let Obsidian's native PDF dialog own focus instead of opening behind
       // the resizable HanMark workspace modal.
-      this.close();
+      super.close();
       return this.actions.exportPdf?.();
     }
     if (this.hwpxVariant === "source-patch") {
@@ -601,34 +601,42 @@ export class HanmarkExportModal extends Modal {
     return this.actions.exportKordoc("quick-hwpx");
   }
 
-  private async run(button: HTMLButtonElement): Promise<void> {
-    const original = button.textContent || "실행";
+  private async run(): Promise<void> {
     this.busy = true;
-    button.disabled = true;
-    button.setText("처리 중…");
+    this.render();
     try {
       const result = await this.executeSelected();
       if (isPresentationResult(result)) {
         if (result.status === "delegated") {
-          this.close();
+          super.close();
           return;
         }
         this.result = result.status === "saved" ? result : null;
         this.busy = false;
         this.render();
+        this.contentEl
+          .querySelector<HTMLButtonElement>(".hanmark-export-result button")
+          ?.focus();
         return;
       }
       // Preserve 2.4.3 action behavior until callers return structured results.
-      if (result !== false && result !== null) this.close();
+      if (result !== false && result !== null) super.close();
     } catch (error: unknown) {
       new Notice(errorMessage(error, "내보내기에 실패했습니다."));
     } finally {
       this.busy = false;
-      if (button.isConnected) {
-        button.disabled = false;
-        button.setText(original);
+      if (this.contentEl.isConnected && !this.result) {
+        this.render();
+        this.contentEl
+          .querySelector<HTMLButtonElement>(".hanmark-export-primary-button")
+          ?.focus();
       }
     }
+  }
+
+  close(): void {
+    if (this.busy) return;
+    super.close();
   }
 
   onClose(): void {

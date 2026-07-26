@@ -205,6 +205,28 @@ function warningNote(result: GeneratedHwpx): string {
   return parts.join(" · ");
 }
 
+function exportOutcomeNotes(result: GeneratedHwpx): string[] {
+  const notes: string[] = [];
+  if (result.embeddedImageCount) {
+    notes.push(
+      `이미지 ${result.embeddedImageCount}개 포함${
+        result.embeddedImageOccurrences > result.embeddedImageCount
+          ? ` (${result.embeddedImageOccurrences}곳 배치)`
+          : ""
+      }`
+    );
+  }
+  if (result.imageFailures.length) {
+    notes.push(`이미지 ${result.imageFailures.length}개 누락 표시`);
+  }
+  for (const warning of result.warnings) {
+    notes.push(
+      `${warning.message}${warning.count > 1 ? ` (${warning.count}건)` : ""}`
+    );
+  }
+  return notes;
+}
+
 type ImageFailureAction = "retry" | "continue" | "cancel";
 
 function chooseImageFailureAction(
@@ -372,9 +394,7 @@ export async function exportKordocHwpxWithOutcome(
         fileName: saved.fileName,
         displayPath: savedDisplayName(saved),
         vaultPath: saved.vaultPath,
-        warnings: result.warnings.map((warning) =>
-          `${warning.message}${warning.count > 1 ? ` (${warning.count}건)` : ""}`
-        )
+        warnings: exportOutcomeNotes(result)
       };
     } else {
       const folder =
@@ -417,9 +437,7 @@ export async function exportKordocHwpxWithOutcome(
         fileName: filenameFromDisplayPath(relative),
         displayPath: relative,
         vaultPath: relative,
-        warnings: result.warnings.map((warning) =>
-          `${warning.message}${warning.count > 1 ? ` (${warning.count}건)` : ""}`
-        )
+        warnings: exportOutcomeNotes(result)
       };
     }
   } catch (error) {

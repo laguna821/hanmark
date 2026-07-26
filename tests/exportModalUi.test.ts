@@ -22,6 +22,8 @@ test("unified export modal keeps format-specific options and one active footer",
   assert.match(source, /"quick"/u);
   assert.match(source, /"gongmun"/u);
   assert.match(source, /"source-patch"/u);
+  assert.match(source, /cls: "hanmark-export-variant-grid"/u);
+  assert.match(source, /"aria-pressed": String\(selected\)/u);
   assert.match(source, /this\.actions\.openPreview\(\)/u);
   assert.match(source, /this\.actions\.openDocxPreview/u);
   assert.match(source, /this\.actions\.openPandocSettings/u);
@@ -55,4 +57,17 @@ test("export cards form a responsive skin-aware two-by-two grid", async () => {
   assert.match(css, /--hwp-toolbar-dark-logo-word/u);
   assert.match(css, /\.hanmark-export-format-card:focus-visible/u);
   assert.match(css, /\.hanmark-export-format-card\.is-selected/u);
+});
+
+test("long exports lock the whole modal and restore focus afterwards", async () => {
+  const source = await readFile("src/ui/HanmarkExportModal.ts", "utf8");
+
+  assert.match(source, /this\.busy = true;\s*this\.render\(\);/u);
+  assert.match(source, /button\.disabled = this\.busy/u);
+  assert.match(source, /select\.disabled = this\.busy/u);
+  assert.match(source, /close\(\): void \{\s*if \(this\.busy\) return;/u);
+  assert.match(
+    source,
+    /querySelector<HTMLButtonElement>\(\s*"\.hanmark-export-result button"\s*\)\s*\?\.focus\(\)/u
+  );
 });
