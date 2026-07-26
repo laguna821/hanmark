@@ -76,9 +76,68 @@ export function readSourceContract(app: App, file: TFile): HwpSourceContract | n
 }
 
 /** Remove a leading YAML frontmatter block (--- … ---). */
+interface LeadingFrontmatter {
+  bodyOffset: number;
+  hasOpeningDelimiter: boolean;
+}
+
+function leadingFrontmatter(md: string): LeadingFrontmatter {
+  const bomOffset = md.startsWith("\uFEFF") ? 1 : 0;
+  const firstLineEnd = md.indexOf("\n", bomOffset);
+  const firstLine = md
+    .slice(bomOffset, firstLineEnd === -1 ? md.length : firstLineEnd)
+    .replace(/\r$/, "");
+
+  if (!/^---[ \t]*$/.test(firstLine)) {
+    return { bodyOffset: bomOffset, hasOpeningDelimiter: false };
+  }
+
+  if (firstLineEnd === -1) {
+    return { bodyOffset: -1, hasOpeningDelimiter: true };
+  }
+
+  let lineStart = firstLineEnd + 1;
+  while (lineStart <= md.length) {
+    const lineEnd = md.indexOf("\n", lineStart);
+    const line = md
+      .slice(lineStart, lineEnd === -1 ? md.length : lineEnd)
+      .replace(/\r$/, "");
+    if (/^(?:---|\.\.\.)[ \t]*$/.test(line)) {
+      return {
+        bodyOffset: lineEnd === -1 ? md.length : lineEnd + 1,
+        hasOpeningDelimiter: true
+      };
+    }
+    if (lineEnd === -1) break;
+    lineStart = lineEnd + 1;
+  }
+
+  return { bodyOffset: -1, hasOpeningDelimiter: true };
+}
+
 export function stripFrontmatter(md: string): string {
-  const m = md.match(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n?/);
-  return m ? md.slice(m[0].length) : md;
+  const result = leadingFrontmatter(md);
+  return result.bodyOffset >= 0 && result.hasOpeningDelimiter
+    ? md.slice(result.bodyOffset)
+    : md;
+}
+
+/**
+ * Remove a leading YAML block for an external converter.
+ *
+ * Unlike `stripFrontmatter`, this fails closed when a note starts a YAML block
+ * without closing it. Passing that malformed metadata to Pandoc produces an
+ * opaque YAML parser error and, before HanMark 2.4.4, soft-line normalization
+ * could merge its keys into an invalid single line.
+ */
+export function stripFrontmatterStrict(md: string): string {
+  const result = leadingFrontmatter(md);
+  if (result.hasOpeningDelimiter && result.bodyOffset < 0) {
+    throw new Error(
+      "문서 맨 앞의 YAML 속성 영역이 닫히지 않았습니다. 닫는 구분선(---)을 추가한 뒤 다시 내보내세요."
+    );
+  }
+  return md.slice(result.bodyOffset);
 }
 
 /**
@@ -89,7 +148,21 @@ export function stripSourceCallout(md: string): string {
   const lines = md.split(/\r?\n/);
   const out: string[] = [];
   let i = 0;
+  let fenceMarker = "";
   while (i < lines.length) {
+    const fence = lines[i].match(/^\s*(`{3,}|~{3,})/)?.[1] ?? "";
+    if (fence) {
+      if (!fenceMarker) fenceMarker = fence[0];
+      else if (fence[0] === fenceMarker) fenceMarker = "";
+      out.push(lines[i]);
+      i++;
+      continue;
+    }
+    if (fenceMarker) {
+      out.push(lines[i]);
+      i++;
+      continue;
+    }
     if (/^>\s*\[!hwp-source\]/i.test(lines[i])) {
       i++;
       while (i < lines.length && /^>/.test(lines[i])) i++;
@@ -108,4 +181,14 @@ export function stripSourceCallout(md: string): string {
  */
 export function extractEditableBody(raw: string): string {
   return stripSourceCallout(stripFrontmatter(raw)).replace(/^\s+/, "");
+}
+
+/**
+ * Strict body extraction for DOCX and other external converters.
+ *
+ * A UTF-8 BOM, the source contract, and HanMark's generated source callout are
+ * removed before any Markdown line normalization runs.
+ */
+export function extractEditableBodyStrict(raw: string): string {
+  return stripSourceCallout(stripFrontmatterStrict(raw)).replace(/^\s+/, "");
 }

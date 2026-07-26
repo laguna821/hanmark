@@ -6,6 +6,7 @@ import {
   type DataAdapter
 } from "obsidian";
 import { adaptMarkdownForKordoc } from "./markdownAdapter";
+import { extractEditableBodyStrict } from "./frontmatter";
 import type { FileGateway, SavedFileResult } from "./fileGateway";
 import { safeSuggestedName, splitFilename } from "./fileGateway";
 import { PandocDocxService } from "../legacy-port/pandocDocx";
@@ -259,7 +260,9 @@ export class DocxExportService {
       // links keep the same meaning as the HWPX path.
       await adapter.write(
         markdownPath,
-        adaptMarkdownForKordoc(source.markdown).markdown
+        adaptMarkdownForKordoc(
+          extractEditableBodyStrict(source.markdown)
+        ).markdown
       );
       await this.pandocService.convertUserInitiated(
         {
