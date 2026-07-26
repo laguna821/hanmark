@@ -7,6 +7,16 @@ import {
 } from "../io/fileGateway";
 import type { CustomFontEntry, HanmarkSettings } from "./settings";
 
+declare global {
+  /**
+   * CSS Font Loading defines FontFaceSet as a mutable setlike collection.
+   * TypeScript 5.9's DOM declarations currently omit its standard add method.
+   */
+  interface FontFaceSet {
+    add(face: FontFace): FontFaceSet;
+  }
+}
+
 export type WordFontSource =
   | "document"
   | "recommended"
@@ -38,10 +48,6 @@ interface LocalFontDataLike {
 
 interface LocalFontAccessWindow extends Window {
   queryLocalFonts?: () => Promise<LocalFontDataLike[]>;
-}
-
-interface MutableFontFaceSet extends FontFaceSet {
-  add(face: FontFace): MutableFontFaceSet;
 }
 
 interface FontFaceWindow extends Window {
@@ -469,7 +475,7 @@ export class WordFontCatalog {
     ) {
       return;
     }
-    const fontSet = previewDocument.fonts as MutableFontFaceSet;
+    const fontSet = previewDocument.fonts;
     let loadedForDocument = this.loadedPreviewFaces.get(previewDocument);
     if (!loadedForDocument) {
       loadedForDocument = new Set<string>();
