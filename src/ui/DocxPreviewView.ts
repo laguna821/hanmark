@@ -173,6 +173,7 @@ export function applyWordTemplatePreview(
 export class DocxPreviewView extends ItemView {
   private readonly options: DocxPreviewViewOptions;
   private previewEl: HTMLElement | null = null;
+  private modeSelect: HTMLSelectElement | null = null;
   private renderTimer: number | null = null;
   private renderVersion = 0;
   private objectUrl: string | null = null;
@@ -208,6 +209,7 @@ export class DocxPreviewView extends ItemView {
     const mode = toolbar.createEl("select", {
       attr: { "aria-label": "DOCX 미리보기 방식" }
     });
+    this.modeSelect = mode;
     mode.createEl("option", { text: "빠른 미리보기", value: "fast-docx" });
     mode.createEl("option", { text: "Windows Word PDF", value: "word-pdf" });
     mode.value = this.options.getPreviewMode();
@@ -267,6 +269,7 @@ export class DocxPreviewView extends ItemView {
     this.renderTimer = null;
     this.revokeObjectUrl();
     this.previewEl = null;
+    this.modeSelect = null;
   }
 
   forceRefresh(): void {
@@ -317,7 +320,7 @@ export class DocxPreviewView extends ItemView {
 
   private async changeMode(mode: DocxPreviewMode): Promise<void> {
     try {
-      await this.options.setPreviewMode?.(mode);
+      await this.setPreviewMode(mode);
       if (mode === "word-pdf") {
         await this.renderExactPreview();
       } else {
@@ -327,6 +330,11 @@ export class DocxPreviewView extends ItemView {
       new Notice(toErrorMessage(error));
       await this.renderFastPreview();
     }
+  }
+
+  private async setPreviewMode(mode: DocxPreviewMode): Promise<void> {
+    await this.options.setPreviewMode?.(mode);
+    if (this.modeSelect) this.modeSelect.value = mode;
   }
 
   private async renderFastPreview(message?: string): Promise<void> {
@@ -402,6 +410,7 @@ export class DocxPreviewView extends ItemView {
       return;
     }
     if (!Platform.isWin || !Platform.isDesktopApp) {
+      await this.setPreviewMode("fast-docx");
       await this.renderFastPreview(
         "Windows Word PDF 미리보기는 Windows 데스크톱에서만 사용할 수 있습니다."
       );
@@ -436,6 +445,8 @@ export class DocxPreviewView extends ItemView {
         }
       });
     } catch (error) {
+      if (!this.previewEl || version !== this.renderVersion) return;
+      await this.setPreviewMode("fast-docx");
       await this.renderFastPreview(
         `Word PDF 미리보기를 만들 수 없어 빠른 미리보기로 전환했습니다: ${toErrorMessage(error)}`
       );

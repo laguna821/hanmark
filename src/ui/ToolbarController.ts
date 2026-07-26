@@ -83,11 +83,20 @@ function wrapSelection(editor: Editor, open: string, close = open): void {
 
 function setHeading(editor: Editor, level: number): void {
   const prefix = `${"#".repeat(Math.min(6, Math.max(1, level)))} `;
-  mapSelectedLines(editor, (line) => `${prefix}${line.replace(/^\s{0,3}#{1,6}\s+/, "")}`);
+  const cursor = editor.getCursor();
+  const line = editor.getLine(cursor.line);
+  editor.setLine(
+    cursor.line,
+    `${prefix}${line.replace(/^\s{0,3}#{1,6}\s+/, "")}`
+  );
 }
 
 function setParagraph(editor: Editor): void {
-  mapSelectedLines(editor, (line) => line.replace(/^\s{0,3}#{1,6}\s+/, ""));
+  const cursor = editor.getCursor();
+  editor.setLine(
+    cursor.line,
+    editor.getLine(cursor.line).replace(/^\s{0,3}#{1,6}\s+/, "")
+  );
 }
 
 function toggleLinePrefix(editor: Editor, expression: RegExp, prefix: string): void {
