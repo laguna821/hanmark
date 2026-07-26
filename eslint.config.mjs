@@ -24,16 +24,15 @@ export default defineConfig([
       }
     },
     rules: {
-      // HanMark's compatibility shell is intentionally dynamic. Keep every
-      // Obsidian, DOM-safety and security rule from the official preset, while
-      // leaving a gradual strict-typing migration outside this release.
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unsafe-argument": "off",
-      "@typescript-eslint/no-unsafe-assignment": "off",
-      "@typescript-eslint/no-unsafe-call": "off",
-      "@typescript-eslint/no-unsafe-member-access": "off",
-      "@typescript-eslint/no-unsafe-return": "off",
-      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      // Keep the same type-safety checks used by the Community review scanner
+      // as release-blocking errors.
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
       // The interface is Korean-first. The English sentence-case rule produces
       // false positives for Korean text containing format and brand names.
       "obsidianmd/ui/sentence-case": "off"

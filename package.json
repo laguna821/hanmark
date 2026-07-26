@@ -1,6 +1,6 @@
 {
   "name": "hanmark",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "description": "No-setup Markdown, images, and reusable semantic templates to HWPX with bundled Kordoc.",
   "main": "main.js",
   "scripts": {
@@ -10,8 +10,9 @@
     "test": "node scripts/run-tests.mjs",
     "lint": "eslint src package.json manifest.json --max-warnings 0",
     "check-bundle": "node scripts/check-bundle.mjs",
+    "check-community": "node scripts/check-community.mjs",
     "check-release": "node scripts/check-release.mjs",
-    "check": "npm run lint && npm run test && npm run build && npm run check-bundle && npm run check-release"
+    "check": "npm run lint && npm run test && npm run build && npm run check-bundle && npm run check-community && npm run check-release"
   },
   "keywords": [
     "hwp",
@@ -29,10 +30,13 @@
   },
   "overrides": {
     "@hono/node-server": "2.0.11",
+    "adm-zip": "0.6.0",
     "body-parser": "2.3.0",
     "esbuild": "0.28.1",
     "fast-uri": "3.1.4",
-    "hono": "4.12.31"
+    "hono": "4.12.31",
+    "protobufjs": "8.7.1",
+    "sharp": "0.35.3"
   },
   "devDependencies": {
     "@eslint/json": "0.14.0",

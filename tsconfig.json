@@ -10,7 +10,7 @@
     "esModuleInterop": true,
     "moduleResolution": "Node",
     "isolatedModules": true,
-    "strict": false,
+    "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["node", "obsidian"]

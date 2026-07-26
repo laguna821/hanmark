@@ -1,0 +1,250 @@
+import assert from "node:assert/strict";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import test from "node:test";
+import { parse } from "kordoc";
+
+import {
+  findUnsafeRuntimeConstructs,
+  hardenKordocOptionalNativeSource,
+  hardenKordocPdfParserSource,
+  hardenPdfJsSource,
+  hardenSetImmediateSource,
+  injectKordocCfb,
+} from "../esbuild.config.mjs";
+
+function makeMinimalPdf(text: string): ArrayBuffer {
+  const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+      "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const [index, body] of objects.entries()) {
+    offsets.push(Buffer.byteLength(pdf, "ascii"));
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf, "ascii");
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (const offset of offsets.slice(1)) {
+    pdf += `${offset.toString().padStart(10, "0")} 00000 n \n`;
+  }
+  pdf +=
+    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n` +
+    `startxref\n${xrefOffset}\n%%EOF\n`;
+  const bytes = Buffer.from(pdf, "ascii");
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}
+
+test("setImmediate hardening rejects strings and removes script scheduling", async () => {
+  const fixtures = [
+    {
+      path: "node_modules/setimmediate/setImmediate.js",
+      callback: 1,
+      setImmediateReadyState: 1,
+      probe: 1,
+      immediateReadyState: 0,
+    },
+    {
+      path: "node_modules/jszip/dist/jszip.js",
+      callback: 1,
+      setImmediateReadyState: 1,
+      probe: 1,
+      immediateReadyState: 1,
+    },
+    {
+      path: "node_modules/immediate/lib/index.js",
+      callback: 0,
+      setImmediateReadyState: 0,
+      probe: 0,
+      immediateReadyState: 1,
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const source = await readFile(fixture.path, "utf8");
+    const transformed = hardenSetImmediateSource(source);
+
+    assert.equal(
+      transformed.callbackReplacements,
+      fixture.callback,
+      fixture.path,
+    );
+    assert.equal(
+      transformed.readyStateReplacements,
+      fixture.setImmediateReadyState,
+      fixture.path,
+    );
+    assert.equal(
+      transformed.readyStateProbeReplacements,
+      fixture.probe,
+      fixture.path,
+    );
+    assert.equal(
+      transformed.immediateReadyStateReplacements,
+      fixture.immediateReadyState,
+      fixture.path,
+    );
+    if (fixture.callback > 0) {
+      assert.match(
+        transformed.source,
+        /throw new TypeError\("setImmediate callback must be a function"\)/u,
+      );
+    }
+    assert.deepEqual(findUnsafeRuntimeConstructs(transformed.source), []);
+  }
+});
+
+test("PDF.js hardening forces its PostScript interpreter fallback", async () => {
+  const pdf = await readFile(
+    "node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+    "utf8",
+  );
+  const worker = await readFile(
+    "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    "utf8",
+  );
+
+  const hardenedPdf = hardenPdfJsSource(pdf);
+  const hardenedWorker = hardenPdfJsSource(worker);
+
+  assert.equal(hardenedPdf.evalProbeReplacements, 1);
+  assert.equal(hardenedWorker.evalProbeReplacements, 1);
+  assert.equal(hardenedWorker.postScriptReplacements, 1);
+  assert.equal(hardenedPdf.dynamicRequireReplacements, 1);
+  assert.equal(hardenedWorker.dynamicRequireReplacements, 1);
+  assert.equal(hardenedPdf.globalThisFallbackReplacements, 1);
+  assert.equal(hardenedWorker.globalThisFallbackReplacements, 1);
+  assert.ok(hardenedPdf.nodeFileSystemReplacements > 0);
+  assert.equal(hardenedWorker.nodeFileSystemReplacements, 0);
+  assert.equal(hardenedPdf.nodeCanvasBootstrapReplacements, 1);
+  assert.equal(hardenedWorker.nodeCanvasBootstrapReplacements, 0);
+  assert.equal(hardenedPdf.nodeCanvasFactoryReplacements, 1);
+  assert.equal(hardenedWorker.nodeCanvasFactoryReplacements, 0);
+  assert.equal(hardenedPdf.workerCdnWrapperReplacements, 1);
+  assert.equal(hardenedWorker.workerCdnWrapperReplacements, 0);
+  assert.equal(hardenedPdf.fakeWorkerDynamicImportReplacements, 1);
+  assert.equal(hardenedWorker.fakeWorkerDynamicImportReplacements, 0);
+  assert.ok(hardenedPdf.atobReplacements > 0);
+  assert.ok(hardenedPdf.btoaReplacements > 0);
+  assert.ok(hardenedWorker.atobReplacements > 0);
+  assert.ok(hardenedWorker.btoaReplacements > 0);
+  assert.match(
+    hardenedWorker.source,
+    /const evaluator = new PostScriptEvaluator\(code\)/u,
+  );
+  assert.doesNotMatch(
+    hardenedWorker.source,
+    /new PostScriptCompiler\(\)\.compile\(code, domain, range\)/u,
+  );
+  assert.doesNotMatch(
+    hardenedPdf.source,
+    /process\.getBuiltinModule\(\s*["']fs["']\s*\)/u,
+  );
+  assert.doesNotMatch(hardenedPdf.source, /@napi-rs\/canvas/u);
+  assert.doesNotMatch(hardenedPdf.source, /\bcreateRequire\b/u);
+  assert.doesNotMatch(hardenedPdf.source, /\bimport\s*\(/u);
+  assert.match(
+    hardenedPdf.source,
+    /globalThis\.document\?\.createElement\("canvas"\)/u,
+  );
+  assert.deepEqual(findUnsafeRuntimeConstructs(hardenedPdf.source), []);
+  assert.deepEqual(findUnsafeRuntimeConstructs(hardenedWorker.source), []);
+});
+
+test("Kordoc 4.2.5 CFB runtime requires are converted to a bundled import", async () => {
+  const directory = "node_modules/kordoc/dist";
+  const files = (await readdir(directory))
+    .filter((name) => /\.(?:c?js|mjs)$/u.test(name))
+    .map((name) => join(directory, name));
+
+  let replacements = 0;
+  for (const file of files) {
+    const source = await readFile(file, "utf8");
+    const transformed = injectKordocCfb(source);
+    replacements += transformed.replacements;
+    if (transformed.replacements > 0) {
+      assert.match(
+        transformed.source,
+        /^import \* as __kordoc_cfb from "cfb";/u,
+      );
+      assert.doesNotMatch(
+        transformed.source,
+        /\brequire\d*\(\s*["']cfb["']\s*\)/u,
+      );
+      assert.doesNotMatch(transformed.source, /\bcreateRequire\b/u);
+    }
+  }
+
+  assert.ok(
+    replacements >= 2,
+    `expected at least two CFB replacements, got ${replacements}`,
+  );
+});
+
+test("Kordoc optional native loaders are replaced without removing document parsers", async () => {
+  const directory = "node_modules/kordoc/dist";
+  const files = (await readdir(directory))
+    .filter((name) => /\.(?:c?js|mjs)$/u.test(name))
+    .map((name) => join(directory, name));
+  const optionalSpecifier =
+    /(?:\bimport\s*\(|\brequire\d*\s*\()\s*["'](?:onnxruntime-node|sharp|@huggingface\/transformers|@hyzyla\/pdfium)["']\s*\)/u;
+
+  let replacements = 0;
+  for (const file of files) {
+    const source = await readFile(file, "utf8");
+    const transformed = hardenKordocOptionalNativeSource(source);
+    replacements +=
+      transformed.cjsImportReplacements +
+      transformed.dynamicImportReplacements +
+      transformed.runtimeRequireReplacements;
+    assert.doesNotMatch(transformed.source, optionalSpecifier, file);
+  }
+
+  assert.ok(
+    replacements >= 10,
+    `expected Kordoc optional native loaders to be neutralized, got ${replacements}`,
+  );
+});
+
+test("Kordoc PDF parser keeps byte parsing without createRequire asset lookup", async () => {
+  const parser = await readFile(
+    "node_modules/kordoc/dist/parser-FDOR727T.js",
+    "utf8",
+  );
+  const transformed = hardenKordocPdfParserSource(parser);
+
+  assert.equal(transformed.assetLookupReplacements, 1);
+  assert.equal(transformed.createRequireImportReplacements, 1);
+  assert.match(transformed.source, /data: new Uint8Array\(buffer\)/u);
+  assert.doesNotMatch(transformed.source, /\bcreateRequire\b/u);
+  assert.doesNotMatch(transformed.source, /pdfjs-dist\/package\.json/u);
+});
+
+test("Kordoc still extracts text from an in-memory PDF", async () => {
+  const parsed = await parse(makeMinimalPdf("HanMark PDF smoke"));
+  assert.equal(parsed.success, true);
+  if (!parsed.success) {
+    assert.fail(parsed.error);
+  }
+  assert.equal(parsed.fileType, "pdf");
+  assert.match(parsed.markdown, /HanMark PDF smoke/u);
+});
+
+test("runtime scanner rejects dynamic imports and createRequire", () => {
+  assert.deepEqual(
+    findUnsafeRuntimeConstructs(
+      'const load = () => import("native-addon"); const req = createRequire(url);',
+    ),
+    ["dynamic import", "createRequire"],
+  );
+});
