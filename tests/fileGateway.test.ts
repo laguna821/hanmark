@@ -5,6 +5,7 @@ import {
   createFileGateway,
   filenameFromDisplayPath,
   isValidSourceCacheId,
+  readSelectedExternalFiles,
   safeSuggestedName,
   sourceBytesMatchContract,
   sourceCacheId,
@@ -122,6 +123,83 @@ test("cross-platform display names produce safe, separate output names", () => {
     extension: ".hwp"
   });
   assert.equal(safeSuggestedName("paper:수정.hwpx"), "paper_수정.hwpx");
+});
+
+function externalFile(
+  name: string,
+  size: number,
+  onRead: () => Promise<ArrayBuffer>,
+  relativePath = ""
+): File {
+  return {
+    name,
+    size,
+    webkitRelativePath: relativePath,
+    arrayBuffer: onRead
+  } as unknown as File;
+}
+
+test("external selection filters extensions and enforces limits before reading bytes", async () => {
+  let fontReads = 0;
+  let textReads = 0;
+  const selected = await readSelectedExternalFiles([
+    externalFile("font.ttf", 3, async () => {
+      fontReads += 1;
+      return new Uint8Array([1, 2, 3]).buffer;
+    }, "Fonts/font.ttf"),
+    externalFile("ignore.txt", 4, async () => {
+      textReads += 1;
+      return new Uint8Array([4, 5, 6, 7]).buffer;
+    }, "Fonts/ignore.txt")
+  ], {
+    extensions: ["ttf"],
+    maxFiles: 1,
+    maxFileBytes: 8,
+    maxTotalBytes: 8
+  });
+
+  assert.equal(fontReads, 1);
+  assert.equal(textReads, 0);
+  assert.equal(selected[0].displayPath, "Fonts/font.ttf");
+
+  let oversizedReads = 0;
+  await assert.rejects(
+    readSelectedExternalFiles([
+      externalFile("oversized.otf", 9, async () => {
+        oversizedReads += 1;
+        return new Uint8Array(9).buffer;
+      })
+    ], {
+      extensions: ["otf"],
+      maxFileBytes: 8
+    }),
+    /per-file limit/
+  );
+  assert.equal(oversizedReads, 0);
+});
+
+test("external file snapshots are read sequentially and never expose absolute paths", async () => {
+  let activeReads = 0;
+  let peakReads = 0;
+  const read = (byte: number) => async (): Promise<ArrayBuffer> => {
+    activeReads += 1;
+    peakReads = Math.max(peakReads, activeReads);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    activeReads -= 1;
+    return new Uint8Array([byte]).buffer;
+  };
+  const selected = await readSelectedExternalFiles([
+    externalFile("one.ttf", 1, read(1), "C:/Private/one.ttf"),
+    externalFile("two.otf", 1, read(2), "/Private/two.otf")
+  ], {
+    extensions: ["ttf", "otf"],
+    maxFiles: 2,
+    maxTotalBytes: 2
+  });
+
+  assert.equal(peakReads, 1);
+  assert.deepEqual(selected.map((file) => file.displayPath), ["one.ttf", "two.otf"]);
+  assert.deepEqual(selected.map((file) => file.relativePath), [undefined, undefined]);
 });
 
 test("Vault sibling saves keep the legacy beside-note workflow without overwriting", async () => {

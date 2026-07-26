@@ -161,6 +161,63 @@ test("multi-template store uses Vault-relative storage and validates JSON", asyn
   assert.ok([...storage.files.keys()].every((path) => path.startsWith(".obsidian/plugins/hanmark/")));
 });
 
+test("Word template names stay distinguishable and malformed inactive files are isolated", async () => {
+  const storage = new MemoryTemplateStorage();
+  let activeId = "default";
+  let nextId = 0;
+  const store = new WordTemplateStore({
+    storage,
+    rootPath: ".obsidian/plugins/hanmark",
+    getActiveTemplateId: () => activeId,
+    setActiveTemplateId: (id) => {
+      activeId = id;
+    },
+    createId: () => `custom-${++nextId}`
+  });
+  const original = await store.ensureDefaultTemplate(createDefaultWordTemplate());
+  const first = await store.duplicateTemplate(original.id, "학회 양식");
+  const second = await store.duplicateTemplate(original.id, "학회 양식");
+  storage.files.set(
+    ".obsidian/plugins/hanmark/word-templates/broken.json",
+    "{not-json"
+  );
+
+  assert.equal(first.name, "학회 양식");
+  assert.equal(second.name, "학회 양식 (2)");
+  assert.deepEqual(
+    (await store.listTemplates()).map((template) => template.name),
+    [original.name, first.name, second.name]
+  );
+  assert.equal(await store.readTemplate("broken"), null);
+});
+
+test("a damaged default Word template is backed up and rebuilt", async () => {
+  const storage = new MemoryTemplateStorage();
+  const store = new WordTemplateStore({
+    storage,
+    rootPath: ".obsidian/plugins/hanmark",
+    getActiveTemplateId: () => "default",
+    setActiveTemplateId: () => undefined,
+    createId: () => "unused"
+  });
+  await store.ensureDirectories();
+  const defaultPath = store.getTemplatePath("default");
+  storage.files.set(defaultPath, "{damaged");
+
+  const recovered = await store.ensureDefaultTemplate(
+    createDefaultWordTemplate()
+  );
+
+  assert.equal(recovered.id, "default");
+  assert.equal((await store.readTemplate("default"))?.id, "default");
+  assert.ok(
+    [...storage.files.keys()].some(
+      (path) =>
+        path.startsWith(`${defaultPath}.invalid-`) && path.endsWith(".bak")
+    )
+  );
+});
+
 test("Pandoc service preserves arguments and runs only with a UI token", async () => {
   let captured: ProcessRequest | null = null;
   const runner = async (
