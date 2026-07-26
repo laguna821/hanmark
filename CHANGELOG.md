@@ -2,6 +2,17 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.5.0
+
+- Added **Achmage Editorial** as the default HTML export theme while preserving the previous output as the selectable **Classic** compatibility theme.
+- Added a deterministic editorial masthead, heading bars, callouts, tables, responsive media and code, narrow-screen rules, and dedicated A4 print styling.
+- Promoted the first leading H1 to the masthead and removed that one duplicate heading from the article body; the note title remains the fallback.
+- Embedded validated local and remote PNG, JPEG, GIF, and BMP images as data URIs so completed HTML files remain self-contained and usable offline.
+- Kept the existing `${title}_html.html` output naming and reported image failures through retry, explicit missing-image continuation, or cancellation instead of silently retaining external sources.
+- Added a strict Content Security Policy and URL allowlists. Generated HTML contains no JavaScript, event handlers, CDN, external stylesheet, bundled font, iframe, or arbitrary user CSS.
+- Added Kami MIT attribution for the adapted document-design language without bundling the Kami package, font assets, build scripts, or example content.
+- Preserved HWPX, DOCX, PDF, import, template, toolbar, DOCX preview, legacy command compatibility, and the user-initiated Pandoc boundary from 2.4.5.
+
 ## 2.4.5
 
 - Made an explicit Fast DOCX Preview open render the semantic document immediately and upgrade it exactly once to the actual Pandoc-generated package.
@@ -80,6 +91,17 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.5.0
+
+- HTML 내보내기의 기본 테마로 **Achmage Editorial**을 추가하고, 이전 출력 외형은 선택 가능한 **Classic** 호환 테마로 보존했습니다.
+- 편집 디자인 마스트헤드, 제목 막대, 콜아웃, 표, 반응형 이미지·코드, 좁은 화면 규칙과 A4 전용 인쇄 스타일을 추가했습니다.
+- 맨 앞 첫 H1을 마스트헤드로 옮겨 본문에서는 한 번만 제거하고, 해당 H1이 없으면 노트 제목을 사용합니다.
+- 검증된 로컬·원격 PNG·JPEG·GIF·BMP 이미지를 data URI로 포함해 완성된 HTML이 독립형으로 오프라인에서 열리게 했습니다.
+- 기존 `${title}_html.html` 파일명을 유지하고, 외부 이미지 주소를 조용히 남기는 대신 재시도·명시적인 누락 표시로 계속·취소 절차로 실패를 알립니다.
+- 엄격한 Content Security Policy와 URL 허용 목록을 추가했습니다. 생성 HTML에는 JavaScript, 이벤트 핸들러, CDN, 외부 스타일시트, 내장 글꼴, iframe과 임의 사용자 CSS가 없습니다.
+- Kami 패키지·글꼴·빌드 스크립트·예제 콘텐츠를 포함하지 않으면서 응용한 문서 디자인 언어에 MIT 저작자 표시를 추가했습니다.
+- 2.4.5의 HWPX·DOCX·PDF·가져오기·템플릿·툴바·DOCX 미리보기·레거시 명령 호환과 사용자 요청 기반 Pandoc 경계를 유지했습니다.
 
 ### 2.4.5
 

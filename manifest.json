@@ -1,9 +1,9 @@
 {
   "id": "hanmark",
   "name": "HanMark",
-  "version": "2.4.5",
+  "version": "2.5.0",
   "minAppVersion": "1.5.7",
-  "description": "Export styled, image-inclusive HWPX with reusable templates and bundled Kordoc. No Python setup required.",
+  "description": "Export Markdown to styled, image-inclusive HWPX, DOCX, and offline HTML. No Python setup required.",
   "author": "Achmage",
   "authorUrl": "https://github.com/laguna821",
   "isDesktopOnly": true

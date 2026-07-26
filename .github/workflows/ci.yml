@@ -2,7 +2,7 @@ name: Verify plugin
 
 on:
   push:
-    branches: ["2.4.5"]
+    branches: ["2.5.0"]
   pull_request:
 
 permissions:

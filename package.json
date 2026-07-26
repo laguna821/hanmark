@@ -1,7 +1,7 @@
 {
   "name": "hanmark",
-  "version": "2.4.5",
-  "description": "No-setup Markdown, images, and reusable semantic templates to HWPX with bundled Kordoc.",
+  "version": "2.5.0",
+  "description": "No-setup Markdown export to image-inclusive HWPX and self-contained offline HTML.",
   "main": "main.js",
   "scripts": {
     "gen-assets": "node scripts/gen-embedded-assets.mjs",
