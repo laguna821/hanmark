@@ -6,6 +6,7 @@ import {
   type ImageReference,
   type ResolvedImageAsset
 } from "./imageAssets";
+import { transformMarkdownImageTokens } from "./markdownImageTokens";
 
 export const HTML_EXPORT_IMAGE_LIMITS = Object.freeze({
   maxImages: 100,
@@ -134,10 +135,9 @@ function rewriteImageTokens(
       return missingLabel(token);
     };
 
-    let output = line.replace(
-      /!\[([^\]]*)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g,
-      (raw, alt: string, angleSource: string | undefined, source: string | undefined) =>
-        replace({ raw, alt, source: angleSource || source || "" })
+    let output = transformMarkdownImageTokens(
+      line,
+      ({ raw, alt, source }) => replace({ raw, alt, source })
     );
     output = output.replace(/<img\b[^>]*>/gi, (raw) => {
       const source = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(raw)?.[1];

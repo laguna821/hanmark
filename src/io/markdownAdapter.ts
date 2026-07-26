@@ -1,3 +1,5 @@
+import { markdownImageTokens } from "./markdownImageTokens";
+
 export type AdapterWarningCode =
   | "image-missing"
   | "note-embed-flattened"
@@ -165,8 +167,8 @@ export function adaptMarkdownForKordoc(source: string): MarkdownAdapterResult {
       warning(warnings, "footnote-flattened", "각주는 일반 텍스트로 남으며 각주 개체로 변환되지 않습니다.");
     }
 
-    for (const match of line.matchAll(/!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\s*\)/g)) {
-      imageRefs.add(match[1] || match[2]);
+    for (const token of markdownImageTokens(line)) {
+      imageRefs.add(token.source);
     }
     for (const match of line.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) {
       imageRefs.add(match[1]);

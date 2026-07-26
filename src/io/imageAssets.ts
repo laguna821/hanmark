@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { errorMessage } from "../utils/errors";
+import { transformMarkdownImageTokens } from "./markdownImageTokens";
 
 export interface LoadedImage {
   data: Uint8Array | ArrayBuffer;
@@ -93,10 +94,10 @@ function transformImageTokens(markdown: string, transform: TokenTransform): stri
       continue;
     }
 
-    line = line.replace(
-      /!\[([^\]]*)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g,
-      (raw, alt: string, angleSource: string | undefined, source: string | undefined) =>
-        transform({ raw, alt: alt || "이미지", source: angleSource || source || "", kind: "markdown" })
+    line = transformMarkdownImageTokens(
+      line,
+      ({ raw, alt, source }) =>
+        transform({ raw, alt: alt || "이미지", source, kind: "markdown" })
     );
     line = line.replace(/<img\b[^>]*>/gi, (raw) => {
       const source = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(raw)?.[1];

@@ -100,11 +100,14 @@ describe("fast HWPX image embedding", () => {
   });
 
   it("finds Markdown and HTML images outside fenced code and deduplicates sources", () => {
-    const references = collectImageReferences(`![첫째](a.png)\n<img src="b.jpg" alt="둘째">\n![반복](a.png)\n![공백](<attachments/my photo.png>)\n\n\`\`\`md\n![코드](ignored.png)\n\`\`\``);
+    const complex =
+      "01.%20핵심연구(기본연구A)%20신규과제%20연구계획서%20작성%20서식(대표업적%20포함)-image_001.bmp";
+    const references = collectImageReferences(`![첫째](a.png)\n<img src="b.jpg" alt="둘째">\n![반복](a.png)\n![공백](<attachments/my photo.png>)\n![가져온 한글 이미지](${complex})\n\n\`\`\`md\n![코드](ignored.png)\n\`\`\``);
     assert.deepEqual(references, [
       { source: "a.png", alt: "첫째", occurrences: 2 },
       { source: "b.jpg", alt: "둘째", occurrences: 1 },
-      { source: "attachments/my photo.png", alt: "공백", occurrences: 1 }
+      { source: "attachments/my photo.png", alt: "공백", occurrences: 1 },
+      { source: complex, alt: "가져온 한글 이미지", occurrences: 1 }
     ]);
   });
 });
