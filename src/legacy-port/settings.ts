@@ -3,13 +3,89 @@ import type { HanmarkTemplateLibrary } from "../io/templateLibrary";
 export type DocxPreviewMode = "fast-docx" | "word-pdf";
 export type ToolbarPosition = "top";
 export type PreviewPosition = "right";
+export type ToolbarSkinMode = "auto" | "light" | "dark";
+export type ToolbarSkinPaletteKey =
+  | "toolbarBg"
+  | "toolbarEdge"
+  | "buttonBorder"
+  | "logoBody"
+  | "logoAccent"
+  | "logoMuted"
+  | "logoText";
+
+export interface ToolbarSkinPalette {
+  toolbarBg: string;
+  toolbarEdge: string;
+  buttonBorder: string;
+  logoBody: string;
+  logoAccent: string;
+  logoMuted: string;
+  logoText: string;
+}
+
+export interface ToolbarSkin {
+  light: ToolbarSkinPalette;
+  dark: ToolbarSkinPalette;
+}
+
+export const TOOLBAR_SKIN_DEFAULTS: Readonly<ToolbarSkin> = Object.freeze({
+  light: Object.freeze({
+    toolbarBg: "#38A9FF",
+    toolbarEdge: "#1A73E8",
+    buttonBorder: "#004D99",
+    logoBody: "#1565C0",
+    logoAccent: "#42ADFF",
+    logoMuted: "#283593",
+    logoText: "#FFFFFF"
+  }),
+  dark: Object.freeze({
+    toolbarBg: "#121212",
+    toolbarEdge: "#1C1C1C",
+    buttonBorder: "#B6FF00",
+    logoBody: "#94D600",
+    logoAccent: "#B6FF00",
+    logoMuted: "#5F7A0A",
+    logoText: "#121212"
+  })
+});
+
+export const TOOLBAR_SKIN_DARK_PRESETS: Readonly<
+  Record<"charcoal-minimal" | "neo-lime-dark" | "olive-deck", Readonly<ToolbarSkinPalette>>
+> = Object.freeze({
+  "charcoal-minimal": TOOLBAR_SKIN_DEFAULTS.dark,
+  "neo-lime-dark": Object.freeze({
+    toolbarBg: "#1C220B",
+    toolbarEdge: "#2A330F",
+    buttonBorder: "#B6FF00",
+    logoBody: "#94D600",
+    logoAccent: "#B6FF00",
+    logoMuted: "#5F7A0A",
+    logoText: "#121212"
+  }),
+  "olive-deck": Object.freeze({
+    toolbarBg: "#242C14",
+    toolbarEdge: "#364119",
+    buttonBorder: "#B6FF00",
+    logoBody: "#94D600",
+    logoAccent: "#B6FF00",
+    logoMuted: "#5F7A0A",
+    logoText: "#121212"
+  })
+});
 
 export interface CustomFontEntry {
   family: string;
+  /**
+   * User-facing source breadcrumb retained for the settings UI. It is never
+   * dereferenced as a filesystem path.
+   */
   path: string;
   weight: 400 | 700;
   style: "normal" | "italic";
   previewOnly?: boolean;
+  /** Content-addressed copy stored through the plugin's Obsidian adapter. */
+  cacheId?: string;
+  fileName?: string;
 }
 
 /**
@@ -30,6 +106,8 @@ export interface HanmarkSettings extends Record<string, unknown> {
   docxPreviewMode: DocxPreviewMode;
   customFontDirs: string[];
   customFonts: CustomFontEntry[];
+  toolbarSkinMode: ToolbarSkinMode;
+  toolbarSkin: ToolbarSkin;
   /** Kordoc HWPX templates remain owned by src/io/templateLibrary.ts. */
   hanmarkTemplateLibrary?: HanmarkTemplateLibrary;
 }
@@ -46,7 +124,9 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   activeWordTemplateId: "default",
   docxPreviewMode: "fast-docx",
   customFontDirs: [],
-  customFonts: []
+  customFonts: [],
+  toolbarSkinMode: "auto",
+  toolbarSkin: cloneToolbarSkin(TOOLBAR_SKIN_DEFAULTS)
 });
 
 export type HanmarkRuntimePlatform = "windows" | "macos" | "linux";
@@ -80,6 +160,68 @@ function stringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+export function cloneToolbarSkin(skin: Readonly<ToolbarSkin>): ToolbarSkin {
+  return {
+    light: { ...skin.light },
+    dark: { ...skin.dark }
+  };
+}
+
+export function normalizeToolbarSkinMode(value: unknown): ToolbarSkinMode {
+  return value === "light" || value === "dark" || value === "auto"
+    ? value
+    : "auto";
+}
+
+export function normalizeToolbarHex(value: unknown, fallback: string): string {
+  const candidate = typeof value === "string" ? value.trim() : "";
+  if (/^#[0-9a-f]{6}$/i.test(candidate)) return candidate.toUpperCase();
+  if (/^[0-9a-f]{6}$/i.test(candidate)) return `#${candidate.toUpperCase()}`;
+  return fallback;
+}
+
+function normalizeToolbarPalette(
+  value: unknown,
+  variant: keyof ToolbarSkin
+): ToolbarSkinPalette {
+  const fallback = TOOLBAR_SKIN_DEFAULTS[variant];
+  const palette = isRecord(value) ? value : {};
+  return {
+    toolbarBg: normalizeToolbarHex(palette.toolbarBg, fallback.toolbarBg),
+    toolbarEdge: normalizeToolbarHex(palette.toolbarEdge, fallback.toolbarEdge),
+    buttonBorder: normalizeToolbarHex(palette.buttonBorder, fallback.buttonBorder),
+    logoBody: normalizeToolbarHex(palette.logoBody, fallback.logoBody),
+    logoAccent: normalizeToolbarHex(palette.logoAccent, fallback.logoAccent),
+    logoMuted: normalizeToolbarHex(palette.logoMuted, fallback.logoMuted),
+    logoText: normalizeToolbarHex(palette.logoText, fallback.logoText)
+  };
+}
+
+function isLegacyOverexposedLimePalette(palette: ToolbarSkinPalette): boolean {
+  return (
+    palette.buttonBorder === "#B6FF00" &&
+    palette.logoBody === "#B6FF00" &&
+    palette.logoAccent === "#D4FF4A" &&
+    palette.logoMuted === "#EDFF9A" &&
+    palette.logoText === "#121212"
+  );
+}
+
+/**
+ * Accepts the nested palette stored by HanMark 2.4.2 and repairs partial or
+ * invalid values. All returned colors are canonical #RRGGBB strings, so they
+ * can be assigned to CSS custom properties without accepting arbitrary CSS.
+ */
+export function normalizeToolbarSkin(value: unknown): ToolbarSkin {
+  const skin = isRecord(value) ? value : {};
+  const light = normalizeToolbarPalette(skin.light, "light");
+  let dark = normalizeToolbarPalette(skin.dark, "dark");
+  if (isLegacyOverexposedLimePalette(dark)) {
+    dark = { ...TOOLBAR_SKIN_DEFAULTS.dark };
+  }
+  return { light, dark };
+}
+
 function normalizeCustomFont(value: unknown): CustomFontEntry | null {
   if (!isRecord(value)) return null;
   const family = nonEmptyString(value.family, "");
@@ -92,6 +234,12 @@ function normalizeCustomFont(value: unknown): CustomFontEntry | null {
     style: value.style === "italic" ? "italic" : "normal"
   };
   if (typeof value.previewOnly === "boolean") entry.previewOnly = value.previewOnly;
+  if (typeof value.cacheId === "string" && value.cacheId.trim()) {
+    entry.cacheId = value.cacheId.trim();
+  }
+  if (typeof value.fileName === "string" && value.fileName.trim()) {
+    entry.fileName = value.fileName.trim();
+  }
   return entry;
 }
 
@@ -129,6 +277,8 @@ export function normalizeHanmarkSettings(
     activeWordTemplateId: nonEmptyString(data.activeWordTemplateId, "default"),
     docxPreviewMode: data.docxPreviewMode === "word-pdf" ? "word-pdf" : "fast-docx",
     customFontDirs: stringArray(data.customFontDirs),
-    customFonts
+    customFonts,
+    toolbarSkinMode: normalizeToolbarSkinMode(data.toolbarSkinMode),
+    toolbarSkin: normalizeToolbarSkin(data.toolbarSkin)
   };
 }

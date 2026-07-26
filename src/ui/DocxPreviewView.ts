@@ -17,6 +17,11 @@ import type {
   WordStyleSpec,
   WordTemplateSpec
 } from "../legacy-port/wordTypes";
+import {
+  isUserInitiatedFastPreviewTrigger,
+  UserInitiatedDocxPackagePreview,
+  type FastDocxPreviewTrigger
+} from "./docxPackagePreview";
 
 export const DOCX_PREVIEW_VIEW_TYPE = "hanmark-docx-preview";
 
@@ -26,6 +31,8 @@ export interface DocxPreviewViewOptions {
   getPreviewMode: () => DocxPreviewMode;
   setPreviewMode?: (mode: DocxPreviewMode) => Promise<void>;
   getSource?: () => DocxSource | null;
+  /** Loads only fonts that the user explicitly selected into the browser preview. */
+  preparePreviewFonts?: (target: Document) => Promise<void>;
 }
 
 const BODY_STYLE_IDS: readonly WordStyleId[] = [
@@ -172,15 +179,23 @@ export function applyWordTemplatePreview(
 
 export class DocxPreviewView extends ItemView {
   private readonly options: DocxPreviewViewOptions;
+  private readonly fastPreview: UserInitiatedDocxPackagePreview<
+    DocxSource,
+    ReturnType<typeof createUserInitiatedAction>
+  >;
   private previewEl: HTMLElement | null = null;
   private modeSelect: HTMLSelectElement | null = null;
-  private renderTimer: number | null = null;
   private renderVersion = 0;
   private objectUrl: string | null = null;
+  private renderedSourceKey: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, options: DocxPreviewViewOptions) {
     super(leaf);
     this.options = options;
+    this.fastPreview = new UserInitiatedDocxPackagePreview(
+      (source, action) =>
+        this.options.exporter.buildDocxBytesUserInitiated(source, action)
+    );
   }
 
   getViewType(): string {
@@ -228,7 +243,7 @@ export class DocxPreviewView extends ItemView {
       if (this.options.getPreviewMode() === "word-pdf") {
         void this.renderExactPreview();
       } else {
-        void this.renderFastPreview();
+        void this.handleFastPreviewTrigger("toolbar-refresh");
       }
     });
 
@@ -246,37 +261,39 @@ export class DocxPreviewView extends ItemView {
         if (this.options.getPreviewMode() === "word-pdf") {
           this.markExactPreviewStale();
         } else {
-          this.scheduleFastRefresh();
+          void this.handleFastPreviewTrigger("document-change");
         }
       })
     );
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
-        if (this.options.getPreviewMode() === "fast-docx") {
-          this.scheduleFastRefresh();
+        if (
+          this.options.getPreviewMode() === "fast-docx" &&
+          this.activeSourceChanged()
+        ) {
+          void this.handleFastPreviewTrigger("active-document-change");
         }
       })
     );
     if (this.options.getPreviewMode() === "word-pdf") {
       this.renderExactPreviewPrompt();
     } else {
-      await this.renderFastPreview();
+      await this.handleFastPreviewTrigger("view-open");
     }
   }
 
   async onClose(): Promise<void> {
-    if (this.renderTimer !== null) window.clearTimeout(this.renderTimer);
-    this.renderTimer = null;
     this.revokeObjectUrl();
     this.previewEl = null;
     this.modeSelect = null;
+    this.renderedSourceKey = null;
   }
 
   forceRefresh(): void {
     if (this.options.getPreviewMode() === "word-pdf") {
       this.markExactPreviewStale();
     } else {
-      this.scheduleFastRefresh(0);
+      void this.handleFastPreviewTrigger("template-change");
     }
   }
 
@@ -284,18 +301,23 @@ export class DocxPreviewView extends ItemView {
     return this.options.getSource?.() ?? activeDocxSource(this);
   }
 
-  private scheduleFastRefresh(delay = 300): void {
-    if (this.renderTimer !== null) window.clearTimeout(this.renderTimer);
-    this.renderTimer = window.setTimeout(() => {
-      this.renderTimer = null;
-      void this.renderFastPreview();
-    }, delay);
+  private sourceKey(source: DocxSource | null = this.source()): string | null {
+    if (!source) return null;
+    return `${source.sourcePath ?? ""}\u0000${source.markdown}`;
+  }
+
+  private activeSourceChanged(): boolean {
+    return (
+      this.renderedSourceKey !== null &&
+      this.sourceKey() !== this.renderedSourceKey
+    );
   }
 
   private renderExactPreviewPrompt(): void {
     const preview = this.previewEl;
     if (!preview) return;
     this.renderVersion += 1;
+    this.renderedSourceKey = null;
     this.revokeObjectUrl();
     preview.empty();
     preview.createDiv({
@@ -306,16 +328,79 @@ export class DocxPreviewView extends ItemView {
     });
   }
 
+  private renderFastPreviewPrompt(message?: string): void {
+    const preview = this.previewEl;
+    if (!preview) return;
+    this.renderVersion += 1;
+    this.renderedSourceKey = null;
+    this.revokeObjectUrl();
+    preview.empty();
+    const source = this.source();
+    if (!source) {
+      preview.createDiv({
+        cls: "hanmark-docx-preview-empty",
+        text: "DOCX로 미리 볼 Markdown 문서를 여세요."
+      });
+      return;
+    }
+    if (!source.markdown.trim()) {
+      preview.createDiv({
+        cls: "hanmark-docx-preview-empty",
+        text: "문서에 내용을 입력한 뒤 ‘새로 고침’을 누르세요."
+      });
+      return;
+    }
+    if (message) {
+      preview.createDiv({
+        cls: "hanmark-docx-preview-warning",
+        text: message
+      });
+    }
+    preview.createDiv({
+      cls: "hanmark-docx-preview-note",
+      text:
+        "빠른 미리보기는 실제 Pandoc DOCX 패키지를 화면에 렌더링합니다. " +
+        "외부 변환은 위의 ‘새로 고침’을 눌렀을 때만 실행됩니다."
+    });
+  }
+
   private markExactPreviewStale(): void {
     const preview = this.previewEl;
     if (!preview) return;
     const existing = preview.querySelector(".hanmark-docx-preview-stale");
     if (existing) return;
+    this.renderVersion += 1;
+    preview.querySelector(".hanmark-docx-preview-loading")?.remove();
     const notice = createDiv({
       cls: "hanmark-docx-preview-warning hanmark-docx-preview-stale",
       text: "문서 또는 템플릿이 바뀌었습니다. ‘새로 고침’을 눌러 Word PDF를 다시 만드세요."
     });
     preview.prepend(notice);
+  }
+
+  private markFastPreviewStale(): void {
+    const preview = this.previewEl;
+    if (!preview) return;
+    const existing = preview.querySelector(".hanmark-docx-preview-stale");
+    if (existing) return;
+    this.renderVersion += 1;
+    preview.querySelector(".hanmark-docx-preview-loading")?.remove();
+    const notice = createDiv({
+      cls: "hanmark-docx-preview-warning hanmark-docx-preview-stale",
+      text: "문서 또는 템플릿이 바뀌었습니다. ‘새로 고침’을 눌러 실제 DOCX를 다시 만드세요."
+    });
+    preview.prepend(notice);
+  }
+
+  private async handleFastPreviewTrigger(
+    trigger: FastDocxPreviewTrigger
+  ): Promise<void> {
+    if (!isUserInitiatedFastPreviewTrigger(trigger)) {
+      if (trigger === "view-open") this.renderFastPreviewPrompt();
+      else this.markFastPreviewStale();
+      return;
+    }
+    await this.renderFastPreviewUserInitiated(trigger);
   }
 
   private async changeMode(mode: DocxPreviewMode): Promise<void> {
@@ -324,11 +409,11 @@ export class DocxPreviewView extends ItemView {
       if (mode === "word-pdf") {
         await this.renderExactPreview();
       } else {
-        await this.renderFastPreview();
+        await this.handleFastPreviewTrigger("mode-selection");
       }
     } catch (error) {
       new Notice(toErrorMessage(error));
-      await this.renderFastPreview();
+      await this.renderSemanticFallback();
     }
   }
 
@@ -337,11 +422,57 @@ export class DocxPreviewView extends ItemView {
     if (this.modeSelect) this.modeSelect.value = mode;
   }
 
-  private async renderFastPreview(message?: string): Promise<void> {
+  private async renderFastPreviewUserInitiated(
+    trigger: "toolbar-refresh" | "mode-selection"
+  ): Promise<void> {
+    const preview = this.previewEl;
+    if (!preview) return;
+    const source = this.source();
+    if (!source || !source.markdown.trim()) {
+      this.renderFastPreviewPrompt();
+      return;
+    }
+    const version = ++this.renderVersion;
+    this.renderedSourceKey = this.sourceKey(source);
+    this.revokeObjectUrl();
+    preview.empty();
+    preview.createDiv({
+      cls: "hanmark-docx-preview-loading",
+      text: "실제 DOCX 미리보기를 만드는 중…"
+    });
+
+    try {
+      const rendered = createDiv({ cls: "docx-preview-docx" });
+      await this.options.preparePreviewFonts?.(this.containerEl.ownerDocument);
+      if (!this.previewEl || version !== this.renderVersion) return;
+      await this.fastPreview.handle(trigger, {
+        source,
+        action: createUserInitiatedAction("toolbar"),
+        container: rendered
+      });
+      if (!this.previewEl || version !== this.renderVersion) return;
+      preview.empty();
+      preview.createDiv({
+        cls: "hanmark-docx-preview-note",
+        text:
+          "Pandoc이 만든 실제 DOCX 패키지를 렌더링했습니다. " +
+          "Word 버전에 따라 쪽 나눔은 조금 다를 수 있습니다."
+      });
+      preview.append(rendered);
+    } catch (error) {
+      if (!this.previewEl || version !== this.renderVersion) return;
+      await this.renderSemanticFallback(
+        `실제 DOCX 미리보기를 만들 수 없어 간이 미리보기로 전환했습니다: ${toErrorMessage(error)}`
+      );
+    }
+  }
+
+  private async renderSemanticFallback(message?: string): Promise<void> {
     const preview = this.previewEl;
     if (!preview) return;
     const version = ++this.renderVersion;
     const source = this.source();
+    this.renderedSourceKey = this.sourceKey(source);
     this.revokeObjectUrl();
     preview.empty();
 
@@ -368,13 +499,14 @@ export class DocxPreviewView extends ItemView {
     const note = preview.createDiv({
       cls: "hanmark-docx-preview-note",
       text:
-        "빠른 미리보기는 Word의 쪽 나눔과 완전히 같지 않습니다. " +
-        "Windows Word PDF는 버튼을 눌렀을 때만 외부 변환을 실행합니다."
+        "간이 미리보기는 Markdown과 Word 템플릿 스타일을 브라우저에서 표시합니다. " +
+        "실제 DOCX의 쪽 나눔과 완전히 같지 않습니다."
     });
     note.setAttribute("role", "note");
 
     try {
       const template = await this.options.templateStore.readActiveTemplate();
+      await this.options.preparePreviewFonts?.(this.containerEl.ownerDocument);
       if (!this.previewEl || version !== this.renderVersion) return;
       const paper = preview.createDiv({
         cls: "hanmark-docx-preview-paper word-template-preview-paper"
@@ -406,18 +538,19 @@ export class DocxPreviewView extends ItemView {
     if (!preview) return;
     const source = this.source();
     if (!source) {
-      await this.renderFastPreview();
+      this.renderFastPreviewPrompt();
       return;
     }
     if (!Platform.isWin || !Platform.isDesktopApp) {
       await this.setPreviewMode("fast-docx");
-      await this.renderFastPreview(
+      await this.renderSemanticFallback(
         "Windows Word PDF 미리보기는 Windows 데스크톱에서만 사용할 수 있습니다."
       );
       return;
     }
 
     const version = ++this.renderVersion;
+    this.renderedSourceKey = this.sourceKey(source);
     this.revokeObjectUrl();
     preview.empty();
     preview.createDiv({
@@ -447,7 +580,7 @@ export class DocxPreviewView extends ItemView {
     } catch (error) {
       if (!this.previewEl || version !== this.renderVersion) return;
       await this.setPreviewMode("fast-docx");
-      await this.renderFastPreview(
+      await this.renderSemanticFallback(
         `Word PDF 미리보기를 만들 수 없어 빠른 미리보기로 전환했습니다: ${toErrorMessage(error)}`
       );
     }

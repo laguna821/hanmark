@@ -34,6 +34,7 @@ import {
   DEFAULT_HANMARK_SETTINGS,
   normalizeHanmarkSettings,
   renderStandaloneHtmlBytes,
+  WordFontCatalog,
   WordTemplateStore,
   type HanmarkRuntimePlatform,
   type HanmarkSettings
@@ -95,6 +96,7 @@ export default class HanmarkPlugin extends Plugin {
 
   private gateway!: FileGateway;
   private wordTemplateStore!: WordTemplateStore;
+  private wordFontCatalog!: WordFontCatalog;
   private docxExporter!: DocxExportService;
   private toolbar: ToolbarController | null = null;
   private settingTab: HanmarkSettingTab | null = null;
@@ -105,6 +107,7 @@ export default class HanmarkPlugin extends Plugin {
     await unpackBundledAssets(this);
 
     this.gateway = createFileGateway(this.app, this);
+    this.wordFontCatalog = new WordFontCatalog(() => this.settings, this.gateway);
     this.wordTemplateStore = new WordTemplateStore({
       storage: createWordTemplateStorage(this.app.vault.adapter),
       rootPath: `${this.app.vault.configDir}/plugins/${this.manifest.id}`,
@@ -147,7 +150,8 @@ export default class HanmarkPlugin extends Plugin {
         toggleDocxPreview: () => void this.toggleDocxPreview(),
         openWordTemplateEditor: () => this.openWordTemplateManager()
       },
-      this.settings.showToolbarOnStartup
+      this.settings.showToolbarOnStartup,
+      () => this.settings
     );
     this.toolbar.initialize();
 
@@ -212,7 +216,8 @@ export default class HanmarkPlugin extends Plugin {
           leaf,
           () => activeTableProfile(this),
           () => activeDocumentStyle(this),
-          () => this.currentMarkdownView()
+          () => this.currentMarkdownView(),
+          () => this.settings.enableLivePreview
         )
     );
     this.registerView(
@@ -226,7 +231,9 @@ export default class HanmarkPlugin extends Plugin {
             this.settings.docxPreviewMode = mode;
             await this.saveSettings();
           },
-          getSource: () => this.currentDocxSource()
+          getSource: () => this.currentDocxSource(),
+          preparePreviewFonts: (target) =>
+            this.wordFontCatalog.applyPreviewFonts(target)
         })
     );
   }
@@ -423,12 +430,12 @@ export default class HanmarkPlugin extends Plugin {
       documentStyle: activeDocumentStyle(this)
     });
     const saved = source.sourcePath
-      ? await this.gateway.saveVaultSibling(
+        ? await this.gateway.saveVaultSibling(
           bytes,
-          `${source.title}.html`,
+          `${source.title}_html.html`,
           source.sourcePath
         )
-      : await this.gateway.saveFile(bytes, `${source.title}.html`);
+      : await this.gateway.saveFile(bytes, `${source.title}_html.html`);
     if (!saved.cancelled) new Notice(`HTML 저장 완료: ${saved.displayPath}`);
   }
 
@@ -540,7 +547,13 @@ export default class HanmarkPlugin extends Plugin {
     new WordTemplateManagerModal(this.app, {
       store: this.wordTemplateStore,
       fileGateway: this.gateway,
+      fontCatalog: this.wordFontCatalog,
       onChanged: async () => {
+        await this.saveSettings();
+        this.refreshPreviews();
+        this.settingTab?.refresh();
+      },
+      onFontCatalogChanged: async () => {
         await this.saveSettings();
         this.refreshPreviews();
         this.settingTab?.refresh();

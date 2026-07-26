@@ -24,9 +24,10 @@
   "license": "MIT",
   "dependencies": {
     "@xmldom/xmldom": "^0.8.10",
+    "docx-preview": "0.4.0",
     "jszip": "^3.10.1",
     "kordoc": "4.2.5",
-    "pdfjs-dist": "^4.10.38"
+    "pdfjs-dist": "4.10.38"
   },
   "overrides": {
     "@hono/node-server": "2.0.11",

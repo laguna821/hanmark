@@ -8,6 +8,17 @@ import {
   type EditorPosition,
   type WorkspaceLeaf
 } from "obsidian";
+import {
+  applyBackgroundColorValue,
+  applyFontColorValue
+} from "../editorCommands";
+import {
+  DEFAULT_HANMARK_SETTINGS,
+  normalizeToolbarSkin,
+  normalizeToolbarSkinMode,
+  type HanmarkSettings,
+  type ToolbarSkinPalette
+} from "../legacy-port/settings";
 
 interface CommandManager {
   executeCommandById(id: string): boolean;
@@ -45,6 +56,81 @@ interface ToolbarMenuItem {
 interface BrushPattern {
   name: string;
   apply: (value: string) => string;
+}
+
+type ToolbarSkinSettings = Pick<
+  HanmarkSettings,
+  "toolbarSkinMode" | "toolbarSkin"
+>;
+
+const TOOLBAR_SKIN_CLASSES = [
+  "hwp-toolbar-skin-auto",
+  "hwp-toolbar-skin-light",
+  "hwp-toolbar-skin-dark"
+] as const;
+
+function svgCssUrl(svg: string): string {
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+function toolbarLogoHwp(palette: ToolbarSkinPalette): string {
+  const { logoAccent, logoBody, logoMuted, logoText } = palette;
+  return svgCssUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">` +
+      `<path fill="${logoAccent}" d="M128 248h98c12 0 22-10 22-22v-38H128z"/>` +
+      `<path fill="${logoAccent}" d="M128 188h120v-60H128z"/>` +
+      `<path fill="${logoBody}" d="M128 128h120V68H128z"/>` +
+      `<path fill="${logoMuted}" d="M128 68h120V30c0-12-10-22-22-22h-98z"/>` +
+      `<path fill="${logoBody}" d="M39 8h89v240H39C18 248 8 238 8 217V39C8 18 18 8 39 8z"/>` +
+      `<path fill="${logoText}" d="M104 57H75V43H62v14H32v12h15c-5 4-8 10-8 17 0 15 12 27 29 27s29-12 29-27c0-7-3-13-8-17h15zm-36 44c-9 0-16-7-16-16s7-16 16-16 16 7 16 16-7 16-16 16z"/>` +
+      `</svg>`
+  );
+}
+
+function toolbarLogoWord(palette: ToolbarSkinPalette): string {
+  const { logoAccent, logoBody, logoMuted, logoText } = palette;
+  return svgCssUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">` +
+      `<path fill="${logoMuted}" d="M9 34l15-19 17 11v13c0 2-2 4-4 4H15c-3 0-6-3-6-6z"/>` +
+      `<path fill="${logoAccent}" d="M9 20c0-3 2-5 5-5h22l5-2v13c0 2-2 4-4 4H15c-3 0-6 3-6 6z"/>` +
+      `<path fill="${logoAccent}" d="M9 10c0-3 3-6 6-6h22c2 0 4 2 4 4v5c0 2-2 4-4 4H15c-3 0-6 3-6 6z"/>` +
+      `<path fill="${logoBody}" d="M8 23h10c2 0 3 2 3 4v10c0 2-1 3-3 3H8c-2 0-4-1-4-3V27c0-2 2-4 4-4z"/>` +
+      `<path fill="${logoText}" d="M18 27l-2 9h-2l-2-5-1 5H9l-2-9h2l1 6 1-6h3l1 6 1-6z"/>` +
+      `</svg>`
+  );
+}
+
+function setToolbarPaletteVariables(
+  toolbar: HTMLElement,
+  variant: "light" | "dark",
+  palette: ToolbarSkinPalette
+): void {
+  const prefix = `--hwp-toolbar-${variant}`;
+  toolbar.style.setProperty(`${prefix}-bg`, palette.toolbarBg);
+  toolbar.style.setProperty(`${prefix}-edge`, palette.toolbarEdge);
+  toolbar.style.setProperty(`${prefix}-btn-border`, palette.buttonBorder);
+  toolbar.style.setProperty(`${prefix}-logo-body`, palette.logoBody);
+  toolbar.style.setProperty(`${prefix}-logo-accent`, palette.logoAccent);
+  toolbar.style.setProperty(`${prefix}-logo-muted`, palette.logoMuted);
+  toolbar.style.setProperty(`${prefix}-logo-text`, palette.logoText);
+  toolbar.style.setProperty(`${prefix}-logo-hwp`, toolbarLogoHwp(palette));
+  toolbar.style.setProperty(`${prefix}-logo-word`, toolbarLogoWord(palette));
+}
+
+/**
+ * Applies only validated palette values to a toolbar element. Theme switching
+ * remains live because CSS selects the light or dark variable set by class.
+ */
+export function applyToolbarSkin(
+  toolbar: HTMLElement,
+  settings: Partial<ToolbarSkinSettings>
+): void {
+  const mode = normalizeToolbarSkinMode(settings.toolbarSkinMode);
+  const skin = normalizeToolbarSkin(settings.toolbarSkin);
+  toolbar.classList.remove(...TOOLBAR_SKIN_CLASSES);
+  toolbar.classList.add(`hwp-toolbar-skin-${mode}`);
+  setToolbarPaletteVariables(toolbar, "light", skin.light);
+  setToolbarPaletteVariables(toolbar, "dark", skin.dark);
 }
 
 function commandManager(plugin: Plugin): CommandManager {
@@ -176,7 +262,9 @@ export class ToolbarController {
   constructor(
     private readonly plugin: Plugin,
     private readonly actions: ToolbarActions,
-    visibleOnStartup: boolean
+    visibleOnStartup: boolean,
+    private readonly getToolbarSkinSettings: () => ToolbarSkinSettings = () =>
+      DEFAULT_HANMARK_SETTINGS
   ) {
     this.visible = visibleOnStartup;
   }
@@ -236,6 +324,7 @@ export class ToolbarController {
     if (!leaf || !(leaf.view instanceof MarkdownView)) return;
     const container = leaf.view.containerEl;
     const toolbar = createDiv({ cls: "hwp-toolbar-container" });
+    applyToolbarSkin(toolbar, this.getToolbarSkinSettings());
     this.currentToolbar = toolbar;
     this.renderMainToolbar(toolbar.createDiv({ cls: "hwp-toolbar-main" }));
     this.renderFormatToolbar(toolbar.createDiv({ cls: "hwp-toolbar-format" }));
@@ -281,6 +370,36 @@ export class ToolbarController {
       options.action(event);
     });
     return button;
+  }
+
+  private addColorButton(
+    root: HTMLElement,
+    options: {
+      icon: string;
+      label: string;
+      text: string;
+      initialColor: string;
+      apply: (editor: Editor, color: string) => void;
+    }
+  ): HTMLButtonElement {
+    const picker = root.createEl("input", {
+      type: "color",
+      attr: {
+        "aria-label": `${options.label} 선택`
+      }
+    });
+    picker.value = options.initialColor;
+    picker.hidden = true;
+    picker.addEventListener("change", () => {
+      const editor = activeEditor(this.plugin);
+      if (editor) options.apply(editor, picker.value);
+    });
+    return this.addButton(root, {
+      icon: options.icon,
+      label: options.label,
+      text: options.text,
+      action: () => picker.click()
+    });
   }
 
   private addMenuButton(
@@ -760,15 +879,33 @@ export class ToolbarController {
       action: () => void this.runPluginCommand("cycle-list-checklist")
     });
     this.addButton(blocks, {
+      icon: "check-check",
+      label: "할 일 완료·미완료 전환",
+      action: () => void this.runCommand("editor:toggle-checklist-status")
+    });
+    this.addButton(blocks, {
       icon: "quote",
       label: "인용문",
       action: () => void this.runPluginCommand("toggle-blockquote")
     });
-    this.addButton(blocks, {
-      icon: "message-square-warning",
-      label: "콜아웃",
-      action: () => void this.runPluginCommand("insert-callout")
-    });
+    this.addMenuButton(
+      blocks,
+      "콜아웃",
+      "콜아웃",
+      [
+        {
+          label: "노트 콜아웃",
+          commandId: "insert-callout-note",
+          icon: "message-square"
+        },
+        {
+          label: "주의 콜아웃",
+          commandId: "insert-callout-warning",
+          icon: "message-square-warning"
+        }
+      ],
+      "message-square-warning"
+    );
 
     this.addDivider(root);
     const tools = root.createDiv({ cls: "hwp-toolbar-group" });
@@ -786,6 +923,8 @@ export class ToolbarController {
         { label: "코드 블록", commandId: "insert-codeblock", icon: "square-code" },
         { label: "수식 블록", commandId: "insert-mathblock", icon: "sigma" },
         { label: "인라인 수식", commandId: "toggle-inline-math", icon: "function-square" },
+        { label: "위 첨자", commandId: "superscript", icon: "superscript" },
+        { label: "아래 첨자", commandId: "subscript", icon: "subscript" },
         { label: "가로줄", commandId: "insert-hr", icon: "minus" }
       ],
       "plus-circle"
@@ -802,17 +941,19 @@ export class ToolbarController {
       ],
       "align-justify"
     );
-    this.addButton(tools, {
+    this.addColorButton(tools, {
       icon: "palette",
       label: "글자색",
       text: "글자색",
-      action: () => void this.runPluginCommand("change-font-color")
+      initialColor: "#1A73E8",
+      apply: applyFontColorValue
     });
-    this.addButton(tools, {
+    this.addColorButton(tools, {
       icon: "paint-bucket",
       label: "배경색",
       text: "배경색",
-      action: () => void this.runPluginCommand("change-background-color")
+      initialColor: "#FFF59D",
+      apply: applyBackgroundColorValue
     });
     this.addMenuButton(
       tools,

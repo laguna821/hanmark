@@ -13,12 +13,37 @@ import {
 import type { TemplateLibraryHost } from "../io/templateLibrary";
 import type {
   DocxPreviewMode,
-  HanmarkSettings
+  HanmarkSettings,
+  ToolbarSkin,
+  ToolbarSkinMode,
+  ToolbarSkinPaletteKey
+} from "../legacy-port/settings";
+import {
+  cloneToolbarSkin,
+  normalizeToolbarHex,
+  normalizeToolbarSkin,
+  normalizeToolbarSkinMode,
+  TOOLBAR_SKIN_DARK_PRESETS,
+  TOOLBAR_SKIN_DEFAULTS
 } from "../legacy-port/settings";
 import type { WordTemplateStore } from "../legacy-port/wordTemplateStore";
 import { errorMessage } from "../utils/errors";
 
 export const HWPX_ENGINE_VERSION = "4.2.5";
+
+const TOOLBAR_SKIN_COLOR_FIELDS: ReadonlyArray<{
+  key: ToolbarSkinPaletteKey;
+  name: string;
+  description: string;
+}> = [
+  { key: "toolbarBg", name: "툴바 배경", description: "툴바 전체 배경색" },
+  { key: "toolbarEdge", name: "툴바 아래 경계", description: "툴바 아래쪽 강조선" },
+  { key: "buttonBorder", name: "버튼 테두리", description: "툴바 버튼과 메뉴 테두리" },
+  { key: "logoBody", name: "로고 기본 색", description: "HWP·Word 로고의 기본 색" },
+  { key: "logoAccent", name: "로고 강조 색", description: "HWP·Word 로고의 강조 색" },
+  { key: "logoMuted", name: "로고 보조 색", description: "HWP·Word 로고의 보조 색" },
+  { key: "logoText", name: "로고 글자 색", description: "HWP·Word 로고 안 글자 색" }
+];
 
 export interface HanmarkSettingsHost extends TemplateLibraryHost {
   app: App;
@@ -134,6 +159,149 @@ export class HanmarkSettingTab extends PluginSettingTab {
             void this.changeToolbarVisibility(enabled);
           });
       });
+    new Setting(container)
+      .setName("실시간 HWPX 미리보기")
+      .setDesc(
+        "끄면 노트 입력·전환 때 HWPX 미리보기를 자동 갱신하지 않습니다. 미리보기 명령을 다시 실행하면 수동으로 갱신할 수 있습니다."
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.host.settings.enableLivePreview)
+          .onChange((enabled) => {
+            void this.changeLivePreview(enabled);
+          });
+      });
+    this.renderToolbarSkinSettings(container);
+  }
+
+  private renderToolbarSkinSettings(container: HTMLElement): void {
+    new Setting(container).setName("툴바 색상").setHeading();
+    new Setting(container)
+      .setName("색상 모드")
+      .setDesc("자동은 Obsidian의 밝은·어두운 테마 전환을 그대로 따릅니다.")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("auto", "Obsidian 테마에 맞춤")
+          .addOption("light", "항상 밝은 팔레트")
+          .addOption("dark", "항상 어두운 팔레트")
+          .setValue(this.host.settings.toolbarSkinMode)
+          .onChange((value) => {
+            void this.changeToolbarSkinMode(normalizeToolbarSkinMode(value));
+          });
+      });
+
+    let selected: keyof ToolbarSkin = "dark";
+    const tabs = container.createDiv({ cls: "hwp-toolbar-skin-tabs" });
+    const tabList = tabs.createDiv({ cls: "hwp-toolbar-skin-tab-list" });
+    const panel = tabs.createDiv({ cls: "hwp-toolbar-skin-tab-panel" });
+    const lightButton = tabList.createEl("button", {
+      cls: "hwp-toolbar-skin-tab",
+      text: "밝은 팔레트",
+      attr: { type: "button" }
+    });
+    const darkButton = tabList.createEl("button", {
+      cls: "hwp-toolbar-skin-tab",
+      text: "어두운 팔레트",
+      attr: { type: "button" }
+    });
+
+    const renderPanel = (): void => {
+      lightButton.classList.toggle("is-active", selected === "light");
+      darkButton.classList.toggle("is-active", selected === "dark");
+      panel.empty();
+      new Setting(panel)
+        .setName(selected === "light" ? "밝은 팔레트" : "어두운 팔레트")
+        .setHeading();
+      for (const field of TOOLBAR_SKIN_COLOR_FIELDS) {
+        this.renderToolbarSkinColor(
+          panel,
+          selected,
+          field.key,
+          field.name,
+          field.description
+        );
+      }
+
+      if (selected === "dark") {
+        new Setting(panel)
+          .setName("기존 팔레트")
+          .setDesc("HanMark 2.4.2에서 제공하던 어두운 툴바 팔레트입니다.")
+          .addButton((button) => {
+            button.setButtonText("Charcoal Minimal").onClick(() => {
+              void this.applyToolbarDarkPreset("charcoal-minimal", renderPanel);
+            });
+          })
+          .addButton((button) => {
+            button.setButtonText("Neo Lime Dark").onClick(() => {
+              void this.applyToolbarDarkPreset("neo-lime-dark", renderPanel);
+            });
+          })
+          .addButton((button) => {
+            button.setButtonText("Olive Deck").onClick(() => {
+              void this.applyToolbarDarkPreset("olive-deck", renderPanel);
+            });
+          });
+      }
+
+      new Setting(panel)
+        .setName("전체 색상 초기화")
+        .setDesc("밝은·어두운 팔레트를 HanMark 기본값으로 되돌립니다.")
+        .addButton((button) => {
+          button.setButtonText("초기화").onClick(() => {
+            void this.resetToolbarSkin(renderPanel);
+          });
+        });
+    };
+
+    lightButton.addEventListener("click", () => {
+      selected = "light";
+      renderPanel();
+    });
+    darkButton.addEventListener("click", () => {
+      selected = "dark";
+      renderPanel();
+    });
+    renderPanel();
+  }
+
+  private renderToolbarSkinColor(
+    container: HTMLElement,
+    variant: keyof ToolbarSkin,
+    key: ToolbarSkinPaletteKey,
+    name: string,
+    description: string
+  ): void {
+    const current = this.host.settings.toolbarSkin[variant][key];
+    let textInput: HTMLInputElement | null = null;
+    new Setting(container)
+      .setName(name)
+      .setDesc(description)
+      .addColorPicker((picker) => {
+        picker.setValue(current).onChange((value) => {
+          const normalized = normalizeToolbarHex(value, current);
+          if (textInput) textInput.value = normalized;
+          void this.changeToolbarSkinColor(variant, key, normalized);
+        });
+      })
+      .addText((text) => {
+        text.setValue(current);
+        text.inputEl.classList.add("hwp-toolbar-skin-hex-input");
+        textInput = text.inputEl;
+        text.onChange((value) => {
+          const normalized = normalizeToolbarHex(value, "");
+          if (normalized) void this.changeToolbarSkinColor(variant, key, normalized);
+        });
+        text.inputEl.addEventListener("blur", () => {
+          const stored = this.host.settings.toolbarSkin[variant][key];
+          text.setValue(normalizeToolbarHex(text.inputEl.value, stored));
+        });
+        text.inputEl.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            text.inputEl.blur();
+          }
+        });
+      });
   }
 
   private renderAdvancedDocxSettings(
@@ -191,7 +359,9 @@ export class HanmarkSettingTab extends PluginSettingTab {
     new Setting(details)
       .setName("DOCX 미리보기 방식")
       .setDesc(
-        "빠른 미리보기는 Obsidian 안에서 즉시 표시합니다. Word PDF는 Windows의 Microsoft Word를 사용자 요청 시에만 실행합니다."
+        "실제 DOCX 빠른 미리보기는 새로고침하거나 이 모드를 선택할 때만 Pandoc을 실행합니다. " +
+        "Pandoc을 사용할 수 없으면 설치 없이 의미 기반 미리보기로 전환합니다. " +
+        "Word PDF는 Windows의 Microsoft Word를 사용자 요청 시에만 실행합니다."
       )
       .addDropdown((dropdown) => {
         dropdown
@@ -277,6 +447,75 @@ export class HanmarkSettingTab extends PluginSettingTab {
       await this.actions.refreshToolbar();
     } catch (error) {
       new Notice(`툴바 설정을 저장하지 못했습니다: ${errorMessage(error)}`);
+    }
+  }
+
+  private async changeLivePreview(enabled: boolean): Promise<void> {
+    try {
+      this.host.settings.enableLivePreview = enabled;
+      await this.host.saveSettings();
+      if (enabled) await this.actions.refreshPreviews();
+    } catch (error) {
+      new Notice(
+        `실시간 미리보기 설정을 저장하지 못했습니다: ${errorMessage(error)}`
+      );
+    }
+  }
+
+  private async changeToolbarSkinMode(mode: ToolbarSkinMode): Promise<void> {
+    try {
+      this.host.settings.toolbarSkinMode = mode;
+      await this.host.saveSettings();
+      await this.actions.refreshToolbar();
+    } catch (error) {
+      new Notice(`툴바 색상 모드를 저장하지 못했습니다. ${errorMessage(error)}`);
+    }
+  }
+
+  private async changeToolbarSkinColor(
+    variant: keyof ToolbarSkin,
+    key: ToolbarSkinPaletteKey,
+    value: string
+  ): Promise<void> {
+    try {
+      this.host.settings.toolbarSkin = normalizeToolbarSkin(
+        this.host.settings.toolbarSkin
+      );
+      const palette = this.host.settings.toolbarSkin[variant];
+      palette[key] = normalizeToolbarHex(value, palette[key]);
+      await this.host.saveSettings();
+      await this.actions.refreshToolbar();
+    } catch (error) {
+      new Notice(`툴바 색상을 저장하지 못했습니다. ${errorMessage(error)}`);
+    }
+  }
+
+  private async applyToolbarDarkPreset(
+    preset: keyof typeof TOOLBAR_SKIN_DARK_PRESETS,
+    refreshPanel: () => void
+  ): Promise<void> {
+    try {
+      const current = normalizeToolbarSkin(this.host.settings.toolbarSkin);
+      this.host.settings.toolbarSkin = {
+        light: { ...current.light },
+        dark: { ...TOOLBAR_SKIN_DARK_PRESETS[preset] }
+      };
+      await this.host.saveSettings();
+      await this.actions.refreshToolbar();
+      refreshPanel();
+    } catch (error) {
+      new Notice(`툴바 팔레트를 적용하지 못했습니다. ${errorMessage(error)}`);
+    }
+  }
+
+  private async resetToolbarSkin(refreshPanel: () => void): Promise<void> {
+    try {
+      this.host.settings.toolbarSkin = cloneToolbarSkin(TOOLBAR_SKIN_DEFAULTS);
+      await this.host.saveSettings();
+      await this.actions.refreshToolbar();
+      refreshPanel();
+    } catch (error) {
+      new Notice(`툴바 색상을 초기화하지 못했습니다. ${errorMessage(error)}`);
     }
   }
 

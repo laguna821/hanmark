@@ -5,6 +5,18 @@ export interface FilePickOptions {
   title?: string;
   extensions: string[];
   multiple?: boolean;
+  /** Maximum number of matching files to read from one explicit selection. */
+  maxFiles?: number;
+  /** Maximum byte size of one selected file. */
+  maxFileBytes?: number;
+  /** Maximum combined byte size of all selected files. */
+  maxTotalBytes?: number;
+  /**
+   * Lets the user explicitly grant access to every matching file in one
+   * directory. The returned files are snapshots; HanMark never retains a
+   * directory handle or reads the directory again in the background.
+   */
+  directory?: boolean;
 }
 
 export interface SelectedExternalFile {
@@ -15,6 +27,8 @@ export interface SelectedExternalFile {
    * Newer Electron builds intentionally expose only the file name.
    */
   displayPath?: string;
+  /** Browser-provided path relative to an explicitly selected directory. */
+  relativePath?: string;
 }
 
 export interface SavedFileResult {
@@ -60,10 +74,6 @@ interface SaveFilePickerWindow extends Window {
       accept: Record<string, string[]>;
     }>;
   }) => Promise<FileSystemFileHandleLike>;
-}
-
-interface ElectronFile extends File {
-  path?: unknown;
 }
 
 const DEFAULT_PLUGIN_ID = "hanmark";
@@ -183,14 +193,102 @@ function isAbortError(error: unknown): boolean {
 
 async function selectedExternalFile(file: File): Promise<SelectedExternalFile> {
   const data = await file.arrayBuffer();
-  const legacyPath = (file as ElectronFile).path;
+  const relativePath = safeRelativeDisplayPath(file.webkitRelativePath);
   return {
     name: file.name,
     bytes: new Uint8Array(data),
-    displayPath: typeof legacyPath === "string" && legacyPath.trim()
-      ? legacyPath.replace(/\\/g, "/")
-      : file.name
+    displayPath: relativePath || file.name,
+    relativePath: relativePath || undefined
   };
+}
+
+function safeRelativeDisplayPath(value: string | undefined): string {
+  const normalized = (value ?? "").trim().replace(/\\/g, "/").replace(/\/+/g, "/");
+  if (
+    !normalized ||
+    normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    normalized.split("/").some((segment) => segment === "..")
+  ) {
+    return "";
+  }
+  return normalized;
+}
+
+function normalizedExtensions(extensions: readonly string[]): Set<string> {
+  return new Set(
+    extensions
+      .map((extension) => extension.trim().replace(/^\./, "").toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function checkedLimit(value: number | undefined, name: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
+function formatMebibytes(bytes: number): string {
+  return `${Math.ceil(bytes / (1024 * 1024))} MiB`;
+}
+
+/**
+ * Filters metadata before reading bytes and reads matching files sequentially.
+ * Exported for a DOM-free regression test; normal callers use `pickFiles()`.
+ */
+export async function readSelectedExternalFiles(
+  files: readonly File[],
+  options: FilePickOptions
+): Promise<SelectedExternalFile[]> {
+  const allowed = normalizedExtensions(options.extensions);
+  const matching = files.filter((file) => {
+    const extension = splitFilename(file.name).extension.replace(/^\./, "").toLowerCase();
+    return allowed.has(extension);
+  });
+  const maxFiles = checkedLimit(options.maxFiles, "maxFiles");
+  const maxFileBytes = checkedLimit(options.maxFileBytes, "maxFileBytes");
+  const maxTotalBytes = checkedLimit(options.maxTotalBytes, "maxTotalBytes");
+
+  if (maxFiles !== undefined && matching.length > maxFiles) {
+    throw new Error(`Select at most ${maxFiles} matching files at once.`);
+  }
+
+  let declaredTotal = 0;
+  for (const file of matching) {
+    if (maxFileBytes !== undefined && file.size > maxFileBytes) {
+      throw new Error(
+        `${file.name} exceeds the ${formatMebibytes(maxFileBytes)} per-file limit.`
+      );
+    }
+    declaredTotal += file.size;
+    if (maxTotalBytes !== undefined && declaredTotal > maxTotalBytes) {
+      throw new Error(
+        `Selected files exceed the ${formatMebibytes(maxTotalBytes)} combined limit.`
+      );
+    }
+  }
+
+  const selected: SelectedExternalFile[] = [];
+  let actualTotal = 0;
+  for (const file of matching) {
+    const snapshot = await selectedExternalFile(file);
+    if (maxFileBytes !== undefined && snapshot.bytes.byteLength > maxFileBytes) {
+      throw new Error(
+        `${file.name} exceeds the ${formatMebibytes(maxFileBytes)} per-file limit.`
+      );
+    }
+    actualTotal += snapshot.bytes.byteLength;
+    if (maxTotalBytes !== undefined && actualTotal > maxTotalBytes) {
+      throw new Error(
+        `Selected files exceed the ${formatMebibytes(maxTotalBytes)} combined limit.`
+      );
+    }
+    selected.push(snapshot);
+  }
+  return selected;
 }
 
 function acceptString(extensions: string[]): string {
@@ -202,11 +300,12 @@ function acceptString(extensions: string[]): string {
 }
 
 function pickWithInput(options: FilePickOptions): Promise<SelectedExternalFile[]> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const input = createEl("input");
     input.type = "file";
-    input.multiple = options.multiple === true;
+    input.multiple = options.multiple === true || options.directory === true;
     input.accept = acceptString(options.extensions);
+    if (options.directory === true) input.setAttribute("webkitdirectory", "");
     input.setAttribute("aria-label", options.title || "Choose files");
     input.hidden = true;
     document.body.appendChild(input);
@@ -218,10 +317,16 @@ function pickWithInput(options: FilePickOptions): Promise<SelectedExternalFile[]
       input.remove();
       resolve(files);
     };
+    const fail = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      input.remove();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
 
     input.addEventListener("change", () => {
       const files = Array.from(input.files ?? []);
-      void Promise.all(files.map(selectedExternalFile)).then(finish, () => finish([]));
+      void readSelectedExternalFiles(files, options).then(finish, fail);
     }, { once: true });
     input.addEventListener("cancel", () => finish([]), { once: true });
     input.click();

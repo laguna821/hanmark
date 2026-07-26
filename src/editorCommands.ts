@@ -189,9 +189,7 @@ function insertCallout(editor: Editor, type: "note" | "warning"): void {
   editor.replaceRange(block, editor.getCursor());
 }
 
-function applyFontColor(editor: Editor): void {
-  const color = promptUser("글자색을 입력하세요 (예: #1a73e8, red)", "#1a73e8");
-  if (!color) return;
+export function applyFontColorValue(editor: Editor, color: string): void {
   transformSelectionOrCurrentLine(editor, (value) =>
     mapNonEmptyLines(
       value,
@@ -204,9 +202,18 @@ function applyFontColor(editor: Editor): void {
   );
 }
 
-function applyBackgroundColor(editor: Editor): void {
-  const color = promptUser("배경색을 입력하세요 (예: #fff59d, yellow)", "#fff59d");
-  if (!color) return;
+function applyFontColor(editor: Editor): void {
+  const color = promptUser(
+    "글자색을 입력하세요 (예: #1a73e8, red)",
+    "#1a73e8"
+  );
+  if (color) applyFontColorValue(editor, color);
+}
+
+export function applyBackgroundColorValue(
+  editor: Editor,
+  color: string
+): void {
   transformSelectionOrCurrentLine(editor, (value) =>
     mapNonEmptyLines(
       value,
@@ -217,6 +224,14 @@ function applyBackgroundColor(editor: Editor): void {
         )}</mark>`
     )
   );
+}
+
+function applyBackgroundColor(editor: Editor): void {
+  const color = promptUser(
+    "배경색을 입력하세요 (예: #fff59d, yellow)",
+    "#fff59d"
+  );
+  if (color) applyBackgroundColorValue(editor, color);
 }
 
 function moveCurrentLine(editor: Editor, direction: -1 | 1): void {

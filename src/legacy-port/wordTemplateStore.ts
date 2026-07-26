@@ -142,6 +142,28 @@ export class WordTemplateStore {
     }
   }
 
+  private async availableName(name: string, excludeId?: string): Promise<string> {
+    const base = cleanName(name);
+    const listing = await this.storage.list(this.templateDir);
+    const used = new Set<string>();
+    for (const filePath of listing.files.filter((path) =>
+      path.toLowerCase().endsWith(".json")
+    )) {
+      try {
+        const template = parseWordTemplateJson(await this.storage.read(filePath));
+        if (template.id !== excludeId) used.add(template.name.toLocaleLowerCase());
+      } catch {
+        // A malformed, inactive template must not block valid template work.
+      }
+    }
+    if (!used.has(base.toLocaleLowerCase())) return base;
+    for (let suffix = 2; suffix < 10_000; suffix += 1) {
+      const candidate = `${base} (${suffix})`;
+      if (!used.has(candidate.toLocaleLowerCase())) return candidate;
+    }
+    throw new Error("A unique Word template name could not be created.");
+  }
+
   getTemplatePath(id: string): string {
     return joinPath(this.templateDir, `${requireSafeId(id)}.json`);
   }
@@ -149,24 +171,36 @@ export class WordTemplateStore {
   async writeTemplate(template: WordTemplateSpec): Promise<WordTemplateSpec> {
     const normalized = parseWordTemplateJson(JSON.stringify(template));
     requireSafeId(normalized.id);
-    normalized.name = cleanName(normalized.name);
     await this.ensureDirectories();
+    normalized.name = await this.availableName(normalized.name, normalized.id);
     await this.storage.write(this.getTemplatePath(normalized.id), JSON.stringify(normalized, null, 2));
     return cloneWordTemplate(normalized);
   }
 
   async ensureDefaultTemplate(template: WordTemplateSpec): Promise<WordTemplateSpec> {
     await this.ensureDirectories();
-    if (!(await this.storage.exists(this.getTemplatePath(template.id)))) {
-      await this.writeTemplate(template);
+    const path = this.getTemplatePath(template.id);
+    if (await this.storage.exists(path)) {
+      const raw = await this.storage.read(path);
+      try {
+        return parseWordTemplateJson(raw);
+      } catch {
+        const backupPath = `${path}.invalid-${Date.now()}.bak`;
+        await this.storage.write(backupPath, raw);
+        return this.writeTemplate(template);
+      }
     }
-    return (await this.readTemplate(template.id)) ?? cloneWordTemplate(template);
+    return this.writeTemplate(template);
   }
 
   async readTemplate(id: string): Promise<WordTemplateSpec | null> {
     const path = this.getTemplatePath(id);
     if (!(await this.storage.exists(path))) return null;
-    return parseWordTemplateJson(await this.storage.read(path));
+    try {
+      return parseWordTemplateJson(await this.storage.read(path));
+    } catch {
+      return null;
+    }
   }
 
   async readActiveTemplate(): Promise<WordTemplateSpec> {
@@ -186,7 +220,11 @@ export class WordTemplateStore {
     const listing = await this.storage.list(this.templateDir);
     const templates: WordTemplateSpec[] = [];
     for (const filePath of listing.files.filter((path) => path.toLowerCase().endsWith(".json"))) {
-      templates.push(parseWordTemplateJson(await this.storage.read(filePath)));
+      try {
+        templates.push(parseWordTemplateJson(await this.storage.read(filePath)));
+      } catch {
+        // Keep the rest of the template library usable if one file is damaged.
+      }
     }
     return templates.sort((left, right) => {
       if (left.id === "default") return -1;

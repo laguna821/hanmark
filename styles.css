@@ -451,6 +451,24 @@
    HWP TOOLBAR — 마크다운 에디터 내부에 삽입되는 DOM 툴바
    ================================================================ */
 
+.hwp-toolbar-container.hwp-toolbar-skin-auto,
+.hwp-toolbar-container.hwp-toolbar-skin-light {
+  --hwp-toolbar-bg: var(--hwp-toolbar-light-bg);
+  --hwp-toolbar-edge: var(--hwp-toolbar-light-edge);
+  --hwp-toolbar-btn-border: var(--hwp-toolbar-light-btn-border);
+  --hwp-toolbar-logo-hwp: var(--hwp-toolbar-light-logo-hwp);
+  --hwp-toolbar-logo-word: var(--hwp-toolbar-light-logo-word);
+}
+
+.theme-dark .hwp-toolbar-container.hwp-toolbar-skin-auto,
+.hwp-toolbar-container.hwp-toolbar-skin-dark {
+  --hwp-toolbar-bg: var(--hwp-toolbar-dark-bg);
+  --hwp-toolbar-edge: var(--hwp-toolbar-dark-edge);
+  --hwp-toolbar-btn-border: var(--hwp-toolbar-dark-btn-border);
+  --hwp-toolbar-logo-hwp: var(--hwp-toolbar-dark-logo-hwp);
+  --hwp-toolbar-logo-word: var(--hwp-toolbar-dark-logo-word);
+}
+
 .hwp-toolbar-container {
   position: sticky;
   top: 0;
@@ -1393,6 +1411,32 @@
   padding: 8px 10px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.word-font-custom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.word-font-custom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.word-font-custom-row > div {
+  min-width: 0;
+}
+
+.word-font-custom-row button {
+  flex: 0 0 auto;
 }
 
 .word-template-preview-header {

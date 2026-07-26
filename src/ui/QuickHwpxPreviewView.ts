@@ -81,7 +81,8 @@ export class QuickHwpxPreviewView extends ItemView {
     leaf: WorkspaceLeaf,
     private readonly profile: () => FormatProfile | undefined,
     private readonly documentStyle: () => DocumentStyleProfile | undefined,
-    private readonly sourceView?: () => MarkdownView | null
+    private readonly sourceView?: () => MarkdownView | null,
+    private readonly livePreviewEnabled: () => boolean = () => true
   ) {
     super(leaf);
   }
@@ -105,15 +106,27 @@ export class QuickHwpxPreviewView extends ItemView {
     const caution = root.createDiv({ cls: "hanmark-preview-caution" });
     caution.setText("빠른 HWPX 미리보기 · 한컴오피스와 완전히 동일한 화면이 아닙니다. 수식·차트·머리말은 다르게 보일 수 있습니다.");
     this.previewEl = root.createDiv({ cls: "hanmark-preview-stage" });
-    this.registerEvent(this.app.workspace.on("editor-change", () => this.schedule()));
-    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.schedule()));
-    this.registerEvent(this.app.workspace.on("file-open", () => this.schedule()));
+    this.registerEvent(
+      this.app.workspace.on("editor-change", () => this.scheduleIfEnabled())
+    );
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", () =>
+        this.scheduleIfEnabled()
+      )
+    );
+    this.registerEvent(
+      this.app.workspace.on("file-open", () => this.scheduleIfEnabled())
+    );
     await this.updatePreview();
   }
 
   forceRefresh(): void {
     this.cache.clear();
     this.schedule(true);
+  }
+
+  private scheduleIfEnabled(): void {
+    if (this.livePreviewEnabled()) this.schedule();
   }
 
   private schedule(immediate = false): void {

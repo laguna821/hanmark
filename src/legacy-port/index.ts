@@ -4,6 +4,7 @@ export * from "./pandocDocx";
 export * from "./settings";
 export * from "./userProcess";
 export * from "./wordPdfPreview";
+export * from "./wordFontCatalog";
 export * from "./wordReferenceDoc";
 export * from "./wordTemplateStore";
 export * from "./wordTypes";
