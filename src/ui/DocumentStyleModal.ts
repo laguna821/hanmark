@@ -1,11 +1,14 @@
-import { Modal, Notice, Setting } from "obsidian";
+import { type App, Modal, Notice, Setting, type TextComponent } from "obsidian";
 import {
   defaultDocumentStyleProfile,
   normalizeDocumentStyleProfile,
   type DocumentStyleProfile,
   type DocumentStyleRole,
+  type CharacterStyleProfile,
+  type ParagraphStyleProfile,
   type RoleStyleProfile
 } from "../io/documentStyle";
+import { errorMessage } from "../utils/errors";
 
 const HU_PER_MM = 283.4646;
 const ROLE_LABELS: Array<[DocumentStyleRole, string]> = [
@@ -19,7 +22,7 @@ const ROLE_LABELS: Array<[DocumentStyleRole, string]> = [
 ];
 
 function cloneProfile(profile: DocumentStyleProfile): DocumentStyleProfile {
-  return JSON.parse(JSON.stringify(profile)) as DocumentStyleProfile;
+  return structuredClone(profile);
 }
 
 function mergedProfile(current?: DocumentStyleProfile): DocumentStyleProfile {
@@ -33,7 +36,14 @@ function mergedProfile(current?: DocumentStyleProfile): DocumentStyleProfile {
   return merged;
 }
 
-function numericInput(component: any, value: number | undefined, min: number, max: number, step: number, update: (value: number) => void): void {
+function numericInput(
+  component: TextComponent,
+  value: number | undefined,
+  min: number,
+  max: number,
+  step: number,
+  update: (value: number) => void
+): void {
   component.inputEl.type = "number";
   component.inputEl.min = String(min);
   component.inputEl.max = String(max);
@@ -66,7 +76,7 @@ export class DocumentStyleModal extends Modal {
   private openRole: DocumentStyleRole = "body";
 
   constructor(
-    app: any,
+    app: App,
     current: DocumentStyleProfile | undefined,
     private readonly onSaveProfile: (profile: DocumentStyleProfile) => Promise<void>
   ) {
@@ -104,19 +114,25 @@ export class DocumentStyleModal extends Modal {
         const normalized = normalizeDocumentStyleProfile(this.draft);
         await this.onSaveProfile(normalized);
         this.close();
-      } catch (error: any) {
-        new Notice(`문서 스타일 저장 실패: ${error?.message || String(error)}`);
+      } catch (error: unknown) {
+        new Notice(`문서 스타일 저장 실패: ${errorMessage(error)}`);
         save.disabled = false;
       }
     };
   }
 
-  private role(role: DocumentStyleRole): RoleStyleProfile {
+  private role(
+    role: DocumentStyleRole
+  ): RoleStyleProfile & { character: CharacterStyleProfile; paragraph: ParagraphStyleProfile } {
     const value = this.draft.roles[role] ?? {};
     value.character ??= {};
     value.paragraph ??= {};
     this.draft.roles[role] = value;
-    return value;
+    return {
+      ...value,
+      character: value.character,
+      paragraph: value.paragraph
+    };
   }
 
   private renderRole(root: HTMLElement, role: DocumentStyleRole, label: string): void {
@@ -138,9 +154,9 @@ export class DocumentStyleModal extends Modal {
       .addText((text) =>
         text
           .setPlaceholder("함초롬바탕")
-          .setValue(value.character?.fontFamily || "")
+          .setValue(value.character.fontFamily || "")
           .onChange((font) => {
-            value.character!.fontFamily = font;
+            value.character.fontFamily = font;
           })
       );
 
@@ -149,39 +165,39 @@ export class DocumentStyleModal extends Modal {
       .setDesc("비워 두면 한글 글꼴을 함께 사용합니다. 예: Times New Roman, Arial")
       .addText((text) =>
         text
-          .setPlaceholder(value.character?.fontFamily || "Times New Roman")
-          .setValue(value.character?.latinFontFamily || "")
+          .setPlaceholder(value.character.fontFamily || "Times New Roman")
+          .setValue(value.character.latinFontFamily || "")
           .onChange((font) => {
-            value.character!.latinFontFamily = font;
+            value.character.latinFontFamily = font;
           })
       );
 
     new Setting(card)
       .setName("크기와 굵기")
       .addText((text) =>
-        numericInput(text, value.character?.fontSizePt, 4, 100, 0.5, (size) => {
-          value.character!.fontSizePt = size;
+        numericInput(text, value.character.fontSizePt, 4, 100, 0.5, (size) => {
+          value.character.fontSizePt = size;
         })
       )
       .addToggle((toggle) =>
         toggle
           .setTooltip("굵게")
-          .setValue(value.character?.bold ?? role !== "body")
+          .setValue(value.character.bold ?? role !== "body")
           .onChange((bold) => {
-            value.character!.bold = bold;
+            value.character.bold = bold;
           })
       )
       .addToggle((toggle) =>
         toggle
           .setTooltip("밑줄")
-          .setValue(value.character?.underline ?? false)
+          .setValue(value.character.underline ?? false)
           .onChange((underline) => {
-            value.character!.underline = underline;
+            value.character.underline = underline;
           })
       )
       .addColorPicker((picker) =>
-        picker.setValue(value.character?.color || "#000000").onChange((selected) => {
-          value.character!.color = selected;
+        picker.setValue(value.character.color || "#000000").onChange((selected) => {
+          value.character.color = selected;
         })
       );
 
@@ -194,14 +210,23 @@ export class DocumentStyleModal extends Modal {
           .addOption("CENTER", "가운데")
           .addOption("RIGHT", "오른쪽")
           .addOption("DISTRIBUTE", "배분 정렬")
-          .setValue(value.paragraph?.alignment || "JUSTIFY")
+          .setValue(value.paragraph.alignment || "JUSTIFY")
           .onChange((alignment) => {
-            value.paragraph!.alignment = alignment as any;
+            if (
+              alignment === "JUSTIFY" ||
+              alignment === "LEFT" ||
+              alignment === "CENTER" ||
+              alignment === "RIGHT" ||
+              alignment === "DISTRIBUTE" ||
+              alignment === "DISTRIBUTE_SPACE"
+            ) {
+              value.paragraph.alignment = alignment;
+            }
           })
       )
       .addText((text) =>
-        numericInput(text, value.paragraph?.lineSpacingPercent, 70, 400, 5, (spacing) => {
-          value.paragraph!.lineSpacingPercent = spacing;
+        numericInput(text, value.paragraph.lineSpacingPercent, 70, 400, 5, (spacing) => {
+          value.paragraph.lineSpacingPercent = spacing;
         })
       );
 
@@ -209,13 +234,13 @@ export class DocumentStyleModal extends Modal {
       .setName("장평과 자간")
       .setDesc("장평 % / 자간 %")
       .addText((text) =>
-        numericInput(text, value.character?.widthPercent, 50, 200, 1, (width) => {
-          value.character!.widthPercent = width;
+        numericInput(text, value.character.widthPercent, 50, 200, 1, (width) => {
+          value.character.widthPercent = width;
         })
       )
       .addText((text) =>
-        numericInput(text, value.character?.letterSpacingPercent, -50, 50, 1, (spacing) => {
-          value.character!.letterSpacingPercent = spacing;
+        numericInput(text, value.character.letterSpacingPercent, -50, 50, 1, (spacing) => {
+          value.character.letterSpacingPercent = spacing;
         })
       );
 
@@ -223,18 +248,18 @@ export class DocumentStyleModal extends Modal {
       .setName("들여쓰기와 좌우 여백")
       .setDesc("첫 줄 / 왼쪽 / 오른쪽, pt · 한글 F6 문단 모양과 같은 단위")
       .addText((text) =>
-        numericInput(text, points(value.paragraph?.firstLineIndentHu), -200, 500, 0.5, (pt) => {
-          value.paragraph!.firstLineIndentHu = hwpPoints(pt);
+        numericInput(text, points(value.paragraph.firstLineIndentHu), -200, 500, 0.5, (pt) => {
+          value.paragraph.firstLineIndentHu = hwpPoints(pt);
         })
       )
       .addText((text) =>
-        numericInput(text, points(value.paragraph?.marginLeftHu), 0, 500, 0.5, (pt) => {
-          value.paragraph!.marginLeftHu = hwpPoints(pt);
+        numericInput(text, points(value.paragraph.marginLeftHu), 0, 500, 0.5, (pt) => {
+          value.paragraph.marginLeftHu = hwpPoints(pt);
         })
       )
       .addText((text) =>
-        numericInput(text, points(value.paragraph?.marginRightHu), 0, 500, 0.5, (pt) => {
-          value.paragraph!.marginRightHu = hwpPoints(pt);
+        numericInput(text, points(value.paragraph.marginRightHu), 0, 500, 0.5, (pt) => {
+          value.paragraph.marginRightHu = hwpPoints(pt);
         })
       );
 
@@ -242,13 +267,13 @@ export class DocumentStyleModal extends Modal {
       .setName("문단 앞뒤 간격")
       .setDesc("앞 / 뒤, pt")
       .addText((text) =>
-        numericInput(text, points(value.paragraph?.spaceBeforeHu), 0, 200, 0.5, (pt) => {
-          value.paragraph!.spaceBeforeHu = hwpPoints(pt);
+        numericInput(text, points(value.paragraph.spaceBeforeHu), 0, 200, 0.5, (pt) => {
+          value.paragraph.spaceBeforeHu = hwpPoints(pt);
         })
       )
       .addText((text) =>
-        numericInput(text, points(value.paragraph?.spaceAfterHu), 0, 200, 0.5, (pt) => {
-          value.paragraph!.spaceAfterHu = hwpPoints(pt);
+        numericInput(text, points(value.paragraph.spaceAfterHu), 0, 200, 0.5, (pt) => {
+          value.paragraph.spaceAfterHu = hwpPoints(pt);
         })
       );
 
@@ -256,8 +281,8 @@ export class DocumentStyleModal extends Modal {
       .setName("다음 문단과 함께")
       .setDesc("현재 문단과 다음 문단이 서로 다른 페이지로 나뉘지 않게 합니다.")
       .addToggle((toggle) =>
-        toggle.setValue(value.paragraph?.keepWithNext ?? role !== "body").onChange((enabled) => {
-          value.paragraph!.keepWithNext = enabled;
+        toggle.setValue(value.paragraph.keepWithNext ?? role !== "body").onChange((enabled) => {
+          value.paragraph.keepWithNext = enabled;
         })
       );
   }

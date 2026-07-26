@@ -1,4 +1,4 @@
-import { Modal, Notice, Setting } from "obsidian";
+import { type App, Modal, Notice, Setting } from "obsidian";
 import { defaultDocumentStyleProfile, documentStyleSummary, type DocumentStyleProfile } from "../io/documentStyle";
 import {
   activeDocumentTemplate,
@@ -10,14 +10,24 @@ import {
   renameDocumentTemplate,
   setActiveDocumentTemplate
 } from "../io/documentStyleSettings";
-import { clearTableStyle, importTableStyle } from "../io/tableStyle";
+import {
+  clearTableStyle,
+  importTableStyle,
+  type HanmarkSettingsPlugin
+} from "../io/tableStyle";
+import { errorMessage } from "../utils/errors";
 
 type Refresh = () => void;
 
 class TemplateNameModal extends Modal {
   private value: string;
 
-  constructor(app: any, title: string, initial: string, private readonly submit: (value: string) => Promise<void>) {
+  constructor(
+    app: App,
+    title: string,
+    initial: string,
+    private readonly submit: (value: string) => Promise<void>
+  ) {
     super(app);
     this.titleEl.setText(title);
     this.value = initial;
@@ -49,8 +59,8 @@ class TemplateNameModal extends Modal {
       try {
         await this.submit(name);
         this.close();
-      } catch (error: any) {
-        new Notice(error?.message || String(error));
+      } catch (error: unknown) {
+        new Notice(errorMessage(error));
         save.disabled = false;
       }
     };
@@ -61,7 +71,7 @@ class TemplateNameModal extends Modal {
   }
 }
 
-function confirmDelete(app: any, name: string): Promise<boolean> {
+function confirmDelete(app: App, name: string): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (value: boolean): void => {
@@ -94,8 +104,8 @@ export class HwpxTemplateManagerModal extends Modal {
   private selectedId: string;
 
   constructor(
-    app: any,
-    private readonly plugin: any,
+    app: App,
+    private readonly plugin: HanmarkSettingsPlugin,
     private readonly onEditProfile: (profile: DocumentStyleProfile) => void,
     private readonly onChanged: Refresh
   ) {
@@ -147,7 +157,7 @@ export class HwpxTemplateManagerModal extends Modal {
         });
         if (item.id === activeDocumentTemplate(this.plugin).id) row.createSpan({ text: "사용 중", cls: "hanmark-template-active" });
         row.onclick = (event) => {
-          if ((event.target as HTMLElement).tagName === "INPUT") return;
+          if (event.target instanceof HTMLElement && event.target.tagName === "INPUT") return;
           this.selectedId = item.id;
           this.render();
         };
@@ -155,6 +165,10 @@ export class HwpxTemplateManagerModal extends Modal {
     }
 
     const selected = items.find((item) => item.id === this.selectedId) || items[0];
+    if (!selected) {
+      contentEl.createEl("p", { text: "사용할 수 있는 HWPX 템플릿이 없습니다." });
+      return;
+    }
     const actions = contentEl.createDiv({ cls: "hanmark-template-actions" });
     const apply = actions.createEl("button", { text: "적용" });
     apply.classList.add("mod-cta");

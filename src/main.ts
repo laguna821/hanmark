@@ -1,16 +1,14 @@
-import { MarkdownView, Notice, Setting, type Plugin } from "obsidian";
-import LegacyPlugin from "../legacy-main.cjs";
-import { importDocument } from "./io/kordocImport";
-import { exportKordocHwpx, patchSourceExperimental } from "./io/kordocSave";
-import { unpackBundledAssets } from "./io/assetUnpack";
-import { readSourceContract } from "./io/frontmatter";
-import { activeTableProfile } from "./io/tableStyle";
 import {
-  defaultDocumentStyleProfile,
-  legacyTemplatePageLayout,
-  legacyTemplateStyleCache,
-  type DocumentStyleProfile
-} from "./io/documentStyle";
+  MarkdownView,
+  Notice,
+  Platform,
+  Plugin,
+  type Editor,
+  type WorkspaceLeaf
+} from "obsidian";
+import { registerEditorCompatibilityCommands } from "./editorCommands";
+import { createWordTemplateStorage, DocxExportService, type DocxSource } from "./io/docxExport";
+import { unpackBundledAssets } from "./io/assetUnpack";
 import {
   activeDocumentStyle,
   activeDocumentTemplate,
@@ -21,77 +19,223 @@ import {
   saveDocumentStyle,
   setActiveDocumentTemplate
 } from "./io/documentStyleSettings";
-import { HanmarkExportModal } from "./ui/HanmarkExportModal";
-import { HwpxTemplateManagerModal } from "./ui/HwpxTemplateManagerModal";
-import { QuickHwpxPreviewView, QUICK_HWPX_PREVIEW_VIEW } from "./ui/QuickHwpxPreviewView";
+import {
+  defaultDocumentStyleProfile,
+  type DocumentStyleProfile
+} from "./io/documentStyle";
+import { createFileGateway, type FileGateway } from "./io/fileGateway";
+import { readSourceContract } from "./io/frontmatter";
+import { importDocument } from "./io/kordocImport";
+import { exportKordocHwpx, patchSourceExperimental } from "./io/kordocSave";
+import { activeTableProfile } from "./io/tableStyle";
+import {
+  createDefaultWordTemplate,
+  createUserInitiatedAction,
+  DEFAULT_HANMARK_SETTINGS,
+  normalizeHanmarkSettings,
+  renderStandaloneHtmlBytes,
+  WordTemplateStore,
+  type HanmarkRuntimePlatform,
+  type HanmarkSettings
+} from "./legacy-port";
+import {
+  DocxPreviewView,
+  DOCX_PREVIEW_VIEW_TYPE
+} from "./ui/DocxPreviewView";
 import { DocumentStyleModal } from "./ui/DocumentStyleModal";
+import { HanmarkExportModal } from "./ui/HanmarkExportModal";
+import {
+  HanmarkSettingTab
+} from "./ui/HanmarkSettingTab";
+import { HwpxTemplateManagerModal } from "./ui/HwpxTemplateManagerModal";
+import {
+  QuickHwpxPreviewView,
+  QUICK_HWPX_PREVIEW_VIEW
+} from "./ui/QuickHwpxPreviewView";
+import {
+  editorFormatting,
+  ToolbarController
+} from "./ui/ToolbarController";
+import { WordTemplateManagerModal } from "./ui/WordTemplateManagerModal";
+import { errorMessage } from "./utils/errors";
 
-// 2.4 keeps the old bundle only as a compatibility shell for the toolbar, HTML and DOCX.
-// The HWPX route never initializes its Python/pypandoc-hwpx bridge.
 type ExportTab = "hwpx" | "other";
 
-const RETIRED_SETTINGS_KEYS = [
-  "pythonPath",
-  "defaultTemplatePath",
-  "cachedTemplateStyles",
-  "cachedTemplatePageLayout",
-  "hanmarkDocumentStyle",
-  "hanmarkDocumentStylePreset",
-  "hanmarkTableProfile",
-  "hanmarkTableProfileName"
-] as const;
-
-function removeRetiredSettings(settings: any): boolean {
-  if (!settings || typeof settings !== "object") return false;
-  let changed = false;
-  for (const key of RETIRED_SETTINGS_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
-    delete settings[key];
-    changed = true;
-  }
-  return changed;
+interface SettingsController {
+  open(): void;
+  openTabById(id: string): void;
 }
 
-function directChildHeadings(container: HTMLElement): HTMLHeadingElement[] {
-  return Array.from(container.children).filter((element): element is HTMLHeadingElement => element.tagName === "H2");
+interface AppWithSettings {
+  setting: SettingsController;
 }
 
-function removeHeadingSection(container: HTMLElement, matches: (text: string) => boolean): void {
-  const heading = directChildHeadings(container).find((item) => matches(item.textContent || ""));
-  if (!heading) return;
-  let node: ChildNode | null = heading;
-  while (node) {
-    const next = node.nextSibling;
-    if (node !== heading && node.instanceOf(HTMLElement) && node.tagName === "H2") break;
-    node.remove();
-    node = next;
-  }
+function runtimePlatform(): HanmarkRuntimePlatform {
+  if (Platform.isWin) return "windows";
+  if (Platform.isMacOS) return "macos";
+  return "linux";
 }
 
-export default class HanmarkPlugin extends LegacyPlugin {
-  private _canonicalSettings: any = null;
-  private _hanmarkSettingsPatched = false;
+function registerHeadingCommand(plugin: Plugin, level: number): void {
+  plugin.addCommand({
+    id: `set-heading-${level}`,
+    name: `제목 ${level} 적용`,
+    editorCallback: (editor: Editor) => editorFormatting.setHeading(editor, level)
+  });
+}
+
+/**
+ * HanMark 2.4.3 runtime.
+ *
+ * HWPX is generated in-process by Kordoc. The only external process boundary is
+ * the optional, user-triggered Pandoc/Word path used by advanced DOCX features.
+ */
+export default class HanmarkPlugin extends Plugin {
+  settings: HanmarkSettings = { ...DEFAULT_HANMARK_SETTINGS };
+
+  private gateway!: FileGateway;
+  private wordTemplateStore!: WordTemplateStore;
+  private docxExporter!: DocxExportService;
+  private toolbar: ToolbarController | null = null;
+  private settingTab: HanmarkSettingTab | null = null;
+  private lastMarkdownView: MarkdownView | null = null;
 
   async onload(): Promise<void> {
-    // DOCX still uses the bundled Word assets. HWPX itself is generated by Kordoc.
-    await unpackBundledAssets(this as unknown as Plugin);
-    await super.onload();
+    await this.loadSettings();
+    await unpackBundledAssets(this);
 
-    // Defense in depth: even an unanticipated legacy caller cannot enter the retired
-    // pypandoc-hwpx method. All HWPX creation is routed through the Kordoc export center.
-    if ((this as any).exportManager) {
-      (this as any).exportManager.exportHwpx = () => this.openExportCenter("hwpx");
-    }
+    this.gateway = createFileGateway(this.app, this);
+    this.wordTemplateStore = new WordTemplateStore({
+      storage: createWordTemplateStorage(this.app.vault.adapter),
+      rootPath: `${this.app.vault.configDir}/plugins/${this.manifest.id}`,
+      getActiveTemplateId: () => this.settings.activeWordTemplateId,
+      setActiveTemplateId: (id) => {
+        this.settings.activeWordTemplateId = id;
+      }
+    });
+    await this.wordTemplateStore.ensureDefaultTemplate(createDefaultWordTemplate());
+    this.docxExporter = new DocxExportService({
+      app: this.app,
+      pluginId: this.manifest.id,
+      fileGateway: this.gateway,
+      templateStore: this.wordTemplateStore,
+      getPandocPath: () => this.settings.pandocPath
+    });
 
+    this.registerViews();
+    this.registerCommands();
+    registerEditorCompatibilityCommands(this);
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf?.view instanceof MarkdownView && leaf.view.file) {
+          this.lastMarkdownView = leaf.view;
+        }
+      })
+    );
+    const initialMarkdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (initialMarkdownView?.file) this.lastMarkdownView = initialMarkdownView;
+
+    this.toolbar = new ToolbarController(
+      this,
+      {
+        importDocument: () => void importDocument(this.app, this),
+        openHwpxExport: () => this.openExportCenter("hwpx"),
+        openOtherExport: () => this.openExportCenter("other"),
+        toggleHwpxPreview: () => void this.toggleQuickPreview(),
+        openTemplateManager: () => this.openTemplateManager(),
+        openSettings: () => this.openPluginSettings(),
+        toggleDocxPreview: () => void this.toggleDocxPreview(),
+        openWordTemplateEditor: () => this.openWordTemplateManager()
+      },
+      this.settings.showToolbarOnStartup
+    );
+    this.toolbar.initialize();
+
+    this.settingTab = new HanmarkSettingTab(
+      this.app,
+      this,
+      {
+        wordTemplateStore: this.wordTemplateStore,
+        openHwpxTemplateManager: () => this.openTemplateManager(),
+        openWordTemplateManager: () => this.openWordTemplateManager(),
+        refreshPreviews: () => this.refreshPreviews(),
+        refreshToolbar: () =>
+          this.toolbar?.setVisible(this.settings.showToolbarOnStartup)
+      }
+    );
+    this.addSettingTab(this.settingTab);
+
+    this.addRibbonIcon("panel-top", "HanMark 툴바 표시·숨기기", () => {
+      const visible = this.toolbar?.toggle() ?? false;
+      this.settings.showToolbarOnStartup = visible;
+      void this.saveSettings();
+    });
+    this.addRibbonIcon("file-output", "HanMark 내보내기", () => {
+      this.openExportCenter("hwpx");
+    });
+  }
+
+  onunload(): void {
+    this.toolbar?.destroy();
+    this.toolbar = null;
+    this.app.workspace
+      .getLeavesOfType(QUICK_HWPX_PREVIEW_VIEW)
+      .forEach((leaf) => leaf.detach());
+    this.app.workspace
+      .getLeavesOfType(DOCX_PREVIEW_VIEW_TYPE)
+      .forEach((leaf) => leaf.detach());
+  }
+
+  async saveSettings(): Promise<void> {
+    this.settings = normalizeHanmarkSettings(this.settings, runtimePlatform());
+    await this.saveData(this.settings);
+  }
+
+  private async loadSettings(): Promise<void> {
+    const loaded: unknown = await this.loadData();
+    const migrationInput: Record<string, unknown> =
+      typeof loaded === "object" && loaded !== null && !Array.isArray(loaded)
+        ? { ...(loaded as Record<string, unknown>) }
+        : {};
+    const migrated = migrateDocumentStyleSettingsInMemory({
+      settings: migrationInput
+    });
+    this.settings = normalizeHanmarkSettings(migrationInput, runtimePlatform());
+    if (migrated) await this.saveData(this.settings);
+  }
+
+  private registerViews(): void {
     this.registerView(
       QUICK_HWPX_PREVIEW_VIEW,
-      (leaf: any) => new QuickHwpxPreviewView(leaf, () => activeTableProfile(this), () => activeDocumentStyle(this))
+      (leaf: WorkspaceLeaf) =>
+        new QuickHwpxPreviewView(
+          leaf,
+          () => activeTableProfile(this),
+          () => activeDocumentStyle(this),
+          () => this.currentMarkdownView()
+        )
     );
+    this.registerView(
+      DOCX_PREVIEW_VIEW_TYPE,
+      (leaf: WorkspaceLeaf) =>
+        new DocxPreviewView(leaf, {
+          exporter: this.docxExporter,
+          templateStore: this.wordTemplateStore,
+          getPreviewMode: () => this.settings.docxPreviewMode,
+          setPreviewMode: async (mode) => {
+            this.settings.docxPreviewMode = mode;
+            await this.saveSettings();
+          },
+          getSource: () => this.currentDocxSource()
+        })
+    );
+  }
 
+  private registerCommands(): void {
     this.addCommand({
       id: "import-hwp-document",
-      name: "한글·문서 불러오기 (HWP/HWPX/PDF/DOCX/XLSX → Markdown)",
-      callback: () => importDocument(this.app, this)
+      name: "문서 불러오기 (HWP/HWPX/PDF/DOCX/XLS/XLSX → Markdown)",
+      callback: () => void importDocument(this.app, this)
     });
     this.addCommand({
       id: "open-export-center",
@@ -100,28 +244,28 @@ export default class HanmarkPlugin extends LegacyPlugin {
     });
     this.addCommand({
       id: "save-hwp-roundtrip",
-      name: "한글로 저장 · 내보내기",
+      name: "한글로 다시 내보내기",
       callback: () => this.openExportCenter("hwpx")
     });
     this.addCommand({
       id: "quick-export-hwpx",
       name: "빠른 HWPX 내보내기 (설치 불필요)",
-      callback: () => exportKordocHwpx(this.app, this, { mode: "quick-hwpx" })
+      callback: () => void exportKordocHwpx(this.app, this, { mode: "quick-hwpx" })
     });
     this.addCommand({
       id: "gongmun-export-hwpx",
-      name: "공문서 HWPX 내보내기…",
+      name: "공문서 HWPX 내보내기",
       callback: () => this.openExportCenter("hwpx")
     });
     this.addCommand({
       id: "patch-hwp-experimental",
-      name: "원본 형식 보존 저장 (.hwp/.hwpx 수정본)",
-      callback: () => patchSourceExperimental(this.app, this)
+      name: "원본 형식 보존 수정본 만들기",
+      callback: () => void patchSourceExperimental(this.app, this)
     });
     this.addCommand({
       id: "quick-hwpx-preview",
-      name: "빠른 HWPX 미리보기 열기/닫기",
-      callback: () => this.activateQuickPreview()
+      name: "빠른 HWPX 미리보기 열기·닫기",
+      callback: () => void this.toggleQuickPreview()
     });
     this.addCommand({
       id: "manage-hwpx-templates",
@@ -131,7 +275,7 @@ export default class HanmarkPlugin extends LegacyPlugin {
     this.addCommand({
       id: "import-document-style",
       name: "HWPX를 사용자 템플릿으로 가져오기",
-      callback: () => this.importDocumentStyleAndRefresh()
+      callback: () => void this.importDocumentStyleAndRefresh()
     });
     this.addCommand({
       id: "edit-document-style",
@@ -139,229 +283,244 @@ export default class HanmarkPlugin extends LegacyPlugin {
       callback: () => this.openDocumentStyleEditor()
     });
 
-    this.rewireLegacyCommandAliases();
-    this.patchToolbarForGateway();
-  }
-
-  /** The legacy layout-ready hook lands here. It must remain external-process free. */
-  async initializePlugin(): Promise<void> {
-    // Kordoc is bundled and requires no external initialization.
-  }
-
-  /** The inherited font reload button also lands here; keep it local and process-free. */
-  async refreshTemplateStyles(): Promise<void> {
-    (this as any).fontCatalog?.invalidate?.();
-    this.refreshQuickPreviews();
-    (this as any).refreshAllDocxPreviews?.();
-  }
-
-  async loadSettings(): Promise<void> {
-    await super.loadSettings();
-    const fresh = (this as any).settings;
-    if (fresh) {
-      fresh.isFirstRun = false;
-    }
-    if (this._canonicalSettings && this._canonicalSettings !== fresh) {
-      Object.assign(this._canonicalSettings, fresh);
-      (this as any).settings = this._canonicalSettings;
-    } else {
-      this._canonicalSettings = fresh;
-    }
-    const changed = migrateDocumentStyleSettingsInMemory(this) || removeRetiredSettings((this as any).settings);
-    if (changed) await this.saveSettings();
-  }
-
-  async saveSettings(): Promise<void> {
-    if (!this._canonicalSettings) this._canonicalSettings = (this as any).settings;
-    if ((this as any).settings) {
-      (this as any).settings.isFirstRun = false;
-      removeRetiredSettings((this as any).settings);
-    }
-    await super.saveSettings();
-    const after = (this as any).settings;
-    removeRetiredSettings(after);
-    const canonical = this._canonicalSettings;
-    if (canonical && after && after !== canonical) {
-      Object.assign(canonical, after);
-      removeRetiredSettings(canonical);
-      (this as any).settings = canonical;
-    }
-    // The inherited normalizer still carries old defaults. Persist once more after pruning
-    // so data.json no longer advertises Python or the removed one-slot HWPX template path.
-    await this.saveData((this as any).settings);
-  }
-
-  addSettingTab(tab: any): any {
-    const result = super.addSettingTab(tab);
-    if (this._hanmarkSettingsPatched || tab?.plugin !== this || typeof tab.display !== "function") return result;
-    const originalDisplay = tab.display.bind(tab);
-    tab.display = () => {
-      originalDisplay();
-      this.decorateSettings(tab.containerEl);
-    };
-    this._hanmarkSettingsPatched = true;
-    return result;
-  }
-
-  private decorateSettings(container: HTMLElement): void {
-    // Remove the retired three-step installer and the old one-slot HWPX picker.
-    removeHeadingSection(container, (text) => text.includes("Python / Pandoc"));
-    removeHeadingSection(container, (text) => text.includes("HWPX 템플릿"));
-
-    const heading = container.querySelector("h1");
-    heading?.setText("HanMark 설정");
-    if (!heading || container.querySelector(".hanmark-settings-engine")) return;
-
-    const status = createDiv({ cls: "hanmark-engine-status hanmark-settings-engine" });
-    status.createEl("strong", { text: "HWPX 기본 엔진 · Kordoc 4.2.5 내장" });
-    status.createSpan({
-      text: "Python·pypandoc-hwpx 없이 HWPX를 만들며, 원격·Vault 이미지를 문서 안에 포함합니다."
+    // Public 1.x command IDs remain stable so hotkeys and mobile toolbar
+    // configurations keep working after the legacy bundle is removed.
+    this.addCommand({
+      id: "export-hwpx",
+      name: "HWPX 내보내기",
+      callback: () => this.openExportCenter("hwpx")
     });
-    heading.insertAdjacentElement("afterend", status);
-
-    const templateSection = createDiv({ cls: "hanmark-settings-template-library" });
-    templateSection.createEl("h2", { text: "HWPX 템플릿" });
-    const active = activeDocumentTemplate(this);
-    new Setting(templateSection)
-      .setName(active.name)
-      .setDesc(
-        `${active.builtIn ? "내장" : "사용자"} 템플릿 · 문서 스타일 ${active.documentStyle ? "포함" : "Kordoc 기본"}` +
-        ` · 표 스타일 ${active.tableStyle?.tables?.length ? `${active.tableStyle.tables.length}개 포함` : "없음"}`
-      )
-      .addDropdown((dropdown) => {
-        for (const item of availableDocumentTemplates(this)) dropdown.addOption(item.id, item.name);
-        dropdown.setValue(active.id);
-        dropdown.onChange(async (id) => {
-          try {
-            await setActiveDocumentTemplate(this, id);
-            this.refreshQuickPreviews();
-            (this.app as any).setting?.activeTab?.display?.();
-          } catch (error: any) {
-            new Notice(error?.message || String(error));
-          }
-        });
-      })
-      .addButton((button) => button.setButtonText("관리").setCta().onClick(() => this.openTemplateManager()))
-      .addButton((button) => button.setButtonText("현재 템플릿 편집").onClick(() => this.openDocumentStyleEditor()))
-      .addButton((button) => button.setButtonText("HWPX에서 추가").onClick(async () => {
-        try {
-          if (await this.importDocumentStyleAndRefresh()) (this.app as any).setting?.activeTab?.display?.();
-        } catch (error: any) {
-          new Notice(error?.message || String(error));
-        }
-      }));
-    status.insertAdjacentElement("afterend", templateSection);
-
-    const docxDetails = createEl("details", { cls: "hanmark-docx-settings" });
-    docxDetails.createEl("summary", { text: "DOCX용 Pandoc 설정 (선택)" });
-    docxDetails.createEl("p", {
-      cls: "setting-item-description",
-      text: "DOCX 내보내기에만 사용합니다. HWPX와 HTML에는 Pandoc도 Python도 필요하지 않습니다."
+    this.addCommand({
+      id: "export-docx",
+      name: "DOCX 내보내기",
+      callback: () => this.openExportCenter("other")
     });
-    new Setting(docxDetails)
-      .setName("Pandoc 경로")
-      .setDesc("예: pandoc 또는 C:\\Program Files\\Pandoc\\pandoc.exe")
-      .addText((text) => text
-        .setPlaceholder("pandoc")
-        .setValue(String((this as any).settings?.pandocPath || "pandoc"))
-        .onChange(async (value) => {
-          (this as any).settings.pandocPath = value.trim() || "pandoc";
-          await this.saveSettings();
-        }));
-    templateSection.insertAdjacentElement("afterend", docxDetails);
+    this.addCommand({
+      id: "export-html",
+      name: "HTML 내보내기",
+      callback: () => this.openExportCenter("other")
+    });
+    this.addCommand({
+      id: "select-template",
+      name: "HWPX 템플릿 관리",
+      callback: () => this.openTemplateManager()
+    });
+    this.addCommand({
+      id: "select-hwpx-template",
+      name: "HWPX 템플릿 관리",
+      callback: () => this.openTemplateManager()
+    });
+    this.addCommand({
+      id: "show-setup-guide",
+      name: "DOCX·Pandoc 설정",
+      callback: () => this.openPluginSettings()
+    });
+    this.addCommand({
+      id: "toggle-preview",
+      name: "빠른 HWPX 미리보기 열기·닫기",
+      callback: () => void this.toggleQuickPreview()
+    });
+    this.addCommand({
+      id: "toggle-hwp-preview",
+      name: "빠른 HWPX 미리보기 열기·닫기",
+      callback: () => void this.toggleQuickPreview()
+    });
+    this.addCommand({
+      id: "toggle-docx-preview",
+      name: "DOCX 미리보기 열기·닫기",
+      callback: () => void this.toggleDocxPreview()
+    });
+    this.addCommand({
+      id: "open-word-template-editor",
+      name: "Word 템플릿 관리",
+      callback: () => this.openWordTemplateManager()
+    });
+    this.addCommand({
+      id: "toggle-toolbar",
+      name: "도구 모음 표시·숨기기",
+      callback: () => {
+        const visible = this.toolbar?.toggle() ?? false;
+        this.settings.showToolbarOnStartup = visible;
+        void this.saveSettings();
+      }
+    });
+    for (let level = 1; level <= 6; level += 1) registerHeadingCommand(this, level);
+    this.addCommand({
+      id: "set-paragraph",
+      name: "본문 문단 적용",
+      editorCallback: (editor) => editorFormatting.setParagraph(editor)
+    });
   }
 
-  private openExportCenter(initialTab: ExportTab = "hwpx"): void {
-    new HanmarkExportModal(this.app, {
-      sourcePatchAvailable: () => {
-        const file = this.app.workspace.getActiveFile();
-        const contract = file ? readSourceContract(this.app, file) : null;
-        return contract?.["hwp-source-format"] === "hwp" || contract?.["hwp-source-format"] === "hwpx";
+  private openExportCenter(initialTab: ExportTab): void {
+    new HanmarkExportModal(
+      this.app,
+      {
+        sourcePatchAvailable: () => {
+          const file = this.app.workspace.getActiveFile();
+          const contract = file ? readSourceContract(this.app, file) : null;
+          return (
+            contract?.["hwp-source-format"] === "hwp" ||
+            contract?.["hwp-source-format"] === "hwpx"
+          );
+        },
+        activeTemplateId: () => activeTemplateId(this),
+        templateChoices: () =>
+          availableDocumentTemplates(this).map(({ id, name }) => ({ id, name })),
+        activeTemplateSummary: () => {
+          const template = activeDocumentTemplate(this);
+          const kind = template.builtIn ? "내장" : "사용자";
+          const style = template.documentStyle ? "문서 스타일 포함" : "Kordoc 기본";
+          const tables = template.tableStyle?.tables?.length
+            ? `표 스타일 ${template.tableStyle.tables.length}개`
+            : "표 스타일 없음";
+          return `${kind} · ${style} · ${tables}`;
+        },
+        selectTemplate: async (id) => {
+          await setActiveDocumentTemplate(this, id);
+          this.refreshPreviews();
+        },
+        openTemplateManager: () => this.openTemplateManager(),
+        exportKordoc: (mode, preset) =>
+          exportKordocHwpx(this.app, this, {
+            mode,
+            gongmunPreset: preset
+          }),
+        patchSource: () => patchSourceExperimental(this.app, this),
+        runOther: (mode) => this.runOtherExport(mode),
+        openPreview: () => this.toggleQuickPreview(false)
       },
-      activeTemplateId: () => activeTemplateId(this),
-      templateChoices: () => availableDocumentTemplates(this).map(({ id, name }) => ({ id, name })),
-      activeTemplateSummary: () => {
-        const item = activeDocumentTemplate(this);
-        const table = item.tableStyle?.tables?.length ? `표 스타일 ${item.tableStyle.tables.length}개` : "표 스타일 없음";
-        return `${item.builtIn ? "내장" : "사용자"} · ${item.documentStyle ? "문서 스타일 포함" : "Kordoc 기본"} · ${table}`;
-      },
-      selectTemplate: async (id) => {
-        await setActiveDocumentTemplate(this, id);
-        this.refreshQuickPreviews();
-      },
-      openTemplateManager: () => this.openTemplateManager(),
-      exportKordoc: (mode, preset) => exportKordocHwpx(this.app, this, { mode, gongmunPreset: preset }),
-      patchSource: () => patchSourceExperimental(this.app, this),
-      runOther: (mode) => this.runOtherExport(mode),
-      openPreview: () => this.activateQuickPreview()
-    }, initialTab).open();
+      initialTab
+    ).open();
   }
 
   private async runOtherExport(mode: "docx" | "html"): Promise<void> {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
-      new Notice("내보낼 마크다운 노트를 여세요.");
+    const source = this.currentDocxSource();
+    if (!source) {
+      new Notice("내보낼 Markdown 문서를 여세요.");
       return;
     }
-    const manager: any = (this as any).exportManager;
-    if (!manager) throw new Error("내보내기 엔진을 초기화하지 못했습니다.");
-
     if (mode === "docx") {
-      await manager.exportDocx(view.editor, view);
+      const progress = new Notice("Pandoc으로 DOCX를 만드는 중…", 0);
+      try {
+        const result = await this.docxExporter.exportUserInitiated(
+          source,
+          createUserInitiatedAction("modal")
+        );
+        if (!result.saved.cancelled) {
+          new Notice(`DOCX 저장 완료: ${result.saved.displayPath}`);
+        }
+      } catch (error) {
+        new Notice(`DOCX 내보내기 실패: ${errorMessage(error)}`, 8_000);
+      } finally {
+        progress.hide();
+      }
       return;
     }
 
-    // The compatibility HTML writer reads the old cache fields. Feed it the active Kordoc
-    // template only for the duration of this export; never persist those retired settings.
-    const settings = (this as any).settings;
-    const oldStyles = settings.cachedTemplateStyles;
-    const oldPage = settings.cachedTemplatePageLayout;
-    const profile = activeDocumentStyle(this);
-    try {
-      if (profile) {
-        settings.cachedTemplateStyles = legacyTemplateStyleCache(profile);
-        settings.cachedTemplatePageLayout = legacyTemplatePageLayout(profile);
-      } else {
-        delete settings.cachedTemplateStyles;
-        delete settings.cachedTemplatePageLayout;
-      }
-      await manager.exportHtml(view.editor, view);
-    } finally {
-      if (oldStyles === undefined) delete settings.cachedTemplateStyles;
-      else settings.cachedTemplateStyles = oldStyles;
-      if (oldPage === undefined) delete settings.cachedTemplatePageLayout;
-      else settings.cachedTemplatePageLayout = oldPage;
-    }
+    const bytes = renderStandaloneHtmlBytes(source.markdown, {
+      title: source.title,
+      documentStyle: activeDocumentStyle(this)
+    });
+    const saved = source.sourcePath
+      ? await this.gateway.saveVaultSibling(
+          bytes,
+          `${source.title}.html`,
+          source.sourcePath
+        )
+      : await this.gateway.saveFile(bytes, `${source.title}.html`);
+    if (!saved.cancelled) new Notice(`HTML 저장 완료: ${saved.displayPath}`);
   }
 
-  private async activateQuickPreview(): Promise<void> {
+  private async toggleQuickPreview(closeWhenOpen = true): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(QUICK_HWPX_PREVIEW_VIEW);
     if (existing.length) {
-      existing.forEach((leaf: any) => leaf.detach());
+      if (closeWhenOpen) {
+        existing.forEach((leaf) => leaf.detach());
+      } else {
+        this.app.workspace.setActiveLeaf(existing[0], { focus: true });
+      }
       return;
     }
     const leaf = this.app.workspace.getLeaf("split", "vertical");
     await leaf.setViewState({ type: QUICK_HWPX_PREVIEW_VIEW, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
   }
 
-  private refreshQuickPreviews(): void {
-    this.app.workspace.getLeavesOfType(QUICK_HWPX_PREVIEW_VIEW).forEach((leaf: any) => {
-      (leaf.view as QuickHwpxPreviewView)?.forceRefresh?.();
-    });
+  private currentMarkdownView(): MarkdownView | null {
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (active?.file) {
+      this.lastMarkdownView = active;
+      return active;
+    }
+    const markdownLeaves = this.app.workspace.getLeavesOfType("markdown");
+    if (
+      this.lastMarkdownView?.file &&
+      markdownLeaves.some((leaf) => leaf === this.lastMarkdownView?.leaf)
+    ) {
+      return this.lastMarkdownView;
+    }
+    const fallback = markdownLeaves
+      .map((leaf) => leaf.view)
+      .find((view): view is MarkdownView => view instanceof MarkdownView && Boolean(view.file));
+    if (fallback) this.lastMarkdownView = fallback;
+    else this.lastMarkdownView = null;
+    return fallback ?? null;
   }
 
-  private async importDocumentStyleAndRefresh(): Promise<boolean> {
-    const changed = await importDocumentStyle(this);
-    if (changed) this.refreshQuickPreviews();
-    return changed;
+  private currentDocxSource(): DocxSource | null {
+    const view = this.currentMarkdownView();
+    if (!view?.file) return null;
+    return {
+      markdown: view.editor.getValue(),
+      title: view.file.basename,
+      sourcePath: view.file.path
+    };
   }
 
-  private openDocumentStyleEditor(profile: DocumentStyleProfile = activeDocumentStyle(this) || defaultDocumentStyleProfile()): void {
+  private async toggleDocxPreview(closeWhenOpen = true): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(DOCX_PREVIEW_VIEW_TYPE);
+    if (existing.length) {
+      if (closeWhenOpen) {
+        existing.forEach((leaf) => leaf.detach());
+      } else {
+        this.app.workspace.setActiveLeaf(existing[0], { focus: true });
+      }
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf("split", "vertical");
+    await leaf.setViewState({ type: DOCX_PREVIEW_VIEW_TYPE, active: true });
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
+  }
+
+  private refreshPreviews(): void {
+    this.app.workspace
+      .getLeavesOfType(QUICK_HWPX_PREVIEW_VIEW)
+      .forEach((leaf) => {
+        if (leaf.view instanceof QuickHwpxPreviewView) leaf.view.forceRefresh();
+      });
+    this.app.workspace
+      .getLeavesOfType(DOCX_PREVIEW_VIEW_TYPE)
+      .forEach((leaf) => {
+        if (leaf.view instanceof DocxPreviewView) leaf.view.forceRefresh();
+      });
+  }
+
+  private async importDocumentStyleAndRefresh(): Promise<void> {
+    if (await importDocumentStyle(this)) {
+      this.refreshPreviews();
+      this.settingTab?.refresh();
+    }
+  }
+
+  private openDocumentStyleEditor(
+    profile: DocumentStyleProfile =
+      activeDocumentStyle(this) ?? defaultDocumentStyleProfile()
+  ): void {
     new DocumentStyleModal(this.app, profile, async (savedProfile) => {
       await saveDocumentStyle(this, savedProfile);
-      this.refreshQuickPreviews();
-      (this.app as any).setting?.activeTab?.display?.();
+      this.refreshPreviews();
+      this.settingTab?.refresh();
     }).open();
   }
 
@@ -371,110 +530,27 @@ export default class HanmarkPlugin extends LegacyPlugin {
       this,
       (profile) => this.openDocumentStyleEditor(profile),
       () => {
-        this.refreshQuickPreviews();
-        (this.app as any).setting?.activeTab?.display?.();
+        this.refreshPreviews();
+        this.settingTab?.refresh();
       }
     ).open();
   }
 
-  private openPluginSettings(): void {
-    const setting = (this.app as any).setting;
-    setting?.open?.();
-    setting?.openTabById?.(this.manifest.id);
-    new Notice("DOCX에만 Pandoc 설정이 필요합니다.");
-  }
-
-  /** Preserve public command IDs while retiring the old pypandoc-hwpx actions. */
-  private rewireLegacyCommandAliases(): void {
-    const registry = (this.app as any).commands?.commands;
-    if (!registry) return;
-    const command = (id: string): any => registry[`${this.manifest.id}:${id}`];
-    const rewire = (id: string, name: string, callback: () => void): void => {
-      const item = command(id);
-      if (!item) return;
-      item.callback = callback;
-      item.editorCallback = callback;
-      item.name = name;
-    };
-    rewire("export-hwpx", "HWPX 내보내기", () => this.openExportCenter("hwpx"));
-    rewire("export-docx", "DOCX 내보내기", () => this.openExportCenter("other"));
-    rewire("export-html", "HTML 내보내기", () => this.openExportCenter("other"));
-    rewire("select-template", "HWPX 템플릿 관리", () => this.openTemplateManager());
-    rewire("select-hwpx-template", "HWPX 템플릿 관리", () => this.openTemplateManager());
-    rewire("show-setup-guide", "DOCX용 Pandoc 설정", () => this.openPluginSettings());
-    rewire("toggle-preview", "빠른 HWPX 미리보기 열기/닫기", () => void this.activateQuickPreview());
-    rewire("toggle-hwp-preview", "빠른 HWPX 미리보기 열기/닫기", () => void this.activateQuickPreview());
-  }
-
-  private patchToolbarForGateway(): void {
-    const rewire = (root: ParentNode): void => {
-      root.querySelectorAll("button").forEach((button) => {
-        if ((button as any).__hanmarkGatewayWired) return;
-        const label = `${button.getAttribute("aria-label") || ""} ${button.textContent || ""}`.trim();
-
-        if (label.includes("설치 가이드")) {
-          button.remove();
-          return;
-        }
-
-        let action: (() => void) | null = null;
-        let ariaLabel: string | null = null;
-        let visibleText: string | null = null;
-        if (label.includes("불러오기")) action = () => void importDocument(this.app, this);
-        else if (label.includes("HWPX") && label.includes("내보내기")) {
-          action = () => this.openExportCenter("hwpx");
-          ariaLabel = "HWPX 내보내기";
-        } else if ((label.includes("DOCX") || label.includes("HTML")) && label.includes("내보내기")) {
-          action = () => this.openExportCenter("other");
-        } else if (label.includes("분할") && !label.toLowerCase().includes("docx")) {
-          action = () => void this.activateQuickPreview();
-          ariaLabel = "빠른 HWPX 미리보기";
-        } else if (label.includes("템플릿") && !label.includes("워드")) {
-          action = () => this.openTemplateManager();
-          ariaLabel = "HWPX 템플릿 관리";
-          visibleText = "HWPX 템플릿";
-        }
-        if (!action) return;
-
-        const replacement = button.cloneNode(true) as HTMLButtonElement;
-        (replacement as any).__hanmarkGatewayWired = true;
-        if (ariaLabel) {
-          replacement.setAttribute("aria-label", ariaLabel);
-          replacement.setAttribute("title", ariaLabel);
-        }
-        if (visibleText) replacement.setText(visibleText);
-        replacement.addEventListener("mousedown", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        });
-        replacement.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          action?.();
-        });
-        button.replaceWith(replacement);
-      });
-    };
-
-    const manager: any = (this as any).toolbarManager;
-    if (manager?.renderMainToolbar) {
-      const original = manager.renderMainToolbar.bind(manager);
-      manager.renderMainToolbar = (element: HTMLElement) => {
-        original(element);
-        rewire(element);
-      };
-      try {
-        manager.removeToolbar?.();
-        const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf;
-        if (activeLeaf && manager.visible) manager.injectToolbar?.(activeLeaf);
-      } catch (error) {
-        console.warn("[hanmark] toolbar re-inject failed:", error);
+  private openWordTemplateManager(): void {
+    new WordTemplateManagerModal(this.app, {
+      store: this.wordTemplateStore,
+      fileGateway: this.gateway,
+      onChanged: async () => {
+        await this.saveSettings();
+        this.refreshPreviews();
+        this.settingTab?.refresh();
       }
-    }
-    document.querySelectorAll(".hwp-toolbar-main").forEach((element) => rewire(element));
+    }).open();
   }
 
-  async onunload(): Promise<void> {
-    await super.onunload();
+  private openPluginSettings(): void {
+    const controller = (this.app as unknown as AppWithSettings).setting;
+    controller.open();
+    controller.openTabById(this.manifest.id);
   }
 }

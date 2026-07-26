@@ -1,5 +1,6 @@
-import { Modal, Notice } from "obsidian";
+import { type App, Modal, Notice } from "obsidian";
 import { VERSION, type GongmunPreset } from "kordoc";
+import { errorMessage } from "../utils/errors";
 
 export interface HanmarkExportActions {
   sourcePatchAvailable: () => boolean;
@@ -30,7 +31,7 @@ export class HanmarkExportModal extends Modal {
   private tab: ExportTab = "hwpx";
   private gongmunPreset: GongmunPreset = "report";
 
-  constructor(app: any, private readonly actions: HanmarkExportActions, initialTab: ExportTab = "hwpx") {
+  constructor(app: App, private readonly actions: HanmarkExportActions, initialTab: ExportTab = "hwpx") {
     super(app);
     this.tab = initialTab;
   }
@@ -155,9 +156,8 @@ export class HanmarkExportModal extends Modal {
     try {
       const success = await action();
       if (success) this.close();
-    } catch (error: any) {
-      new Notice(error?.message || String(error));
-      console.error("[hanmark] export action failed:", error);
+    } catch (error: unknown) {
+      new Notice(errorMessage(error, "내보내기에 실패했습니다."));
     } finally {
       if (button.isConnected) {
         button.disabled = false;

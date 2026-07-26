@@ -466,7 +466,7 @@
   );
   flex-shrink: 0;
   user-select: none;
-  min-height: unset !important;
+  min-height: unset;
 }
 
 .hwp-toolbar-container::before,
@@ -672,7 +672,7 @@
   --font-interface: unset;
   --default-font: unset;
   font-family: serif;
-  font-size: 10pt !important;
+  font-size: 10pt;
   line-height: 1.6;
   color: #1a1a1a;
   word-break: keep-all;
@@ -687,7 +687,7 @@
    1) 테마 변수 pin — var() 기반 테마 규칙을 specificity 무관하게 무력화(currentColor로 해소).
    2) 요소 색 리셋 — 정확히 (0,1,1) specificity 유지. 프리뷰 컨테이너가 주입하는 인라인
       <style>이 문서 순서로 이기므로, 템플릿에서 추출된 비검정 제목색은 그대로 살아남는다.
-      !important나 이중-클래스 셀렉터는 절대 쓰지 않는다(추출된 색을 덮어버린다). */
+      강제 우선순위나 이중-클래스 셀렉터는 쓰지 않는다(추출된 색을 덮어버린다). */
 .hwp-paper,
 .word-template-preview-paper {
   --h1-color: currentColor;
@@ -721,7 +721,7 @@
   margin: 0;
   padding: 0;
   /* 인라인 스타일의 font-family가 최우선 되도록 */
-  font-family: inherit !important;
+  font-family: inherit;
 }
 
 .hwp-line.hwp-empty {
@@ -1506,19 +1506,19 @@
 }
 
 /* HanMark 작업창: Obsidian의 작은 기본 모달 제한을 풀고 데스크톱 작업창처럼 사용한다. */
-.modal.hanmark-resizable-workspace-modal {
+.modal-container .modal.hanmark-resizable-workspace-modal {
   position: relative;
-  width: 94vw !important;
-  height: 90vh !important;
-  min-width: min(760px, calc(100vw - 16px)) !important;
-  min-height: min(560px, calc(100vh - 16px)) !important;
-  max-width: calc(100vw - 16px) !important;
-  max-height: calc(100vh - 16px) !important;
+  width: 94vw;
+  height: 90vh;
+  min-width: min(760px, calc(100vw - 16px));
+  min-height: min(560px, calc(100vh - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
   resize: both;
-  overflow: hidden !important;
+  overflow: hidden;
 }
 
-.modal.hanmark-resizable-workspace-modal::after {
+.modal-container .modal.hanmark-resizable-workspace-modal::after {
   content: "";
   position: absolute;
   right: 3px;
@@ -1530,18 +1530,18 @@
   pointer-events: none;
 }
 
-.modal.hanmark-resizable-workspace-modal > .modal-content,
-.modal.hanmark-resizable-workspace-modal .modal-content.hanmark-export-modal,
-.modal.hanmark-resizable-workspace-modal .modal-content.hanmark-template-manager,
-.modal.hanmark-resizable-workspace-modal .modal-content.hanmark-document-style-modal {
+.modal-container .modal.hanmark-resizable-workspace-modal > .modal-content,
+.modal-container .modal.hanmark-resizable-workspace-modal .modal-content.hanmark-export-modal,
+.modal-container .modal.hanmark-resizable-workspace-modal .modal-content.hanmark-template-manager,
+.modal-container .modal.hanmark-resizable-workspace-modal .modal-content.hanmark-document-style-modal {
   box-sizing: border-box;
-  width: 100% !important;
-  height: 100% !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  max-width: none !important;
-  max-height: none !important;
-  overflow: auto !important;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  overflow: auto;
   resize: none;
 }
 
@@ -1553,12 +1553,12 @@
 }
 
 @media (max-width: 800px), (max-height: 650px) {
-  .modal.hanmark-resizable-workspace-modal {
-    width: calc(100vw - 8px) !important;
-    height: calc(100vh - 8px) !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    max-width: calc(100vw - 8px) !important;
-    max-height: calc(100vh - 8px) !important;
+  .modal-container .modal.hanmark-resizable-workspace-modal {
+    width: calc(100vw - 8px);
+    height: calc(100vh - 8px);
+    min-width: 0;
+    min-height: 0;
+    max-width: calc(100vw - 8px);
+    max-height: calc(100vh - 8px);
   }
 }

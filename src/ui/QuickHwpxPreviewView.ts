@@ -4,6 +4,7 @@ import { extractEditableBody } from "../io/frontmatter";
 import { renderQuickHwpxPreview } from "../io/kordocEngine";
 import { createObsidianImageLoader } from "../io/obsidianImageLoader";
 import { documentStyleSummary, type DocumentStyleProfile } from "../io/documentStyle";
+import { errorMessage } from "../utils/errors";
 
 export const QUICK_HWPX_PREVIEW_VIEW = "hanmark-quick-hwpx-preview";
 
@@ -79,7 +80,8 @@ export class QuickHwpxPreviewView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
     private readonly profile: () => FormatProfile | undefined,
-    private readonly documentStyle: () => DocumentStyleProfile | undefined
+    private readonly documentStyle: () => DocumentStyleProfile | undefined,
+    private readonly sourceView?: () => MarkdownView | null
   ) {
     super(leaf);
   }
@@ -125,7 +127,9 @@ export class QuickHwpxPreviewView extends ItemView {
   private async updatePreview(): Promise<void> {
     if (!this.previewEl) return;
     const version = ++this.renderVersion;
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const view =
+      this.sourceView?.() ??
+      this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       this.previewEl.setText("미리볼 마크다운 노트를 여세요.");
       return;
@@ -177,11 +181,17 @@ export class QuickHwpxPreviewView extends ItemView {
           pages: result.render.pageCount
         };
         this.cache.set(key, entry);
-        if (this.cache.size > 4) this.cache.delete(this.cache.keys().next().value);
-      } catch (error: any) {
+        if (this.cache.size > 4) {
+          const oldest: unknown = this.cache.keys().next().value;
+          if (typeof oldest === "string") this.cache.delete(oldest);
+        }
+      } catch (error: unknown) {
         if (version !== this.renderVersion || !this.previewEl) return;
         this.previewEl.empty();
-        this.previewEl.createDiv({ cls: "hanmark-preview-error", text: `미리보기 실패: ${error?.message || String(error)}` });
+        this.previewEl.createDiv({
+          cls: "hanmark-preview-error",
+          text: `미리보기 실패: ${errorMessage(error)}`
+        });
         return;
       }
     }
