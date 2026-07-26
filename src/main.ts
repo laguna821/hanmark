@@ -182,7 +182,7 @@ function registerHeadingCommand(plugin: Plugin, level: number): void {
 }
 
 /**
- * HanMark 2.5.0 runtime.
+ * HanMark 2.5.1 runtime.
  *
  * HWPX is generated in-process by Kordoc. The single external process boundary
  * is used only after an explicit user action: optional Pandoc/Word conversion
@@ -659,8 +659,7 @@ export default class HanmarkPlugin extends Plugin {
       new Notice("PDF로 내보낼 Markdown 문서를 여세요.");
       return null;
     }
-    const commands = (this.app as unknown as AppWithCommands).commands;
-    if (!commands.executeCommandById("workspace:export-pdf")) {
+    if (!this.executeCommandById("workspace:export-pdf")) {
       new Notice(
         "Obsidian의 PDF 내보내기 명령을 열 수 없습니다. 데스크톱 앱을 업데이트한 뒤 다시 시도하세요.",
         8_000
@@ -668,6 +667,16 @@ export default class HanmarkPlugin extends Plugin {
       return null;
     }
     return { format: "pdf", status: "delegated" };
+  }
+
+  /**
+   * One audited boundary for Obsidian's registered-command dispatcher.
+   * Import integrations receive this bound plugin method instead of reaching
+   * into another plugin object or command registry themselves.
+   */
+  executeCommandById(id: string): boolean {
+    const commands = (this.app as unknown as AppWithCommands).commands;
+    return commands.executeCommandById(id);
   }
 
   private async revealExportOutput(

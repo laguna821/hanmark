@@ -2,6 +2,7 @@ import type { HanmarkTemplateLibrary } from "../io/templateLibrary";
 
 export type DocxPreviewMode = "fast-docx" | "word-pdf";
 export type HtmlExportTheme = "achmage-editorial" | "classic";
+export type ImportedImageDestination = "vault" | "cmds-eagle-r2" | "ask";
 export type ToolbarPosition = "top";
 export type PreviewPosition = "right";
 export type ToolbarSkinMode = "auto" | "light" | "dark";
@@ -96,7 +97,7 @@ export interface CustomFontEntry {
  * small prevents the retired Python and one-slot HWPX settings from returning.
  */
 export interface HanmarkSettings extends Record<string, unknown> {
-  settingsVersion: 6;
+  settingsVersion: 7;
   pandocPath: string;
   toolbarPosition: ToolbarPosition;
   showToolbarOnStartup: boolean;
@@ -106,6 +107,9 @@ export interface HanmarkSettings extends Record<string, unknown> {
   activeWordTemplateId: string;
   docxPreviewMode: DocxPreviewMode;
   htmlExportTheme: HtmlExportTheme;
+  importedImageDestination: ImportedImageDestination;
+  cmdsEagleWorkerUrl: string;
+  cmdsEaglePublicUrl: string;
   customFontDirs: string[];
   customFonts: CustomFontEntry[];
   toolbarSkinMode: ToolbarSkinMode;
@@ -115,7 +119,7 @@ export interface HanmarkSettings extends Record<string, unknown> {
 }
 
 export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze({
-  settingsVersion: 6,
+  settingsVersion: 7,
   pandocPath: "pandoc",
   toolbarPosition: "top",
   showToolbarOnStartup: true,
@@ -126,6 +130,9 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   activeWordTemplateId: "default",
   docxPreviewMode: "fast-docx",
   htmlExportTheme: "achmage-editorial",
+  importedImageDestination: "vault",
+  cmdsEagleWorkerUrl: "",
+  cmdsEaglePublicUrl: "",
   customFontDirs: [],
   customFonts: [],
   toolbarSkinMode: "auto",
@@ -138,7 +145,12 @@ const RETIRED_SETTINGS_KEYS = [
   "pythonPath",
   "defaultTemplatePath",
   "cachedTemplateStyles",
-  "cachedTemplatePageLayout"
+  "cachedTemplatePageLayout",
+  "cmdsEagleApiKey",
+  "cmdsEagleR2ApiKey",
+  "r2ApiKey",
+  "cloudflareApiKey",
+  "cloudflareR2ApiKey"
 ] as const;
 
 export function defaultFontDirectory(platform: HanmarkRuntimePlatform): string {
@@ -178,6 +190,12 @@ export function normalizeToolbarSkinMode(value: unknown): ToolbarSkinMode {
 
 export function normalizeHtmlExportTheme(value: unknown): HtmlExportTheme {
   return value === "classic" ? "classic" : "achmage-editorial";
+}
+
+export function normalizeImportedImageDestination(
+  value: unknown
+): ImportedImageDestination {
+  return value === "cmds-eagle-r2" || value === "ask" ? value : "vault";
 }
 
 export function normalizeToolbarHex(value: unknown, fallback: string): string {
@@ -268,7 +286,7 @@ export function normalizeHanmarkSettings(
 
   return {
     ...preserved,
-    settingsVersion: 6,
+    settingsVersion: 7,
     pandocPath: nonEmptyString(data.pandocPath, DEFAULT_HANMARK_SETTINGS.pandocPath),
     toolbarPosition: "top",
     showToolbarOnStartup:
@@ -284,6 +302,17 @@ export function normalizeHanmarkSettings(
     activeWordTemplateId: nonEmptyString(data.activeWordTemplateId, "default"),
     docxPreviewMode: data.docxPreviewMode === "word-pdf" ? "word-pdf" : "fast-docx",
     htmlExportTheme: normalizeHtmlExportTheme(data.htmlExportTheme),
+    importedImageDestination: normalizeImportedImageDestination(
+      data.importedImageDestination
+    ),
+    cmdsEagleWorkerUrl:
+      typeof data.cmdsEagleWorkerUrl === "string"
+        ? data.cmdsEagleWorkerUrl.trim()
+        : "",
+    cmdsEaglePublicUrl:
+      typeof data.cmdsEaglePublicUrl === "string"
+        ? data.cmdsEaglePublicUrl.trim()
+        : "",
     customFontDirs: stringArray(data.customFontDirs),
     customFonts,
     toolbarSkinMode: normalizeToolbarSkinMode(data.toolbarSkinMode),

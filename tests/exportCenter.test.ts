@@ -57,7 +57,11 @@ describe("HanMark unified export center", () => {
 
     assert.match(
       main,
-      /commands\.executeCommandById\("workspace:export-pdf"\)/u
+      /this\.executeCommandById\("workspace:export-pdf"\)/u
+    );
+    assert.match(
+      main,
+      /executeCommandById\(id: string\): boolean[\s\S]*?commands\.executeCommandById\(id\)/u
     );
     assert.match(
       modal,

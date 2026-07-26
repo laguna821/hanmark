@@ -175,7 +175,7 @@ it("new Kordoc imports write only parsed Markdown and attachment links", async (
   );
   assert.match(
     source,
-    /\(result\.warnings\?\.length \?\? 0\) \+ persisted\.warnings\.length/u
+    /\(result\.warnings\?\.length \?\? 0\) \+[\s\S]*?persisted\.warnings\.length \+[\s\S]*?cloud\.warnings\.length/u
   );
   assert.doesNotMatch(
     source,

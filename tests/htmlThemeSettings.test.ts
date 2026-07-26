@@ -4,19 +4,38 @@ import test from "node:test";
 import {
   DEFAULT_HANMARK_SETTINGS,
   normalizeHanmarkSettings,
-  normalizeHtmlExportTheme
+  normalizeHtmlExportTheme,
+  normalizeImportedImageDestination
 } from "../src/legacy-port/settings";
 
-test("HTML theme settings migrate to version 6 with Achmage Editorial by default", () => {
+test("settings migrate to version 7 with safe HTML and imported-image defaults", () => {
   const settings = normalizeHanmarkSettings({
     settingsVersion: 5,
     unrelatedFutureSetting: "preserved"
   });
 
-  assert.equal(settings.settingsVersion, 6);
+  assert.equal(settings.settingsVersion, 7);
   assert.equal(settings.htmlExportTheme, "achmage-editorial");
+  assert.equal(settings.importedImageDestination, "vault");
+  assert.equal(settings.cmdsEagleWorkerUrl, "");
+  assert.equal(settings.cmdsEaglePublicUrl, "");
   assert.equal(settings.unrelatedFutureSetting, "preserved");
   assert.equal(DEFAULT_HANMARK_SETTINGS.htmlExportTheme, "achmage-editorial");
+});
+
+test("imported-image settings preserve explicit cloud and ask choices", () => {
+  assert.equal(normalizeImportedImageDestination("cmds-eagle-r2"), "cmds-eagle-r2");
+  assert.equal(normalizeImportedImageDestination("ask"), "ask");
+  assert.equal(normalizeImportedImageDestination("unknown"), "vault");
+
+  const settings = normalizeHanmarkSettings({
+    importedImageDestination: "cmds-eagle-r2",
+    cmdsEagleWorkerUrl: " https://worker.example/ ",
+    cmdsEaglePublicUrl: " https://cdn.example/ "
+  });
+  assert.equal(settings.importedImageDestination, "cmds-eagle-r2");
+  assert.equal(settings.cmdsEagleWorkerUrl, "https://worker.example/");
+  assert.equal(settings.cmdsEaglePublicUrl, "https://cdn.example/");
 });
 
 test("HTML theme settings preserve Classic and reject unknown stored values", () => {
@@ -35,6 +54,12 @@ test("settings UI exposes clear Achmage Editorial and Classic choices", async ()
   assert.match(source, /HTML 내보내기/u);
   assert.match(source, /Achmage Editorial \(권장\)/u);
   assert.match(source, /Classic \(기존 스타일\)/u);
+  assert.match(
+    source,
+    /CMDS Eagle 현재 클라우드 \(R2 폴백 가능\)/u
+  );
+  assert.match(source, /가져올 때마다 묻기/u);
+  assert.match(source, /API 키는 필요할 때 묻고 인증 성공 뒤 세션 메모리에만/u);
   assert.doesNotMatch(source, /innerHTML/u);
 });
 

@@ -15,6 +15,7 @@ import type {
   DocxPreviewMode,
   HanmarkSettings,
   HtmlExportTheme,
+  ImportedImageDestination,
   ToolbarSkin,
   ToolbarSkinMode,
   ToolbarSkinPaletteKey
@@ -113,6 +114,7 @@ export class HanmarkSettingTab extends PluginSettingTab {
       );
 
     this.renderHwpxSettings(containerEl);
+    this.renderImportedImageSettings(containerEl);
     this.renderHtmlExportSettings(containerEl);
     this.renderToolbarSettings(containerEl);
     this.renderAdvancedDocxSettings(containerEl, version);
@@ -145,6 +147,68 @@ export class HanmarkSettingTab extends PluginSettingTab {
           .setCta()
           .onClick(() => {
             void this.runAction(() => this.actions.openHwpxTemplateManager());
+          });
+      });
+  }
+
+  private renderImportedImageSettings(container: HTMLElement): void {
+    new Setting(container).setName("문서 가져오기 이미지").setHeading();
+
+    new Setting(container)
+      .setName("가져온 이미지 저장 방식")
+      .setDesc(
+        "HWPX·DOCX·PDF에서 꺼낸 이미지를 어디에 둘지 정합니다. " +
+        "CMDS Eagle 현재 클라우드는 공개 브리지 또는 등록 명령을 먼저 사용합니다."
+      )
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("vault", "Vault 첨부 파일 (기본)")
+          .addOption(
+            "cmds-eagle-r2",
+            "CMDS Eagle 현재 클라우드 (R2 폴백 가능)"
+          )
+          .addOption("ask", "가져올 때마다 묻기")
+          .setValue(this.host.settings.importedImageDestination)
+          .onChange((value) => {
+            const destination: ImportedImageDestination =
+              value === "cmds-eagle-r2" || value === "ask" ? value : "vault";
+            void this.changeImportedImageDestination(destination);
+          });
+      });
+
+    const fallback = container.createEl("details", {
+      cls: "hanmark-r2-fallback-settings"
+    });
+    fallback.createEl("summary", { text: "직접 R2 폴백 설정 (선택)" });
+    fallback.createEl("p", {
+      cls: "setting-item-description",
+      text:
+        "정상적으로 CMDS Eagle가 응답하면 아래 정보는 사용하지 않습니다. " +
+        "브리지를 사용할 수 없을 때만 HanMark가 같은 Worker 계약으로 업로드하며, " +
+        "API 키는 필요할 때 묻고 인증 성공 뒤 세션 메모리에만 두며 설정 파일에는 저장하지 않습니다."
+    });
+
+    new Setting(fallback)
+      .setName("Worker URL")
+      .setDesc("예: https://example.workers.dev")
+      .addText((text) => {
+        text
+          .setPlaceholder("https://…workers.dev")
+          .setValue(this.host.settings.cmdsEagleWorkerUrl)
+          .onChange((value) => {
+            void this.changeR2FallbackUrl("cmdsEagleWorkerUrl", value);
+          });
+      });
+
+    new Setting(fallback)
+      .setName("Public URL")
+      .setDesc("업로드한 파일을 읽을 공개 R2 주소입니다.")
+      .addText((text) => {
+        text
+          .setPlaceholder("https://…r2.dev")
+          .setValue(this.host.settings.cmdsEaglePublicUrl)
+          .onChange((value) => {
+            void this.changeR2FallbackUrl("cmdsEaglePublicUrl", value);
           });
       });
   }
@@ -570,6 +634,35 @@ export class HanmarkSettingTab extends PluginSettingTab {
     } catch (error) {
       this.host.settings.htmlExportTheme = previous;
       new Notice(`HTML 테마 설정을 저장하지 못했습니다: ${errorMessage(error)}`);
+      this.render();
+    }
+  }
+
+  private async changeImportedImageDestination(
+    destination: ImportedImageDestination
+  ): Promise<void> {
+    const previous = this.host.settings.importedImageDestination;
+    try {
+      this.host.settings.importedImageDestination = destination;
+      await this.host.saveSettings();
+    } catch (error) {
+      this.host.settings.importedImageDestination = previous;
+      new Notice(`이미지 저장 방식을 저장하지 못했습니다: ${errorMessage(error)}`);
+      this.render();
+    }
+  }
+
+  private async changeR2FallbackUrl(
+    key: "cmdsEagleWorkerUrl" | "cmdsEaglePublicUrl",
+    value: string
+  ): Promise<void> {
+    const previous = this.host.settings[key];
+    try {
+      this.host.settings[key] = value.trim();
+      await this.host.saveSettings();
+    } catch (error) {
+      this.host.settings[key] = previous;
+      new Notice(`R2 폴백 설정을 저장하지 못했습니다: ${errorMessage(error)}`);
       this.render();
     }
   }

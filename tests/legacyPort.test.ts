@@ -66,6 +66,8 @@ test("typed settings retain Kordoc-owned data and retire Python-era keys", () =>
     {
       pythonPath: "python",
       defaultTemplatePath: "old.hwpx",
+      cmdsEagleApiKey: "must-not-survive",
+      r2ApiKey: "must-not-survive",
       pandocPath: " C:\\Pandoc\\pandoc.exe ",
       hanmarkTemplateLibrary: {
         schemaVersion: 1,
@@ -82,6 +84,8 @@ test("typed settings retain Kordoc-owned data and retire Python-era keys", () =>
   assert.equal(settings.fontDirectoryPath, "C:\\Windows\\Fonts");
   assert.equal(settings.pythonPath, undefined);
   assert.equal(settings.defaultTemplatePath, undefined);
+  assert.equal(settings.cmdsEagleApiKey, undefined);
+  assert.equal(settings.r2ApiKey, undefined);
   assert.deepEqual(settings.futureKordocSetting, { enabled: true });
   assert.equal(settings.hanmarkTemplateLibrary?.schemaVersion, 1);
   assert.deepEqual(settings.hanmarkDocumentStyle, { name: "migration source" });
