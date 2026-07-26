@@ -2,6 +2,17 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.4.5
+
+- Made an explicit Fast DOCX Preview open render the semantic document immediately and upgrade it exactly once to the actual Pandoc-generated package.
+- Kept Pandoc outside workspace restoration, view lifecycle, typing, active-document, and template-change events; those events only mark an existing preview as changed.
+- Fitted actual DOCX pages to the available pane without changing page proportions or pagination, with bounded scaling and horizontal overflow for very narrow panes.
+- Changed new HWP, HWPX, PDF, DOCX, XLSX, and XLS imports to ordinary Markdown body content and rewritten Vault attachment links, without generated source YAML, source callouts, or round-trip source caching.
+- Removed source patching from the public export types and export center while preserving the non-overwriting compatibility path as a command-palette-only legacy command for older imported notes.
+- Added a safe migration command that creates a clean Markdown sibling from older HanMark-generated source metadata while preserving user-authored YAML and ordinary callouts.
+- Removed an unnecessary `FontFaceSet` type assertion reported by Community review without changing font loading behavior.
+- Preserved HWPX generation, embedded images, templates, toolbar editing, DOCX/HTML/PDF export, existing command IDs, and the optional Pandoc workflow.
+
 ## 2.4.4
 
 - Fixed Pandoc DOCX export and actual-package preview by removing leading Obsidian YAML frontmatter and the generated source callout before Markdown line normalization.
@@ -69,6 +80,17 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.4.5
+
+- 사용자가 빠른 DOCX 미리보기를 직접 열면 간이 문서를 즉시 표시한 뒤 Pandoc이 생성한 실제 패키지로 정확히 한 번 전환하도록 했습니다.
+- 작업공간 복원, 뷰 생명주기, 입력, 활성 문서 변경과 템플릿 변경에서는 Pandoc을 실행하지 않고 기존 미리보기만 변경된 상태로 표시합니다.
+- 실제 DOCX 페이지의 비율과 페이지 구분을 바꾸지 않으면서 패널 폭에 맞추고, 아주 좁은 패널에서는 제한된 축척과 가로 스크롤을 사용합니다.
+- 새 HWP·HWPX·PDF·DOCX·XLSX·XLS 가져오기는 생성된 원본 YAML·원본 콜아웃·왕복 원본 캐시 없이 일반 Markdown 본문과 실제 Vault 첨부 링크만 만듭니다.
+- 공개 내보내기 타입과 내보내기 센터에서 원본 수정을 제거하고, 예전 가져오기 노트를 위한 비덮어쓰기 호환 경로만 명령 팔레트 전용 레거시 명령으로 유지했습니다.
+- 사용자가 작성한 YAML과 일반 콜아웃을 보존하면서 예전 HanMark 생성 원본 메타데이터만 제거한 깨끗한 Markdown 형제 노트를 만드는 안전한 마이그레이션 명령을 추가했습니다.
+- 글꼴 로딩 동작을 바꾸지 않으면서 Community 심사에서 지적한 불필요한 `FontFaceSet` 타입 단언을 제거했습니다.
+- HWPX 생성, 이미지 포함, 템플릿, 툴바 편집, DOCX·HTML·PDF 내보내기, 기존 명령 ID와 선택적 Pandoc 절차를 유지했습니다.
 
 ### 2.4.4
 
