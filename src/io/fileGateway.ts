@@ -35,6 +35,8 @@ export interface SavedFileResult {
   cancelled: boolean;
   fileName: string;
   displayPath?: string;
+  /** Vault-relative path, available only for files HanMark created in the Vault. */
+  vaultPath?: string;
   method?: "file-system-access" | "download" | "vault";
 }
 
@@ -431,6 +433,7 @@ export function createFileGateway(app: App, plugin?: unknown): FileGateway {
         cancelled: false,
         fileName: filenameFromDisplayPath(relativePath, fileName),
         displayPath: relativePath,
+        vaultPath: relativePath,
         method: "vault"
       };
     },
