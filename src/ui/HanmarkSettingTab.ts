@@ -14,6 +14,7 @@ import type { TemplateLibraryHost } from "../io/templateLibrary";
 import type {
   DocxPreviewMode,
   HanmarkSettings,
+  HtmlExportTheme,
   ToolbarSkin,
   ToolbarSkinMode,
   ToolbarSkinPaletteKey
@@ -112,6 +113,7 @@ export class HanmarkSettingTab extends PluginSettingTab {
       );
 
     this.renderHwpxSettings(containerEl);
+    this.renderHtmlExportSettings(containerEl);
     this.renderToolbarSettings(containerEl);
     this.renderAdvancedDocxSettings(containerEl, version);
   }
@@ -143,6 +145,27 @@ export class HanmarkSettingTab extends PluginSettingTab {
           .setCta()
           .onClick(() => {
             void this.runAction(() => this.actions.openHwpxTemplateManager());
+          });
+      });
+  }
+
+  private renderHtmlExportSettings(container: HTMLElement): void {
+    new Setting(container).setName("HTML 내보내기").setHeading();
+
+    new Setting(container)
+      .setName("HTML 테마")
+      .setDesc(
+        "새 HTML 파일에 적용할 화면·인쇄 스타일입니다. 스크립트나 외부 폰트 없이 독립형 파일로 저장합니다."
+      )
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("achmage-editorial", "Achmage Editorial (권장)")
+          .addOption("classic", "Classic (기존 스타일)")
+          .setValue(this.host.settings.htmlExportTheme)
+          .onChange((value) => {
+            const theme: HtmlExportTheme =
+              value === "classic" ? "classic" : "achmage-editorial";
+            void this.changeHtmlExportTheme(theme);
           });
       });
   }
@@ -536,6 +559,18 @@ export class HanmarkSettingTab extends PluginSettingTab {
       await this.actions.refreshPreviews();
     } catch (error) {
       new Notice(`DOCX 미리보기 설정을 저장하지 못했습니다: ${errorMessage(error)}`);
+    }
+  }
+
+  private async changeHtmlExportTheme(theme: HtmlExportTheme): Promise<void> {
+    const previous = this.host.settings.htmlExportTheme;
+    try {
+      this.host.settings.htmlExportTheme = theme;
+      await this.host.saveSettings();
+    } catch (error) {
+      this.host.settings.htmlExportTheme = previous;
+      new Notice(`HTML 테마 설정을 저장하지 못했습니다: ${errorMessage(error)}`);
+      this.render();
     }
   }
 

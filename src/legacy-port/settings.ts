@@ -1,6 +1,7 @@
 import type { HanmarkTemplateLibrary } from "../io/templateLibrary";
 
 export type DocxPreviewMode = "fast-docx" | "word-pdf";
+export type HtmlExportTheme = "achmage-editorial" | "classic";
 export type ToolbarPosition = "top";
 export type PreviewPosition = "right";
 export type ToolbarSkinMode = "auto" | "light" | "dark";
@@ -95,7 +96,7 @@ export interface CustomFontEntry {
  * small prevents the retired Python and one-slot HWPX settings from returning.
  */
 export interface HanmarkSettings extends Record<string, unknown> {
-  settingsVersion: 5;
+  settingsVersion: 6;
   pandocPath: string;
   toolbarPosition: ToolbarPosition;
   showToolbarOnStartup: boolean;
@@ -104,6 +105,7 @@ export interface HanmarkSettings extends Record<string, unknown> {
   fontDirectoryPath: string;
   activeWordTemplateId: string;
   docxPreviewMode: DocxPreviewMode;
+  htmlExportTheme: HtmlExportTheme;
   customFontDirs: string[];
   customFonts: CustomFontEntry[];
   toolbarSkinMode: ToolbarSkinMode;
@@ -113,7 +115,7 @@ export interface HanmarkSettings extends Record<string, unknown> {
 }
 
 export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze({
-  settingsVersion: 5,
+  settingsVersion: 6,
   pandocPath: "pandoc",
   toolbarPosition: "top",
   showToolbarOnStartup: true,
@@ -123,6 +125,7 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   fontDirectoryPath: "",
   activeWordTemplateId: "default",
   docxPreviewMode: "fast-docx",
+  htmlExportTheme: "achmage-editorial",
   customFontDirs: [],
   customFonts: [],
   toolbarSkinMode: "auto",
@@ -171,6 +174,10 @@ export function normalizeToolbarSkinMode(value: unknown): ToolbarSkinMode {
   return value === "light" || value === "dark" || value === "auto"
     ? value
     : "auto";
+}
+
+export function normalizeHtmlExportTheme(value: unknown): HtmlExportTheme {
+  return value === "classic" ? "classic" : "achmage-editorial";
 }
 
 export function normalizeToolbarHex(value: unknown, fallback: string): string {
@@ -261,7 +268,7 @@ export function normalizeHanmarkSettings(
 
   return {
     ...preserved,
-    settingsVersion: 5,
+    settingsVersion: 6,
     pandocPath: nonEmptyString(data.pandocPath, DEFAULT_HANMARK_SETTINGS.pandocPath),
     toolbarPosition: "top",
     showToolbarOnStartup:
@@ -276,6 +283,7 @@ export function normalizeHanmarkSettings(
     fontDirectoryPath: nonEmptyString(data.fontDirectoryPath, fallbackFontDirectory),
     activeWordTemplateId: nonEmptyString(data.activeWordTemplateId, "default"),
     docxPreviewMode: data.docxPreviewMode === "word-pdf" ? "word-pdf" : "fast-docx",
+    htmlExportTheme: normalizeHtmlExportTheme(data.htmlExportTheme),
     customFontDirs: stringArray(data.customFontDirs),
     customFonts,
     toolbarSkinMode: normalizeToolbarSkinMode(data.toolbarSkinMode),

@@ -117,7 +117,8 @@ test("HTML replacement preserves legacy structures and neutralizes active URLs",
   const blocks = preprocessMarkdownForHtml(markdown);
   const html = renderStandaloneHtml(markdown, {
     title: "<내 문서>",
-    documentStyle: profile
+    documentStyle: profile,
+    theme: "classic"
   });
 
   assert.ok(blocks.some((block) => block.type === "table"));
@@ -125,7 +126,7 @@ test("HTML replacement preserves legacy structures and neutralizes active URLs",
   assert.match(html, /<title>&lt;내 문서&gt;<\/title>/);
   assert.match(html, /font-family:"맑은 고딕"/);
   assert.match(html, /line-height:1\.70/);
-  assert.match(html, /src="https:\/\/example\.com\/a\.png"/);
+  assert.doesNotMatch(html, /src="https:\/\/example\.com\/a\.png"/);
   assert.match(html, /href="#"/);
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);

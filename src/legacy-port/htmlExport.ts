@@ -17,6 +17,7 @@ export interface HtmlExportOptions {
   title: string;
   documentStyle?: DocumentStyleProfile;
   page?: Partial<HtmlPageLayout>;
+  theme?: "achmage-editorial" | "classic";
 }
 
 export type HtmlBlockType =
@@ -79,20 +80,50 @@ function escapeAttribute(value: string): string {
   return escapeHtml(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+const SAFE_RASTER_DATA_URL =
+  /^data:image\/(png|jpeg|gif|bmp);base64,([A-Za-z0-9+/]+={0,2})$/i;
+const RASTER_BASE64_SIGNATURES: Record<string, string> = {
+  png: "iVBORw0KGgo",
+  jpeg: "/9j/",
+  gif: "R0lGOD",
+  bmp: "Qk"
+};
+
+function isStructurallyValidRasterBase64(mime: string, value: string): boolean {
+  return value.length > 0 &&
+    value.length % 4 === 0 &&
+    value.startsWith(RASTER_BASE64_SIGNATURES[mime.toLowerCase()] ?? "\u0000");
+}
+
+function hasUnsafeControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code <= 0x1f || code === 0x7f;
+  });
+}
+
 function safeUrl(value: string, image: boolean): string {
   const trimmed = value.trim();
   if (!trimmed) return image ? "" : "#";
-  const compact = [...trimmed]
-    .filter((character) => (character.codePointAt(0) ?? 0) > 0x20)
-    .join("")
-    .toLowerCase();
-  if (compact.startsWith("javascript:") || compact.startsWith("vbscript:")) {
+
+  if (hasUnsafeControlCharacter(trimmed)) {
     return image ? "" : "#";
   }
-  if (compact.startsWith("data:") && !(image && compact.startsWith("data:image/"))) {
-    return image ? "" : "#";
+
+  if (image) {
+    const match = trimmed.match(SAFE_RASTER_DATA_URL);
+    return match && isStructurallyValidRasterBase64(match[1], match[2])
+      ? trimmed
+      : "";
   }
-  return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    return SAFE_LINK_PROTOCOLS.has(parsed.protocol.toLowerCase()) ? trimmed : "#";
+  } catch {
+    return "#";
+  }
 }
 
 function inlineToHtml(value: string): string {
@@ -427,16 +458,30 @@ export function renderHtmlBody(
     .join("\n");
 }
 
-export function renderStandaloneHtml(markdown: string, options: HtmlExportOptions): string {
-  const page = resolvePage(options);
-  const body = renderHtmlBody(markdown, options.documentStyle);
-  return `<!DOCTYPE html>
-<html lang="ko">
-<head>
+const CONTENT_SECURITY_POLICY =
+  "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
+const KAMI_ATTRIBUTION =
+  "Achmage Editorial theme adapted from Kami under the MIT License.";
+
+function renderDocumentHead(title: string, css: string): string {
+  return `<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHtml(options.title)}</title>
+<meta http-equiv="Content-Security-Policy" content="${CONTENT_SECURITY_POLICY}">
+<title>${escapeHtml(title)}</title>
 <style>
+${css}
+</style>
+</head>`;
+}
+
+function renderClassicStandaloneHtml(
+  markdown: string,
+  options: HtmlExportOptions
+): string {
+  const page = resolvePage(options);
+  const body = renderHtmlBody(markdown, options.documentStyle);
+  const css = `
 * { box-sizing: border-box; }
 body { margin: 0; background: #e8e8e8; display: flex; justify-content: center; padding: 40px 20px; }
 .hanmark-paper {
@@ -464,11 +509,273 @@ hr { border: 0; border-top: 1px solid #999; margin: 12px 0; }
 @media print {
   body { background: none; padding: 0; }
   .hanmark-paper { box-shadow: none; }
-}
-</style>
-</head>
+}`;
+  return `<!DOCTYPE html>
+<html lang="ko">
+${renderDocumentHead(options.title, css)}
 <body><main class="hanmark-paper">${body}</main></body>
 </html>`;
+}
+
+function plainHeadingTitle(markdown: string): string | null {
+  const firstContentLine = markdown
+    .split(/\r?\n/)
+    .find((line) => line.trim().length > 0)
+    ?.trim();
+  const heading = firstContentLine?.match(/^#\s+(.+)$/);
+  if (!heading) return null;
+  return heading[1]
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\[\[[^|\]]+\|([^\]]+)\]\]/g, "$1")
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/`([^`\r\n]+)`/g, "$1")
+    .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/(?<!\*)\*([^*\r\n]+)\*(?!\*)/g, "$1")
+    .replace(/(?<!\w)_([^_\r\n]+)_(?!\w)/g, "$1")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/==(.+?)==/g, "$1")
+    .trim() || null;
+}
+
+function renderEditorialBlock(block: HtmlBlock): string {
+  if (block.type === "empty") {
+    return `<div class="hanmark-line hanmark-empty" aria-hidden="true">&nbsp;</div>`;
+  }
+  if (block.type === "hr") return "<hr>";
+  if (block.type === "table") {
+    return `<div class="hanmark-table-wrap">${block.html}</div>`;
+  }
+  if (block.type === "codeblock") {
+    return `<div class="hanmark-codeblock">${block.html}</div>`;
+  }
+  if (block.type === "quote") {
+    const calloutContent = block.html.replace(
+      /^\[![A-Za-z0-9_-]+\][+-]?\s*/i,
+      ""
+    );
+    return `<aside class="hanmark-callout">${calloutContent}</aside>`;
+  }
+  if (block.type === "list") {
+    const level = Math.max(0, Math.min(6, block.indent));
+    return `<div class="hanmark-line hanmark-list hanmark-indent-${level}">${block.html}</div>`;
+  }
+  if (/^h[1-6]$/.test(block.type)) {
+    return `<${block.type} class="hanmark-heading">${block.html}</${block.type}>`;
+  }
+  return `<p class="hanmark-line hanmark-body">${block.html}</p>`;
+}
+
+function editorialDocument(markdown: string, fallbackTitle: string): {
+  title: string;
+  masthead: string;
+  body: string;
+} {
+  const blocks = preprocessMarkdownForHtml(markdown);
+  const firstContentIndex = blocks.findIndex((block) => block.type !== "empty");
+  const leadingHeading =
+    firstContentIndex >= 0 && blocks[firstContentIndex].type === "h1"
+      ? blocks[firstContentIndex]
+      : null;
+  if (leadingHeading && firstContentIndex >= 0) {
+    blocks.splice(firstContentIndex, 1);
+  }
+  return {
+    title: plainHeadingTitle(markdown) ?? fallbackTitle,
+    masthead: leadingHeading?.html ?? escapeHtml(fallbackTitle),
+    body: blocks.map(renderEditorialBlock).join("\n")
+  };
+}
+
+function renderEditorialStandaloneHtml(
+  markdown: string,
+  options: HtmlExportOptions
+): string {
+  const document = editorialDocument(markdown, options.title);
+  const css = `
+:root {
+  --hanmark-white: #FFFFFF;
+  --hanmark-ivory: #F4F8FB;
+  --hanmark-navy: #002E6E;
+  --hanmark-blue: #0066B3;
+  --hanmark-teal: #00B5AD;
+  --hanmark-ink: #17233A;
+  --hanmark-muted: #5A6B82;
+  --hanmark-rule: #D8E2EC;
+}
+* { box-sizing: border-box; }
+html { background: var(--hanmark-ivory); }
+body {
+  margin: 0;
+  padding: 48px 24px;
+  background: var(--hanmark-ivory);
+  color: var(--hanmark-ink);
+  font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.hanmark-paper {
+  width: min(100%, 840px);
+  min-height: 1040px;
+  margin: 0 auto;
+  padding: 72px 76px 80px;
+  background: var(--hanmark-white);
+  border-top: 8px solid var(--hanmark-navy);
+  box-shadow: 0 18px 54px rgba(0, 46, 110, .14);
+}
+.hanmark-masthead { margin: 0 0 56px; }
+.hanmark-kicker {
+  margin: 0 0 12px;
+  color: var(--hanmark-blue);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.hanmark-masthead h1 {
+  margin: 0;
+  color: var(--hanmark-navy);
+  font-size: clamp(30px, 5vw, 48px);
+  line-height: 1.18;
+  letter-spacing: -.035em;
+}
+.hanmark-masthead-rule {
+  width: 88px;
+  height: 6px;
+  margin-top: 26px;
+  background: linear-gradient(90deg, var(--hanmark-blue), var(--hanmark-teal));
+}
+.hanmark-heading {
+  position: relative;
+  margin: 2.15em 0 .8em;
+  padding-left: 17px;
+  color: var(--hanmark-navy);
+  line-height: 1.35;
+  letter-spacing: -.018em;
+  break-after: avoid-page;
+}
+.hanmark-heading::before {
+  content: "";
+  position: absolute;
+  inset: .12em auto .12em 0;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--hanmark-teal);
+}
+h1.hanmark-heading { font-size: 2rem; }
+h2.hanmark-heading { font-size: 1.55rem; }
+h3.hanmark-heading { font-size: 1.28rem; }
+h4.hanmark-heading, h5.hanmark-heading, h6.hanmark-heading { font-size: 1.08rem; }
+.hanmark-line { margin: 0; }
+.hanmark-body { margin: 0 0 .72em; }
+.hanmark-empty { min-height: .72em; }
+.hanmark-list { position: relative; margin: .32em 0; padding-left: 1.35em; }
+.hanmark-indent-1 { margin-left: 1.4em; }
+.hanmark-indent-2 { margin-left: 2.8em; }
+.hanmark-indent-3 { margin-left: 4.2em; }
+.hanmark-indent-4 { margin-left: 5.6em; }
+.hanmark-indent-5 { margin-left: 7em; }
+.hanmark-indent-6 { margin-left: 8.4em; }
+.hanmark-callout {
+  margin: 1.6em 0;
+  padding: 18px 20px;
+  border: 1px solid rgba(0, 181, 173, .34);
+  border-left: 6px solid var(--hanmark-teal);
+  border-radius: 0 12px 12px 0;
+  background: rgba(0, 181, 173, .08);
+  color: #183F4B;
+}
+a { color: var(--hanmark-blue); text-decoration-thickness: .08em; text-underline-offset: .15em; }
+.hanmark-wikilink { color: var(--hanmark-blue); }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5em auto;
+  border-radius: 8px;
+}
+.hanmark-table-wrap {
+  max-width: 100%;
+  margin: 1.6em 0;
+  overflow-x: auto;
+  border: 1px solid var(--hanmark-rule);
+  border-radius: 10px;
+}
+table { width: 100%; border-collapse: collapse; table-layout: auto; }
+th, td { padding: 11px 13px; border: 1px solid var(--hanmark-rule); text-align: left; vertical-align: top; }
+th { background: var(--hanmark-navy); color: var(--hanmark-white); font-weight: 750; }
+tbody tr:nth-child(even) { background: var(--hanmark-ivory); }
+.hanmark-codeblock { max-width: 100%; margin: 1.5em 0; overflow-x: auto; }
+pre {
+  margin: 0;
+  padding: 18px 20px;
+  overflow-x: auto;
+  border-left: 5px solid var(--hanmark-blue);
+  border-radius: 6px;
+  background: #EAF1F8;
+  color: #12243D;
+  white-space: pre;
+}
+code { font-family: "D2Coding", "Consolas", "SFMono-Regular", monospace; }
+.hanmark-inline-code { padding: .12em .35em; border-radius: 4px; background: #EAF1F8; font-size: .92em; }
+mark { padding: 0 .18em; background: #DDF7F4; color: inherit; }
+hr { margin: 2.2em 0; border: 0; border-top: 2px solid var(--hanmark-rule); }
+@media (max-width: 760px) {
+  body { padding: 0; background: var(--hanmark-white); font-size: 15px; }
+  .hanmark-paper {
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 38px 20px 52px;
+    border-top-width: 6px;
+    box-shadow: none;
+  }
+  .hanmark-masthead { margin-bottom: 38px; }
+  .hanmark-masthead h1 { font-size: clamp(28px, 9vw, 38px); }
+  .hanmark-indent-4, .hanmark-indent-5, .hanmark-indent-6 { margin-left: 4.2em; }
+}
+@page { size: A4; margin: 18mm 17mm 20mm; }
+@media print {
+  html, body { background: none; }
+  body { padding: 0; font-size: 10.5pt; line-height: 1.65; }
+  .hanmark-paper {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+  .hanmark-masthead { break-after: avoid-page; }
+  .hanmark-heading { break-after: avoid-page; }
+  .hanmark-body, .hanmark-list { orphans: 3; widows: 3; }
+  .hanmark-table-wrap, table, pre, img, .hanmark-callout { break-inside: avoid; }
+  a { color: inherit; }
+}`;
+  return `<!DOCTYPE html>
+<!-- ${KAMI_ATTRIBUTION} -->
+<html lang="ko">
+${renderDocumentHead(document.title, css)}
+<body>
+<main class="hanmark-paper">
+<header class="hanmark-masthead">
+<p class="hanmark-kicker">HanMark Editorial</p>
+<h1>${document.masthead}</h1>
+<div class="hanmark-masthead-rule" aria-hidden="true"></div>
+</header>
+${document.body}
+</main>
+</body>
+</html>`;
+}
+
+export function renderStandaloneHtml(markdown: string, options: HtmlExportOptions): string {
+  return options.theme === "classic"
+    ? renderClassicStandaloneHtml(markdown, options)
+    : renderEditorialStandaloneHtml(markdown, options);
 }
 
 export function renderStandaloneHtmlBytes(
