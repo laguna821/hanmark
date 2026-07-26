@@ -117,6 +117,18 @@ test("masthead title keeps literal hash and equals characters", () => {
   assert.match(html, /<h1>C#과 A=B — <strong>강조<\/strong><\/h1>/);
 });
 
+test("large embedded images render without recursive regular-expression overflow", () => {
+  const targetBytes = 8 * 1024 * 1024;
+  let payload = `R0lGOD${"A".repeat(targetBytes - 6)}`;
+  payload += "=".repeat((4 - (payload.length % 4)) % 4);
+  const markdown = `# 큰 이미지\n\n![스크린샷](data:image/gif;base64,${payload})`;
+
+  assert.doesNotThrow(() => {
+    const html = renderStandaloneHtmlBytes(markdown, { title: "큰 이미지" });
+    assert.ok(html.byteLength > targetBytes);
+  });
+});
+
 test("Editorial callouts remove Obsidian markers while preserving safe visible text", () => {
   const markdown = [
     "# 콜아웃",

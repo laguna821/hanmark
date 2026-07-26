@@ -19,6 +19,12 @@ export interface ProcessRequest {
   args: readonly string[];
   timeoutMs?: number;
   maxBufferBytes?: number;
+  /**
+   * Exit codes that mean the requested operation was handed off successfully.
+   * Most processes use the default `[0]`; launcher-style platform utilities
+   * may document additional non-error completion codes.
+   */
+  successExitCodes?: readonly number[];
 }
 
 export interface ProcessResult {
@@ -66,6 +72,17 @@ function toError(value: unknown): Error {
     : new Error("External process failed with a non-Error reason.");
 }
 
+function checkedSuccessExitCodes(values: readonly number[] | undefined): Set<number> {
+  const codes = values ?? [0];
+  if (
+    codes.length === 0 ||
+    codes.some((code) => !Number.isInteger(code) || code < 0 || code > 255)
+  ) {
+    throw new Error("External process success exit codes are invalid.");
+  }
+  return new Set(codes);
+}
+
 /**
  * The single intentional shell-process boundary in HanMark.
  *
@@ -77,6 +94,7 @@ export const runUserProcess: UserProcessRunner = async (request, action) => {
   const executable = cleanExecutable(request.executable);
   const timeoutMs = request.timeoutMs ?? 60_000;
   const maxBufferBytes = request.maxBufferBytes ?? 20 * 1024 * 1024;
+  const successExitCodes = checkedSuccessExitCodes(request.successExitCodes);
 
   return new Promise<ProcessResult>((resolve, reject) => {
     const child = spawn(executable, [...request.args], {
@@ -126,7 +144,7 @@ export const runUserProcess: UserProcessRunner = async (request, action) => {
           reject(new Error(`External process was terminated by signal ${signal}.`));
           return;
         }
-        if (code !== 0) {
+        if (code === null || !successExitCodes.has(code)) {
           reject(new Error(stderrText || `External process exited with code ${code ?? "unknown"}.`));
           return;
         }

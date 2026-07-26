@@ -132,7 +132,10 @@ export function buildOutputRevealRequest(
       executable: "explorer.exe",
       args: ["/select,", fullPath],
       timeoutMs: 10_000,
-      maxBufferBytes: 64 * 1024
+      maxBufferBytes: 64 * 1024,
+      // Explorer is a shell broker: a successful hand-off commonly exits 1
+      // without stderr when an existing Explorer process receives the request.
+      successExitCodes: [0, 1]
     };
   }
   if (platform === "macos") {

@@ -3,6 +3,7 @@ import type {
   DocumentStyleRole,
   RoleStyleProfile
 } from "../io/documentStyle";
+import { transformMarkdownImageTokens } from "../io/markdownImageTokens";
 
 export interface HtmlPageLayout {
   widthPt: number;
@@ -81,8 +82,6 @@ function escapeAttribute(value: string): string {
 }
 
 const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
-const SAFE_RASTER_DATA_URL =
-  /^data:image\/(png|jpeg|gif|bmp);base64,([A-Za-z0-9+/]+={0,2})$/i;
 const RASTER_BASE64_SIGNATURES: Record<string, string> = {
   png: "iVBORw0KGgo",
   jpeg: "/9j/",
@@ -91,16 +90,49 @@ const RASTER_BASE64_SIGNATURES: Record<string, string> = {
 };
 
 function isStructurallyValidRasterBase64(mime: string, value: string): boolean {
-  return value.length > 0 &&
-    value.length % 4 === 0 &&
-    value.startsWith(RASTER_BASE64_SIGNATURES[mime.toLowerCase()] ?? "\u0000");
+  if (
+    value.length === 0 ||
+    value.length % 4 !== 0 ||
+    !value.startsWith(RASTER_BASE64_SIGNATURES[mime.toLowerCase()] ?? "\u0000")
+  ) {
+    return false;
+  }
+  let padding = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    const isBase64 =
+      (code >= 0x41 && code <= 0x5a) ||
+      (code >= 0x61 && code <= 0x7a) ||
+      (code >= 0x30 && code <= 0x39) ||
+      code === 0x2b ||
+      code === 0x2f;
+    if (isBase64 && padding === 0) continue;
+    if (code === 0x3d && index >= value.length - 2) {
+      padding += 1;
+      if (padding <= 2) continue;
+    }
+    return false;
+  }
+  return true;
 }
 
 function hasUnsafeControlCharacter(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0) ?? 0;
-    return code <= 0x1f || code === 0x7f;
-  });
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
+function safeRasterDataUrl(value: string): string {
+  const lower = value.slice(0, 40).toLowerCase();
+  for (const mime of Object.keys(RASTER_BASE64_SIGNATURES)) {
+    const prefix = `data:image/${mime};base64,`;
+    if (!lower.startsWith(prefix)) continue;
+    const encoded = value.slice(prefix.length);
+    return isStructurallyValidRasterBase64(mime, encoded) ? value : "";
+  }
+  return "";
 }
 
 function safeUrl(value: string, image: boolean): string {
@@ -112,10 +144,7 @@ function safeUrl(value: string, image: boolean): string {
   }
 
   if (image) {
-    const match = trimmed.match(SAFE_RASTER_DATA_URL);
-    return match && isStructurallyValidRasterBase64(match[1], match[2])
-      ? trimmed
-      : "";
+    return safeRasterDataUrl(trimmed);
   }
 
   try {
@@ -139,7 +168,7 @@ function inlineToHtml(value: string): string {
   text = text.replace(/`([^`\r\n]+)`/g, (_match, code: string) =>
     stash(`<code class="hanmark-inline-code">${escapeHtml(code)}</code>`)
   );
-  text = text.replace(/!\[([^\]]*)\]\(([^)\r\n]+)\)/g, (_match, alt: string, source: string) => {
+  text = transformMarkdownImageTokens(text, ({ alt, source }) => {
     const url = safeUrl(source, true);
     if (!url) return escapeHtml(alt);
     return stash(

@@ -8,6 +8,7 @@ import {
 } from "../src/io/outputReveal";
 import {
   createUserInitiatedAction,
+  runUserProcess,
   type ProcessRequest,
   type UserInitiatedAction
 } from "../src/legacy-port/userProcess";
@@ -67,7 +68,8 @@ test("reveal requests use fixed executables and argument arrays", () => {
       executable: "explorer.exe",
       args: ["/select,", "C:\\Vault\\Exports\\paper.hwpx"],
       timeoutMs: 10_000,
-      maxBufferBytes: 64 * 1024
+      maxBufferBytes: 64 * 1024,
+      successExitCodes: [0, 1]
     }
   );
   assert.deepEqual(
@@ -92,6 +94,30 @@ test("reveal requests use fixed executables and argument arrays", () => {
     buildOutputRevealRequest("linux", "/paper.hwpx").args[0],
     "/"
   );
+});
+
+test("process exit 1 remains an error unless a launcher explicitly accepts it", async () => {
+  const exitsOne = {
+    executable: process.execPath,
+    args: ["-e", "process.exit(1)"],
+    timeoutMs: 5_000,
+    maxBufferBytes: 64 * 1024
+  } satisfies ProcessRequest;
+
+  await assert.rejects(
+    runUserProcess(exitsOne, createUserInitiatedAction("modal")),
+    /exited with code 1/u
+  );
+
+  const accepted = await runUserProcess(
+    {
+      ...exitsOne,
+      successExitCodes: [0, 1]
+    },
+    createUserInitiatedAction("modal")
+  );
+  assert.equal(accepted.stdout.byteLength, 0);
+  assert.equal(accepted.stderr, "");
 });
 
 test("resolved reveal paths must be absolute for their platform", () => {
