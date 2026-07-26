@@ -1446,7 +1446,11 @@
 .docx-preview-loading,
 .docx-preview-error,
 .docx-preview-warning,
-.docx-preview-empty {
+.docx-preview-empty,
+.hanmark-docx-preview-loading,
+.hanmark-docx-preview-error,
+.hanmark-docx-preview-warning,
+.hanmark-docx-preview-empty {
   padding: 16px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 10px;

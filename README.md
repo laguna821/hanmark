@@ -43,7 +43,7 @@ HanMark 2.4.5 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 
 Pandoc settings appear only for DOCX. HWPX, HTML, and PDF do not read the Pandoc path. PDF delegates to Obsidian; it does not apply a HanMark HWPX or Word template.
 
-Explicitly opening Fast DOCX Preview from a HanMark button or command renders the semantic preview immediately and requests the actual Pandoc-generated package once. Pressing **Refresh** or directly selecting a preview mode is also an explicit request. Workspace restoration, view lifecycle events, typing, active-note changes, and template changes only mark an existing result as changed; they never start Pandoc. If DOCX generation is unavailable, the semantic browser preview remains visible.
+Explicitly opening Fast DOCX Preview from a HanMark button or command renders the semantic preview immediately and requests the actual Pandoc-generated package once. Pressing **Refresh** or directly selecting a preview mode is also an explicit request. Typing marks an existing result as changed; active-note and template changes refresh only the in-process semantic preview. Workspace restoration and these lifecycle events never start Pandoc. If DOCX generation is unavailable, the semantic browser preview remains visible.
 
 ### Quick start
 
@@ -154,7 +154,7 @@ HanMark 2.4.5의 HWPX 생성·가져오기·레거시 원본 수정·검증·이
 
 Pandoc 설정은 DOCX에만 표시됩니다. HWPX·HTML·PDF는 Pandoc 경로를 읽지 않습니다. PDF는 Obsidian에 위임하므로 HanMark HWPX 또는 Word 템플릿을 적용하지 않습니다.
 
-HanMark 버튼이나 명령으로 빠른 DOCX 미리보기를 직접 열면 간이 미리보기를 즉시 렌더링하고 Pandoc이 만든 실제 DOCX 패키지를 한 번 요청합니다. **새로 고침**을 누르거나 미리보기 방식을 직접 선택하는 것도 명시적인 요청입니다. 작업공간 복원, 뷰 생명주기, 입력, 활성 노트 변경과 템플릿 변경은 기존 결과를 변경된 상태로 표시할 뿐 Pandoc을 실행하지 않습니다. DOCX 생성이 불가능해도 간이 미리보기는 그대로 남습니다.
+HanMark 버튼이나 명령으로 빠른 DOCX 미리보기를 직접 열면 간이 미리보기를 즉시 렌더링하고 Pandoc이 만든 실제 DOCX 패키지를 한 번 요청합니다. **새로 고침**을 누르거나 미리보기 방식을 직접 선택하는 것도 명시적인 요청입니다. 입력은 기존 결과를 `변경됨`으로 표시하고, 활성 노트와 템플릿 변경은 프로세스 없는 간이 미리보기만 갱신합니다. 작업공간 복원과 이런 생명주기 이벤트는 Pandoc을 실행하지 않습니다. DOCX 생성이 불가능해도 간이 미리보기는 그대로 남습니다.
 
 ### 빠른 사용법
 

@@ -151,4 +151,6 @@ test("explicit UI open is wired after view creation and responsive fit is CSS-sc
     css,
     /\.docx-preview-docx \.docx-wrapper,[\s\S]*?\.hanmark-docx-preview-paper[\s\S]*?zoom:/u
   );
+  assert.match(css, /\.hanmark-docx-preview-empty/u);
+  assert.match(css, /\.hanmark-docx-preview-error/u);
 });
