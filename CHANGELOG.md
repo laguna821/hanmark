@@ -5,7 +5,7 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 2.4.5
 
 - Made an explicit Fast DOCX Preview open render the semantic document immediately and upgrade it exactly once to the actual Pandoc-generated package.
-- Kept Pandoc outside workspace restoration, view lifecycle, typing, active-document, and template-change events; those events only mark an existing preview as changed.
+- Kept Pandoc outside workspace restoration and view lifecycle events. Typing marks the result as changed, while active-document and template changes refresh only the in-process semantic preview.
 - Fitted actual DOCX pages to the available pane without changing page proportions or pagination, with bounded scaling and horizontal overflow for very narrow panes.
 - Changed new HWP, HWPX, PDF, DOCX, XLSX, and XLS imports to ordinary Markdown body content and rewritten Vault attachment links, without generated source YAML, source callouts, or round-trip source caching.
 - Removed source patching from the public export types and export center while preserving the non-overwriting compatibility path as a command-palette-only legacy command for older imported notes.
