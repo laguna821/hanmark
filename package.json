@@ -1,6 +1,6 @@
 {
   "name": "hanmark",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "No-setup Markdown export to image-inclusive HWPX and self-contained offline HTML.",
   "main": "main.js",
   "scripts": {

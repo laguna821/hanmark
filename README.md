@@ -2,7 +2,7 @@
 
 **A desktop Obsidian plugin that connects durable Markdown notes with editable Korean HWP/HWPX documents.**
 
-HanMark 2.5.0 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files and self-contained HTML requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
+HanMark 2.5.1 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files and self-contained HTML requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
 
 > Keep the source of knowledge in portable Markdown. Produce HWPX, DOCX, HTML, or PDF when an institution requires it.
 
@@ -12,8 +12,12 @@ HanMark 2.5.0 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 
 ## English
 
-### What changed in 2.5.0
+### What changed in 2.5.1
 
+- **Imported images survive the full workflow:** Korean, percent-encoded, spaced, and balanced-parenthesis paths are parsed without truncation in live HWPX preview and HWPX, DOCX, and HTML export.
+- **CMDS Eagle bridge:** imported images can stay in the Vault, be uploaded by CMDS Eagle to its active provider, or be decided per import. A disposable image-only staging note isolates the current command integration from the imported document, URL replacement is verified, and a direct R2 fallback is explicit and credential-safe.
+- **Large HTML images no longer overflow the renderer:** image destinations and base64 data are processed iteratively instead of expanding or capturing giant strings.
+- **Reliable Show in folder on Windows:** Explorer's documented handoff-style exit behavior is accepted only for that fixed launcher; other processes still require an ordinary success exit.
 - **Achmage Editorial by default:** HTML export now uses a deterministic editorial layout with a masthead, clear heading bars, readable tables, callouts, code blocks, and responsive media. The previous HanMark HTML appearance remains available as **Classic**.
 - **Offline, self-contained output:** local and remote PNG, JPEG, GIF, and BMP images are validated and embedded as data URIs. The completed HTML has no external stylesheet, font, CDN, or script dependency.
 - **Strict export boundary:** generated HTML contains a restrictive Content Security Policy, no JavaScript or event handlers, and allows ordinary links only through `http:`, `https:`, or `mailto:`.
@@ -75,7 +79,7 @@ Users who added a preview font by filesystem path in HanMark 2.4.2 may need to s
 
 ### Markdown-first import and legacy source patching
 
-HanMark imports HWP, HWPX, PDF, DOCX, XLSX, and XLS documents as ordinary Markdown. Extracted images are saved through Obsidian's attachment policy and links are rewritten to their real Vault paths. New imports contain the parsed document body and attachment links only; HanMark does not prepend source YAML or a source-path callout and does not cache the original solely for a future round trip.
+HanMark imports HWP, HWPX, PDF, DOCX, XLSX, and XLS documents as ordinary Markdown. Extracted images can stay as Vault attachments, be sent to the active CMDS Eagle cloud provider, or be decided on each import. The CMDS Eagle path first uses a public workspace bridge and then its registered active-note conversion command. The compatibility command runs only on a disposable staging note containing each unique image once; verified HTTPS URLs are token-patched into the latest imported Markdown, so CMDS never rewrites the document body. HanMark rechecks the staging target immediately before dispatch and never reads CMDS Eagle's private settings or credentials. Once a remote upload may have started, HanMark does not cascade the same unresolved image into another uploader. An optional direct R2 fallback uses user-entered Worker and Public URLs and asks for the API key without saving it; the key is retained for the session only after a successful authenticated upload. New imports contain the parsed document body and image links only; HanMark does not prepend source YAML or a source-path callout and does not cache the original solely for a future round trip.
 
 For compatible notes imported by an earlier HanMark release, the command-palette-only **고급·레거시: 원본 형식 보존 수정본 만들기** command remains available. It always creates a separate output file and never overwrites the original HWP/HWPX. A separate migration command can create a clean Markdown sibling from HanMark's older generated metadata while preserving user-authored YAML and ordinary callouts.
 
@@ -88,12 +92,12 @@ For compatible notes imported by an earlier HanMark release, the command-palette
 - HTML intentionally excludes SVG, WebP, video, iframe, script, event-handler, raw user CSS, external font, and CDN resources. Ordinary links are limited to `http:`, `https:`, and `mailto:`.
 - The generated HTML Content Security Policy is `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`.
 - PDF uses Obsidian's native PDF export and print styles. It is not rendered through a HanMark HWPX template.
-- HanMark 2.5.0 is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
+- HanMark 2.5.1 is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
 - Optional OCR/ML components such as Sharp, ONNX, and PDFium are not loaded by the plugin startup bundle.
 
 ### Privacy and capabilities
 
-- **Network:** HanMark makes an outbound request only when a user previews or exports Markdown containing an HTTP(S) image. It requests the exact image URL present in the note. No other document content is uploaded. Achmage Editorial embeds a validated result into the saved HTML, which makes that output independent of the network after export.
+- **Network:** HanMark requests the exact HTTP(S) image URL present in a note only when the user previews or exports that note. If the user explicitly selects CMDS Eagle's active cloud for imported images, the extracted image bytes are uploaded through CMDS Eagle's configured provider; only when that bridge is unavailable and the user has configured the optional fallback does HanMark send those image bytes to the entered HTTPS Worker URL. No document text is uploaded. The fallback API key is cached in memory only after a successful authenticated upload, cleared after an authentication rejection, and never written to HanMark settings. Achmage Editorial embeds validated images into the saved HTML, which makes that output independent of the network after export.
 - **Files:** HanMark reads Vault attachments and files explicitly selected by the user. It writes imported attachments and user-requested export files through Obsidian Vault and browser file APIs. New imports do not cache the original source. If the user invokes the legacy source-patching command for an older imported note, HanMark may ask for the original again and stores only the private data required for that explicit compatibility action; it never overwrites the original.
 - **External programs:** HWPX and HTML use no external converter. PDF delegates to Obsidian's built-in PDF command. A user-configured Pandoc executable can run only after an explicit DOCX export, an explicit Fast DOCX Preview open, **Refresh**, or direct preview-mode selection. Workspace restoration, view lifecycle events, typing, active-note changes, and template changes never start Pandoc. Optional Windows Word-to-PDF preview invokes Word only after a corresponding explicit preview request. For a newly saved Vault result, **Show in folder** can start the operating system's file manager with that result selected, only after the user clicks the button.
 - **Clipboard and dynamic execution:** HanMark does not read or write the clipboard and does not evaluate downloaded or generated JavaScript.
@@ -109,6 +113,9 @@ Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](
 npm ci --omit=optional
 npm run check
 ```
+
+The public, credential-free CMDS Eagle interoperability contract is documented
+in [`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md).
 
 `npm run check` runs the official Obsidian ESLint rules, adapter/template/HWPX and characterization tests, TypeScript compilation, the production build, bundle-size/native-module guards, Community review guards, and release consistency checks. See [CONTRIBUTING.md](CONTRIBUTING.md) for the preserved-version branch policy.
 
@@ -126,10 +133,14 @@ npm run check
 
 **Obsidian Markdown과 편집 가능한 한글 HWP/HWPX를 잇는 데스크톱 플러그인입니다.**
 
-HanMark 2.5.0의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX와 독립형 HTML을 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
+HanMark 2.5.1의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX와 독립형 HTML을 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
 
-### 2.5.0 핵심 변화
+### 2.5.1 핵심 변화
 
+- **가져온 이미지의 전체 경로 보존:** 한글·공백·`%20`·균형 괄호가 섞인 이미지 경로를 잘라 먹지 않아 HWPX 라이브 미리보기와 HWPX·DOCX·HTML 내보내기까지 이어집니다.
+- **CMDS Eagle 브리지:** 가져온 이미지를 Vault에 두거나, CMDS Eagle의 현재 제공자로 업로드하거나, 매번 선택할 수 있습니다. 현재 명령 연동은 이미지 전용 임시 스테이징 노트로 원문과 격리하고 URL 교체를 실제로 검증하며, 직접 R2 폴백은 명시적으로만 안전하게 작동합니다.
+- **대형 HTML 이미지 스택 오류 수정:** 거대한 이미지 목적지와 base64 문자열을 배열로 펼치거나 통째로 캡처하지 않고 반복형 스캐너로 처리합니다.
+- **Windows 파일 위치 보기 복구:** 고정된 Explorer 실행기의 전달 완료 종료코드만 허용하고 다른 외부 프로세스의 성공 판정은 그대로 엄격하게 유지합니다.
 - **Achmage Editorial 기본 적용:** HTML 내보내기에 마스트헤드, 분명한 제목 막대, 읽기 쉬운 표·콜아웃·코드 블록과 반응형 미디어를 갖춘 결정론적 편집 디자인을 기본 적용합니다. 이전 HanMark HTML 외형은 **Classic**으로 계속 선택할 수 있습니다.
 - **오프라인 독립형 결과:** 로컬·원격 PNG·JPEG·GIF·BMP 이미지를 검증해 data URI로 포함합니다. 완성된 HTML은 외부 스타일시트, 글꼴, CDN 또는 스크립트에 의존하지 않습니다.
 - **엄격한 내보내기 경계:** 생성된 HTML에 제한적인 Content Security Policy를 넣고 JavaScript·이벤트 핸들러를 배제하며 일반 링크는 `http:`, `https:`, `mailto:`만 허용합니다.
@@ -191,7 +202,7 @@ HanMark 2.4.2에서 파일 시스템 경로로 미리보기 글꼴을 추가한 
 
 ### Markdown 우선 가져오기와 레거시 원본 수정
 
-HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 가져옵니다. 추출된 이미지는 Obsidian 첨부 정책에 따라 저장하고 실제 Vault 경로로 링크를 다시 씁니다. 새 가져오기 노트에는 파싱된 문서 본문과 첨부 링크만 들어가며, HanMark가 원본 YAML이나 원본 경로 콜아웃을 앞에 붙이지 않고 향후 왕복만을 위해 원본을 캐시하지도 않습니다.
+HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 가져옵니다. 추출된 이미지는 Vault 첨부 파일로 두거나, CMDS Eagle의 현재 클라우드 제공자로 보내거나, 가져올 때마다 선택할 수 있습니다. CMDS Eagle 경로는 공개 워크스페이스 브리지를 먼저 시도하고 현재 버전에서는 서로 다른 이미지 링크를 한 번씩만 담은 전용 임시 스테이징 노트에서 등록 명령을 실행합니다. 검증된 HTTPS URL만 최신 Markdown의 이미지 토큰에 적용하므로 CMDS가 가져온 문서 본문을 다시 쓰지 않습니다. 명령 실행 직전에 대상 스테이징 노트를 다시 확인하고, 원격 업로드가 시작됐을 가능성이 있으면 같은 이미지를 다른 업로더로 연쇄 전송하지 않아 중복을 막습니다. HanMark가 CMDS Eagle의 비공개 설정이나 자격증명을 읽지는 않습니다. 선택적 직접 R2 폴백은 사용자가 입력한 Worker/Public URL만 저장하고 API 키는 인증 업로드가 성공한 뒤에만 현재 Obsidian 세션 메모리에 보관하며 인증 거절 시 지웁니다. 새 가져오기 노트에는 파싱된 문서 본문과 이미지 링크만 들어가며, HanMark가 원본 YAML이나 원본 경로 콜아웃을 앞에 붙이지 않고 향후 왕복만을 위해 원본을 캐시하지도 않습니다.
 
 이전 HanMark 버전으로 가져온 호환 노트에는 명령 팔레트 전용 **고급·레거시: 원본 형식 보존 수정본 만들기**를 계속 제공합니다. 이 명령은 항상 별도 결과 파일을 만들고 원본 HWP/HWPX를 덮어쓰지 않습니다. 별도의 마이그레이션 명령은 사용자가 작성한 YAML과 일반 콜아웃을 보존하면서 HanMark가 예전에 생성한 메타데이터만 제거한 깨끗한 Markdown 형제 노트를 만듭니다.
 
@@ -204,12 +215,12 @@ HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 가져옵니다.
 - HTML은 SVG·WebP·동영상·iframe·스크립트·이벤트 핸들러·사용자 원시 CSS·외부 글꼴·CDN 자원을 의도적으로 제외합니다. 일반 링크는 `http:`, `https:`, `mailto:`만 허용합니다.
 - 생성된 HTML의 Content Security Policy는 `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`입니다.
 - PDF는 Obsidian 기본 PDF 내보내기와 인쇄 스타일을 사용합니다. HanMark HWPX 템플릿으로 렌더링하는 기능이 아닙니다.
-- HanMark 2.5.0은 데스크톱 전용이며 모바일 Obsidian은 지원하지 않습니다. 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
+- HanMark 2.5.1은 데스크톱 전용이며 모바일 Obsidian은 지원하지 않습니다. 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
 - Sharp, ONNX, PDFium 같은 선택적 OCR·ML 구성요소는 플러그인 시작 번들에서 불러오지 않습니다.
 
 ### 개인정보와 접근 권한
 
-- **네트워크:** 사용자가 HTTP(S) 이미지가 포함된 Markdown을 미리보거나 내보낼 때만 노트에 적힌 해당 이미지 URL로 요청합니다. 다른 문서 내용은 업로드하지 않습니다. Achmage Editorial은 검증된 결과를 저장할 HTML 안에 포함하므로 내보낸 뒤에는 네트워크가 필요하지 않습니다.
+- **네트워크:** 사용자가 HTTP(S) 이미지가 포함된 노트를 미리보거나 내보낼 때만 노트에 적힌 해당 이미지 URL로 요청합니다. 가져온 이미지에 대해 사용자가 명시적으로 CMDS Eagle 현재 클라우드를 선택하면 추출된 이미지 바이트를 CMDS Eagle의 현재 제공자를 통해 업로드합니다. 그 브리지를 사용할 수 없고 사용자가 선택적 폴백을 설정한 경우에만 입력한 HTTPS Worker URL로 이미지 바이트를 보냅니다. 문서 본문은 업로드하지 않으며 폴백 API 키는 인증 업로드가 성공한 뒤에만 현재 Obsidian 세션 메모리에 보관하고 인증 거절 시 지우며 HanMark 설정에는 기록하지 않습니다. Achmage Editorial은 검증된 이미지를 저장할 HTML 안에 포함하므로 내보낸 뒤에는 네트워크가 필요하지 않습니다.
 - **파일:** Vault 첨부 파일과 사용자가 직접 선택한 파일을 읽습니다. 가져온 첨부 파일과 사용자가 요청한 결과 파일은 Obsidian Vault와 브라우저 파일 API로 저장합니다. 새 가져오기는 원본을 캐시하지 않습니다. 사용자가 예전 가져오기 노트에서 레거시 원본 수정 명령을 직접 실행한 경우에는 원본을 다시 선택하라고 요청할 수 있고 해당 호환 동작에 필요한 비공개 데이터만 저장합니다. 원본은 절대 덮어쓰지 않습니다.
 - **외부 프로그램:** HWPX와 HTML은 외부 변환기를 사용하지 않습니다. PDF는 Obsidian 기본 PDF 명령에 위임합니다. 사용자가 지정한 Pandoc은 명시적인 DOCX 내보내기, 빠른 DOCX 미리보기 직접 열기, **새로 고침**, 또는 사용자가 직접 미리보기 방식을 선택했을 때만 실행합니다. 작업공간 복원, 뷰 생명주기, 입력, 활성 노트 변경과 템플릿 변경은 Pandoc을 실행하지 않습니다. Windows Word-to-PDF 미리보기 역시 해당 미리보기 동작을 직접 요청한 뒤에만 Word를 호출합니다. 방금 저장한 Vault 결과의 **파일 위치 보기**는 사용자가 버튼을 누른 경우에만 운영체제 파일 관리자를 실행해 해당 파일을 선택합니다.
 - **클립보드와 동적 실행:** 클립보드를 읽거나 쓰지 않으며 다운로드하거나 생성한 JavaScript를 동적으로 실행하지 않습니다.
@@ -225,6 +236,9 @@ HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 가져옵니다.
 npm ci --omit=optional
 npm run check
 ```
+
+CMDS Eagle와 자격증명을 공유하지 않는 공개 연동 계약은
+[`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md)에 정리되어 있습니다.
 
 `npm run check`는 공식 Obsidian ESLint, Markdown 어댑터·템플릿·HWPX 및 특성 보존 테스트, TypeScript 컴파일, 프로덕션 빌드, 번들 크기·네이티브 모듈 검사, Community 심사 게이트와 Release 일치 검사를 실행합니다. 버전 브랜치 보존 원칙은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하십시오.
 

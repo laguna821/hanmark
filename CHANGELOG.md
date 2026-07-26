@@ -2,6 +2,17 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.5.1
+
+- Replaced truncating Markdown image regular expressions with a shared iterative scanner that supports Korean, percent-encoded spaces, angle destinations, escaped characters, and balanced parentheses.
+- Kept imported Vault images available to HWPX live preview and HWPX, DOCX, and HTML export; new local imports use unambiguous Vault-root wiki embeds.
+- Added Vault, CMDS Eagle's active cloud provider, and ask-every-import image destinations, with an optional direct R2 fallback.
+- Added a credential-free CMDS Eagle workspace-event contract and a verified compatibility bridge through `cmds-eagle:convert-all-to-cloud`; HanMark never reads CMDS Eagle private settings or credentials.
+- Added an optional HTTPS R2 Worker fallback. Worker/Public URLs are user configured, while the API key remains in memory for the current Obsidian session and is never persisted.
+- Removed giant image-string spreading and full-payload regular-expression captures from the standalone HTML renderer, preventing Electron-dependent `Maximum call stack size exceeded` failures.
+- Accepted Windows Explorer's handoff exit code only for the fixed Show-in-folder launcher while preserving strict exit handling for every other process.
+- Preserved Kordoc 4.2.5 HWPX generation, templates, Achmage Editorial and Classic HTML, optional Pandoc DOCX, PDF delegation, toolbar editing, and existing command IDs.
+
 ## 2.5.0
 
 - Added **Achmage Editorial** as the default HTML export theme while preserving the previous output as the selectable **Classic** compatibility theme.
@@ -91,6 +102,17 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.5.1
+
+- 이미지 Markdown 정규식을 공통 반복형 스캐너로 교체해 한글, `%20` 공백, 꺾쇠 목적지, 이스케이프 문자와 균형 괄호가 섞인 경로를 끝까지 보존합니다.
+- 불러온 Vault 이미지를 HWPX 라이브 미리보기와 HWPX·DOCX·HTML 내보내기에서 계속 사용할 수 있게 했고, 새 로컬 가져오기는 모호하지 않은 Vault 루트 위키 임베드를 사용합니다.
+- 가져온 이미지 저장 방식을 Vault, CMDS Eagle 현재 클라우드, 매번 묻기 중에서 선택할 수 있게 하고 선택적 직접 R2 폴백을 추가했습니다.
+- 자격증명을 공유하지 않는 CMDS Eagle 워크스페이스 이벤트 계약과 `cmds-eagle:convert-all-to-cloud` 등록 명령을 통한 검증형 호환 브리지를 추가했습니다. HanMark는 CMDS Eagle의 비공개 설정이나 자격증명을 읽지 않습니다.
+- 선택적 HTTPS R2 Worker 폴백을 추가했습니다. Worker/Public URL만 사용자가 설정하며 API 키는 현재 Obsidian 세션의 메모리에만 두고 저장하지 않습니다.
+- 독립형 HTML 렌더러에서 거대한 이미지 문자열 펼치기와 전체 payload 정규식 캡처를 제거해 Electron 환경의 `Maximum call stack size exceeded` 오류를 막았습니다.
+- Windows Explorer의 전달 완료 종료코드만 고정된 파일 위치 보기 실행기에 한해 허용하고 다른 프로세스의 종료 판정은 그대로 엄격하게 유지했습니다.
+- Kordoc 4.2.5 HWPX 생성, 템플릿, Achmage Editorial·Classic HTML, 선택적 Pandoc DOCX, PDF 위임, 툴바 편집과 기존 명령 ID를 보존했습니다.
 
 ### 2.5.0
 

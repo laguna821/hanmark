@@ -2,7 +2,7 @@ name: Publish verified plugin
 
 on:
   push:
-    tags: ["2.5.0"]
+    tags: ["2.5.1"]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -74,5 +74,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           release/main.js release/manifest.json release/styles.css
           --verify-tag
-          --title "HanMark 2.5.0 — Achmage Editorial HTML / Achmage Editorial HTML"
-          --notes-file "release-notes/2.5.0.md"
+          --title "HanMark 2.5.1 — Reliable images & CMDS Eagle bridge / 안정적인 이미지·CMDS Eagle 연동"
+          --notes-file "release-notes/2.5.1.md"
