@@ -1,9 +1,11 @@
 import {
   FileSystemAdapter,
   MarkdownView,
+  Modal,
   Notice,
   Platform,
   Plugin,
+  type App,
   type Editor,
   type WorkspaceLeaf
 } from "obsidian";
@@ -33,11 +35,16 @@ import {
   extractEditableBodyStrict,
   readSourceContract
 } from "./io/frontmatter";
+import {
+  prepareSelfContainedHtmlMarkdown
+} from "./io/htmlExportService";
+import type { ImageFailure } from "./io/imageAssets";
 import { importDocument } from "./io/kordocImport";
 import {
   createCleanLegacyImportCopy,
   hasHanmarkSourceMetadata
 } from "./io/legacyImportMigration";
+import { createObsidianImageLoader } from "./io/obsidianImageLoader";
 import {
   exportKordocHwpx,
   exportKordocHwpxWithOutcome,
@@ -98,6 +105,68 @@ interface AppWithCommands {
   commands: CommandManager;
 }
 
+type HtmlImageFailureAction = "retry" | "continue" | "cancel";
+
+function chooseHtmlImageFailureAction(
+  app: App,
+  failures: ImageFailure[]
+): Promise<HtmlImageFailureAction> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (action: HtmlImageFailureAction): void => {
+      if (resolved) return;
+      resolved = true;
+      resolve(action);
+    };
+    const modal = new Modal(app);
+    modal.titleEl.setText(`HTML 이미지 ${failures.length}개를 포함하지 못했습니다`);
+    modal.contentEl.createEl("p", {
+      text: "네트워크 또는 첨부 경로를 확인해 다시 시도하거나, 해당 위치를 누락 안내로 바꾸어 계속할 수 있습니다. 실패한 외부 주소는 HTML에 남지 않습니다."
+    });
+    const list = modal.contentEl.createEl("ul");
+    for (const failure of failures.slice(0, 10)) {
+      list.createEl("li", {
+        text: `${failure.alt || failure.source || "이미지"}: ${failure.message}`
+      });
+    }
+    if (failures.length > 10) {
+      modal.contentEl.createEl("p", {
+        text: `외 ${failures.length - 10}개`
+      });
+    }
+    const controls = modal.contentEl.createDiv({
+      cls: "hanmark-export-secondary-actions"
+    });
+    const retry = controls.createEl("button", {
+      text: "다시 시도",
+      cls: "mod-cta",
+      attr: { type: "button" }
+    });
+    retry.onclick = () => {
+      finish("retry");
+      modal.close();
+    };
+    const continueButton = controls.createEl("button", {
+      text: "누락 표시로 계속",
+      attr: { type: "button" }
+    });
+    continueButton.onclick = () => {
+      finish("continue");
+      modal.close();
+    };
+    const cancel = controls.createEl("button", {
+      text: "취소",
+      attr: { type: "button" }
+    });
+    cancel.onclick = () => {
+      finish("cancel");
+      modal.close();
+    };
+    modal.onClose = () => finish("cancel");
+    modal.open();
+  });
+}
+
 function runtimePlatform(): HanmarkRuntimePlatform {
   if (Platform.isWin) return "windows";
   if (Platform.isMacOS) return "macos";
@@ -113,7 +182,7 @@ function registerHeadingCommand(plugin: Plugin, level: number): void {
 }
 
 /**
- * HanMark 2.4.5 runtime.
+ * HanMark 2.5.0 runtime.
  *
  * HWPX is generated in-process by Kordoc. The single external process boundary
  * is used only after an explicit user action: optional Pandoc/Word conversion
@@ -234,7 +303,12 @@ export default class HanmarkPlugin extends Plugin {
       settings: migrationInput
     });
     this.settings = normalizeHanmarkSettings(migrationInput, runtimePlatform());
-    if (migrated) await this.saveData(this.settings);
+    if (
+      migrated ||
+      migrationInput.settingsVersion !== this.settings.settingsVersion
+    ) {
+      await this.saveData(this.settings);
+    }
   }
 
   private registerViews(): void {
@@ -451,6 +525,17 @@ export default class HanmarkPlugin extends Plugin {
             ? "HanMark 기본 Word 템플릿"
             : this.settings.activeWordTemplateId,
         openPandocSettings: () => this.openPluginSettings(),
+        activeHtmlTheme: () => this.settings.htmlExportTheme,
+        setHtmlTheme: async (theme) => {
+          const previous = this.settings.htmlExportTheme;
+          this.settings.htmlExportTheme = theme;
+          try {
+            await this.saveSettings();
+          } catch (error) {
+            this.settings.htmlExportTheme = previous;
+            throw error;
+          }
+        },
         exportPdf: async () => this.delegatePdfExport(),
         revealOutput: (outcome) => this.revealExportOutput(outcome),
         applySkin: (root) => applyToolbarSkin(root, this.settings)
@@ -492,28 +577,80 @@ export default class HanmarkPlugin extends Plugin {
       }
     }
 
-    const bytes = renderStandaloneHtmlBytes(
-      extractEditableBodyStrict(source.markdown),
-      {
-        title: source.title,
-        documentStyle: activeDocumentStyle(this)
+    const view = this.currentMarkdownView();
+    if (!view?.file) {
+      new Notice("HTML로 내보낼 Markdown 문서를 여세요.");
+      return null;
+    }
+    const body = extractEditableBodyStrict(source.markdown);
+    const progress = new Notice("HTML 이미지를 독립형 파일에 포함하는 중…", 0);
+    try {
+      let prepared: Awaited<
+        ReturnType<typeof prepareSelfContainedHtmlMarkdown>
+      >;
+      while (true) {
+        prepared = await prepareSelfContainedHtmlMarkdown(body, {
+          loader: createObsidianImageLoader(this.app, view.file),
+          onProgress: (imageProgress) => {
+            progress.setMessage(
+              `HTML 이미지 처리 중 ${imageProgress.completed}/${
+                imageProgress.total
+              } · ${imageProgress.status === "embedded" ? "포함" : "실패"}`
+            );
+          }
+        });
+        if (!prepared.failures.length) break;
+        progress.setMessage("일부 이미지를 독립형 HTML에 포함하지 못했습니다.");
+        const action = await chooseHtmlImageFailureAction(
+          this.app,
+          prepared.failures
+        );
+        if (action === "cancel") {
+          return { format: "html", status: "cancelled" };
+        }
+        if (action === "continue") break;
+        progress.setMessage("HTML 이미지를 다시 불러오는 중…");
       }
-    );
-    const saved = source.sourcePath
-      ? await this.gateway.saveVaultSibling(
-          bytes,
-          `${source.title}_html.html`,
-          source.sourcePath
-        )
-      : await this.gateway.saveFile(bytes, `${source.title}_html.html`);
-    if (!saved.cancelled) new Notice(`HTML 저장 완료: ${saved.displayPath}`);
-    return {
-      format: "html",
-      status: saved.cancelled ? "cancelled" : "saved",
-      fileName: saved.fileName,
-      displayPath: saved.displayPath,
-      vaultPath: saved.vaultPath
-    };
+      progress.setMessage("독립형 HTML을 저장하는 중…");
+      const bytes = renderStandaloneHtmlBytes(prepared.markdown, {
+        title: source.title,
+        documentStyle: activeDocumentStyle(this),
+        theme: this.settings.htmlExportTheme
+      });
+      const saved = source.sourcePath
+        ? await this.gateway.saveVaultSibling(
+            bytes,
+            `${source.title}_html.html`,
+            source.sourcePath
+          )
+        : await this.gateway.saveFile(bytes, `${source.title}_html.html`);
+      if (!saved.cancelled) {
+        new Notice(`HTML 저장 완료: ${saved.displayPath}`);
+      }
+      const warnings: string[] = [];
+      if (prepared.embeddedCount) {
+        warnings.push(
+          `이미지 ${prepared.embeddedCount}개 포함${
+            prepared.embeddedOccurrences > prepared.embeddedCount
+              ? ` (${prepared.embeddedOccurrences}곳 배치)`
+              : ""
+          }`
+        );
+      }
+      if (prepared.failures.length) {
+        warnings.push(`이미지 ${prepared.failures.length}개 누락 표시`);
+      }
+      return {
+        format: "html",
+        status: saved.cancelled ? "cancelled" : "saved",
+        fileName: saved.fileName,
+        displayPath: saved.displayPath,
+        vaultPath: saved.vaultPath,
+        warnings
+      };
+    } finally {
+      progress.hide();
+    }
   }
 
   private delegatePdfExport(): HanmarkExportOutcome | null {

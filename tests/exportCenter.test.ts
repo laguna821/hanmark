@@ -144,4 +144,24 @@ describe("HanMark unified export center", () => {
       /(?:from\s+|require\()\s*["']electron["']|showItemInFolder|electron\.shell/u
     );
   });
+
+  it("routes HTML through the self-contained image service and selected theme", async () => {
+    const { modal, main } = await exportSources();
+    const imageService = await readFile(
+      "src/io/htmlExportService.ts",
+      "utf8"
+    );
+
+    assert.match(main, /prepareSelfContainedHtmlMarkdown\(body,/u);
+    assert.match(main, /createObsidianImageLoader\(this\.app, view\.file\)/u);
+    assert.match(main, /theme: this\.settings\.htmlExportTheme/u);
+    assert.match(main, /"retry" \| "continue" \| "cancel"/u);
+    assert.match(main, /실패한 외부 주소는 HTML에 남지 않습니다/u);
+    assert.match(modal, /Achmage Editorial \(권장\)/u);
+    assert.match(modal, /Classic \(기존 스타일\)/u);
+    assert.match(imageService, /maxImages: 100/u);
+    assert.match(imageService, /maxImageBytes: 20 \* 1024 \* 1024/u);
+    assert.match(imageService, /maxTotalBytes: 200 \* 1024 \* 1024/u);
+    assert.match(imageService, /concurrency: 4/u);
+  });
 });

@@ -37,3 +37,13 @@ test("settings UI exposes clear Achmage Editorial and Classic choices", async ()
   assert.match(source, /Classic \(기존 스타일\)/u);
   assert.doesNotMatch(source, /innerHTML/u);
 });
+
+test("plugin load persists the settings version migration", async () => {
+  const source = await readFile("src/main.ts", "utf8");
+
+  assert.match(
+    source,
+    /migrationInput\.settingsVersion !== this\.settings\.settingsVersion/u
+  );
+  assert.match(source, /await this\.saveData\(this\.settings\)/u);
+});

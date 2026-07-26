@@ -5,6 +5,7 @@ import {
   type HanmarkExportOutcome,
   type HwpxExportVariant
 } from "../io/exportTypes";
+import type { HtmlExportTheme } from "../legacy-port/settings";
 import { errorMessage } from "../utils/errors";
 
 type HanmarkExportActionResult =
@@ -34,6 +35,8 @@ export interface HanmarkExportActions {
   openDocxPreview?: () => Promise<void>;
   activeWordTemplateName?: () => string;
   openPandocSettings?: () => void;
+  activeHtmlTheme?: () => HtmlExportTheme;
+  setHtmlTheme?: (theme: HtmlExportTheme) => Promise<void>;
   exportPdf?: () => Promise<HanmarkExportActionResult>;
   revealOutput?: (
     result: HanmarkExportOutcome
@@ -461,6 +464,42 @@ export class HanmarkExportModal extends Modal {
     root.createEl("p", {
       text: "현재 문서를 이미지가 포함된 독립형 HTML 파일로 저장합니다. 설치가 필요 없고 모바일 브라우저에서 읽기 좋습니다."
     });
+    if (this.actions.activeHtmlTheme && this.actions.setHtmlTheme) {
+      const option = root.createDiv({ cls: "hanmark-export-option-row" });
+      const label = option.createEl("label", {
+        text: "HTML 테마",
+        attr: { for: "hanmark-export-html-theme" }
+      });
+      label.addClass("hanmark-export-field-label");
+      const select = option.createEl("select", {
+        attr: { id: "hanmark-export-html-theme" }
+      });
+      select.createEl("option", {
+        value: "achmage-editorial",
+        text: "Achmage Editorial (권장)"
+      });
+      select.createEl("option", {
+        value: "classic",
+        text: "Classic (기존 스타일)"
+      });
+      select.value = this.actions.activeHtmlTheme();
+      select.disabled = this.busy;
+      select.onchange = async () => {
+        const theme: HtmlExportTheme =
+          select.value === "classic" ? "classic" : "achmage-editorial";
+        try {
+          await this.actions.setHtmlTheme?.(theme);
+        } catch (error: unknown) {
+          select.value = this.actions.activeHtmlTheme?.() ?? "achmage-editorial";
+          new Notice(
+            errorMessage(error, "HTML 테마 설정을 저장하지 못했습니다.")
+          );
+        }
+      };
+      option.createEl("small", {
+        text: "Achmage Editorial은 화면·모바일·인쇄에 맞춘 기본 테마이며, Classic은 이전 HanMark HTML 모양을 유지합니다."
+      });
+    }
   }
 
   private renderPdfDetail(root: HTMLElement): void {
