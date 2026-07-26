@@ -31,6 +31,7 @@ const check = (scope, content, pattern, message) => {
 };
 
 for (const [path, content] of sourceEntries) {
+  const normalizedPath = path.replaceAll("\\", "/");
   check(
     path,
     content,
@@ -48,10 +49,24 @@ for (const [path, content] of sourceEntries) {
   check(
     path,
     content,
+    /\.innerHTML\b|\.srcdoc\b|renderAltChunks\s*:\s*true/u,
+    "HTML string insertion and DOCX altChunk rendering are forbidden"
+  );
+  check(
+    path,
+    content,
     /(?:from\s*|import\s*\(|require\s*\()\s*["'](?:node:)?fs(?:\/promises)?["']/u,
     "direct Node filesystem access is forbidden"
   );
   check(path, content, /\bconsole\.log\s*\(/u, "production console.log is forbidden");
+  if (normalizedPath !== "src/legacy-port/userProcess.ts") {
+    check(
+      path,
+      content,
+      /(?:from\s*|import\s*\(|require\s*\()\s*["'](?:node:)?child_process["']/u,
+      "process execution is only allowed through the userProcess boundary"
+    );
+  }
 }
 
 check(
@@ -69,6 +84,12 @@ check(
 check(
   "main.js",
   bundle,
+  /\bclipboardData\b|\.addEventListener\(\s*["'](?:copy|cut|paste)["']/u,
+  "unused PDF annotation-editor clipboard access leaked into the bundle"
+);
+check(
+  "main.js",
+  bundle,
   /(?<![\w$.])(?:atob|btoa)\s*\(/u,
   "bare browser base64 APIs leaked into the bundle"
 );
@@ -81,9 +102,28 @@ check(
 check(
   "main.js",
   bundle,
+  /\.innerHTML\b|\.srcdoc\b|renderAltChunks\s*:\s*true/u,
+  "HTML string insertion or DOCX altChunk rendering leaked into the bundle"
+);
+check(
+  "main.js",
+  bundle,
   /require\s*\(\s*["'](?:node:)?fs(?:\/promises)?["']\s*\)/u,
   "direct Node filesystem access leaked into the bundle"
 );
+check(
+  "main.js",
+  bundle,
+  /require\(\s*["']child_process["']\s*\)|\bexecFileSync\b|HWPFrame\.HwpObject/u,
+  "Kordoc's unreachable COM process fallback leaked into the bundle"
+);
+const processBoundaries =
+  bundle.match(/require\(\s*["']node:child_process["']\s*\)/gu) ?? [];
+if (processBoundaries.length !== 1) {
+  findings.push(
+    `main.js: expected one user-initiated process boundary, found ${processBoundaries.length}`
+  );
+}
 check("styles.css", css, /!\s*important\b/iu, "CSS declarations must not use !important");
 
 try {
@@ -98,5 +138,5 @@ if (findings.length > 0) {
 }
 
 console.log(
-  "Community gate passed: no dynamic evaluation, script injection, clipboard/base64 API, direct filesystem access, legacy runtime, or CSS !important."
+  "Community gate passed: no dynamic evaluation, script injection, PDF clipboard path, unapproved process/filesystem access, legacy runtime, or CSS !important."
 );
