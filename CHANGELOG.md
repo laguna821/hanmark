@@ -2,6 +2,15 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.4.4
+
+- Fixed Pandoc DOCX export and actual-package preview by removing leading Obsidian YAML frontmatter and the generated source callout before Markdown line normalization.
+- Added BOM/CRLF-safe frontmatter parsing, preserved YAML examples inside fenced code, and reported an actionable error for an unclosed leading frontmatter block.
+- Replaced the tabbed/scrolling export form with one responsive 2×2 HWPX, DOCX, HTML, and PDF format grid using the active toolbar palette.
+- Delegated PDF to Obsidian's native PDF export command and clearly separated its print-style output from HanMark HWPX and Word templates.
+- Kept completed Vault exports visible with their result path and added an explicit-click **Show in folder** action for newly written Vault files.
+- Preserved existing command IDs, template systems, Kordoc 4.2.5 HWPX behavior, optional Pandoc DOCX behavior, and the 2.4.3 Community review safeguards.
+
 ## 2.4.3
 
 - Preserved the 2.4.2 HWPX, image, template, toolbar, HTML, and optional Pandoc DOCX behavior while replacing the untyped legacy compatibility runtime with typed modules.
@@ -60,6 +69,15 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.4.4
+
+- Markdown 줄 정규화 전에 Obsidian YAML 프런트매터와 생성된 원본 안내 콜아웃을 제거해 Pandoc DOCX 내보내기와 실제 패키지 미리보기를 복구했습니다.
+- BOM·CRLF에 안전한 프런트매터 처리를 추가하고 코드 펜스 안의 YAML 예제를 보존하며, 닫히지 않은 선두 프런트매터에는 해결 방법이 포함된 오류를 표시합니다.
+- 탭과 긴 스크롤 방식의 내보내기 화면을 현재 툴바 팔레트를 따르는 반응형 2×2 HWPX·DOCX·HTML·PDF 형식 그리드로 교체했습니다.
+- PDF를 Obsidian 기본 PDF 내보내기 명령에 위임하고, 해당 인쇄 스타일 결과가 HanMark HWPX·Word 템플릿 변환이 아님을 명확히 했습니다.
+- 완료된 Vault 내보내기의 결과 경로를 창에 유지하고, 방금 저장한 Vault 파일에 한해 사용자가 직접 누르는 **파일 위치 보기**를 추가했습니다.
+- 기존 명령 ID, 템플릿 시스템, Kordoc 4.2.5 HWPX 동작, 선택적 Pandoc DOCX와 2.4.3 Community 심사 안전장치를 유지했습니다.
 
 ### 2.4.3
 

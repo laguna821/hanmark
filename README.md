@@ -2,9 +2,9 @@
 
 **A desktop Obsidian plugin that connects durable Markdown notes with editable Korean HWP/HWPX documents.**
 
-HanMark 2.4.3 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
+HanMark 2.4.4 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
 
-> Keep the source of knowledge in portable Markdown. Produce the HWPX, DOCX, or HTML that an institution requires when you need it.
+> Keep the source of knowledge in portable Markdown. Produce HWPX, DOCX, HTML, or PDF when an institution requires it.
 
 [English](#english) · [한국어](#한국어)
 
@@ -12,16 +12,13 @@ HanMark 2.4.3 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 
 ## English
 
-### What changed in 2.4.3
+### What changed in 2.4.4
 
-- **Same document features, smaller review surface:** the 2.4.2 HWPX, image, template, HTML, and optional DOCX behavior is retained in typed modules without the old compatibility bundle.
-- **Safer file boundary:** imports use user-selected `File` data, Vault work uses Obsidian APIs, and source-preserving edits use a content-addressed private cache. Runtime Node filesystem access is removed.
-- **Review-safe rendering:** dynamic code evaluation, clipboard access, and CSS forced-priority declarations are removed.
-- **Audited production graph:** vulnerable optional transitive versions are overridden, while Sharp, ONNX, PDFium, OCR/ML, and other native extras remain excluded from installation and the startup bundle.
-- **Verifiable releases:** tagged builds run Windows/macOS checks, rebuild the three Community assets, and publish GitHub artifact attestations.
-- **One explicit external capability remains:** optional DOCX export can run a Pandoc executable selected by the user; optional Word-to-PDF preview runs only when the user asks for it.
-- **Word workflow parity:** the resizable three-pane template editor, dirty-change guard, style links, searchable installed/custom font catalog, and actual Pandoc-generated DOCX preview remain available. External conversion starts only from a direct refresh or mode-selection action.
-- **Toolbar parity:** the 2.4.2 light/dark palettes, color pickers, checklist toggle, superscript/subscript, note/warning callouts, and live-preview switch remain available.
+- **Reliable DOCX metadata handling:** leading Obsidian YAML frontmatter and HanMark's source callout are removed before Markdown normalization. Titles containing colons, aliases, nested metadata, BOM, and CRLF no longer corrupt Pandoc DOCX export or its actual-package preview. An unclosed leading frontmatter block produces an actionable error.
+- **One four-format export center:** HWPX, DOCX, HTML, and PDF are presented as a responsive 2×2 grid, with the selected format highlighted by the active HanMark toolbar palette. Existing command IDs and toolbar entry points remain compatible.
+- **Native PDF handoff:** the PDF card opens Obsidian's own PDF export command and settings. It is not a HanMark HWPX-template conversion, and its pagination follows Obsidian's print styles.
+- **Visible save result:** after a Vault export, HanMark shows the saved path. **Show in folder** can open that newly written Vault result in the operating system's file manager only after an explicit click.
+- **Review safeguards retained:** no new dependency or background executable was added. Optional Pandoc/Word actions and the explicit file-manager action remain user initiated; native OCR/ML extras stay outside the startup bundle.
 
 ### Core 2.x workflow
 
@@ -30,21 +27,22 @@ HanMark 2.4.3 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 - **Reusable HWPX templates:** create, import, duplicate, rename, edit, select, and delete any number of templates.
 - **Semantic document styles:** each template combines body and Heading 1–6 typography, paragraph spacing/indentation, page rules, and an optional table profile.
 - **Hancom-editable styles:** generated styles expose real font names and paragraph properties in Hancom Office's toolbar and F6 style dialog.
-- **Simpler export center:** HWPX work is on one tab; source patching, HTML, and optional Pandoc DOCX export are grouped under Other formats.
+- **Unified export center:** HWPX, DOCX, HTML, and PDF use one responsive format grid; HWPX-specific variants appear only after selecting HWPX.
 - **Resizable full-screen-capable dialogs:** the export center and template manager no longer depend on a narrow fixed modal.
 - **No pypandoc-hwpx HWPX workflow:** old Python installation and executable-path setup are retired from all HWPX commands and settings.
 
 ### Export modes
 
-| Location | Output | Engine | External setup |
+| Format | Output | Engine | External setup |
 | --- | --- | --- | --- |
 | HWPX | Quick HWPX | Kordoc 4.2.5 + selected template | None |
 | HWPX | Korean public-document HWPX | Kordoc 4.2.5 preset | None |
-| Other formats | Separate patched HWP/HWPX copy | Kordoc 4.2.5 | None |
-| Other formats | HTML | Built-in HanMark writer | None |
-| Other formats | DOCX | Pandoc + HanMark Word template | Optional Pandoc only |
+| HWPX | Separate patched HWP/HWPX copy | Kordoc 4.2.5 | None |
+| DOCX | Styled Word document | Pandoc + HanMark Word template | Optional Pandoc only |
+| HTML | Browser-ready HTML | Built-in HanMark writer | None |
+| PDF | Obsidian PDF export settings | Native Obsidian command | None |
 
-Pandoc settings appear only for DOCX. HWPX and HTML do not read the Pandoc path.
+Pandoc settings appear only for DOCX. HWPX, HTML, and PDF do not read the Pandoc path. PDF delegates to Obsidian; it does not apply a HanMark HWPX or Word template.
 
 The fast DOCX preview renders an actual Pandoc-generated DOCX package after you select its mode or press **Refresh**. Opening the view, typing, changing the active note, or changing a template only marks the existing preview as stale; it never starts Pandoc in the background. If DOCX generation is unavailable, HanMark falls back to the semantic browser preview.
 
@@ -52,8 +50,8 @@ The fast DOCX preview renders an actual Pandoc-generated DOCX package after you 
 
 1. Install and enable **HanMark** from Obsidian's Community plugins browser.
 2. Open the Markdown note you want to export.
-3. Select **HWPX** in the toolbar or run **HanMark: Export** from the command palette.
-4. Choose a built-in or custom template and select **Create HWPX**.
+3. Select an export button in the toolbar or run **HanMark: Export** from the command palette.
+4. Choose HWPX, DOCX, HTML, or PDF in the format grid, review its options, and start the export.
 
 The HWPX template button opens the template library. Built-in templates are immutable: duplicate one before editing it. Custom templates are Vault-wide and can be renamed or removed.
 
@@ -86,14 +84,15 @@ Source-preserving edits always create a separate output file. The original HWP/H
 - The semantic template model does not clone fixed-position covers, approval boxes, headers/footers, text boxes, or arbitrary drawing layouts.
 - The Kordoc HWPX SVG preview is an editing aid, not a pixel-identical Hancom Office renderer. Equations, charts, headers, and footers can differ.
 - Fast DOCX preview renders the actual generated package, but it is not Microsoft Word; page breaks and some layout can differ.
-- HanMark 2.4.3 is desktop-only. Mobile is not supported.
+- PDF uses Obsidian's native PDF export and print styles. It is not rendered through a HanMark HWPX template.
+- HanMark 2.4.4 is desktop-only. Mobile is not supported.
 - Optional OCR/ML components such as Sharp, ONNX, and PDFium are not loaded by the plugin startup bundle.
 
 ### Privacy and capabilities
 
 - **Network:** HanMark makes an outbound request only when a user previews or exports Markdown containing an HTTP(S) image. It requests the exact image URL present in the note. No other document content is uploaded.
 - **Files:** HanMark reads Vault attachments and files explicitly selected by the user. It writes imported attachments and user-requested export files through Obsidian Vault and browser file APIs. A source selected for editable round trips may be stored in a private, content-addressed plugin cache; the original is never overwritten.
-- **External programs:** HWPX and HTML use no external executable. A user-configured Pandoc executable can run only for an explicit DOCX export, Fast DOCX **Refresh**, or direct preview-mode selection. Optional Windows Word-to-PDF preview invokes Word only after **Refresh** or direct mode selection.
+- **External programs:** HWPX and HTML use no external converter. PDF delegates to Obsidian's built-in PDF command. A user-configured Pandoc executable can run only for an explicit DOCX export, Fast DOCX **Refresh**, or direct preview-mode selection. Optional Windows Word-to-PDF preview invokes Word only after **Refresh** or direct mode selection. For a newly saved Vault result, **Show in folder** can start the operating system's file manager with that result selected, only after the user clicks the button.
 - **Clipboard and dynamic execution:** HanMark does not read or write the clipboard and does not evaluate downloaded or generated JavaScript.
 - **Data collection:** no accounts, analytics, telemetry, advertising, payments, or remote feature flags.
 
@@ -123,18 +122,15 @@ npm run check
 
 **Obsidian Markdown과 편집 가능한 한글 HWP/HWPX를 잇는 데스크톱 플러그인입니다.**
 
-HanMark 2.4.3의 HWPX 생성·가져오기·원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
+HanMark 2.4.4의 HWPX 생성·가져오기·원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
 
-### 2.4.3 핵심 변화
+### 2.4.4 핵심 변화
 
-- **문서 기능은 유지하고 심사 표면은 축소:** 2.4.2의 HWPX·이미지·템플릿·HTML·선택적 DOCX 동작을 타입이 있는 모듈로 옮기고 구 호환 번들을 제거했습니다.
-- **안전한 파일 경계:** 가져오기는 사용자가 선택한 `File` 데이터를, Vault 작업은 Obsidian API를 사용합니다. 원본 형식 보존 수정은 콘텐츠 해시 기반 비공개 캐시를 사용하며 런타임 Node 파일 시스템 접근을 제거했습니다.
-- **심사 친화적 렌더링:** 동적 코드 실행, 클립보드 접근과 CSS 강제 우선순위를 제거했습니다.
-- **배포 의존성 감사:** 취약한 선택적 전이 의존성 버전을 안전한 버전으로 고정하고 Sharp·ONNX·PDFium·OCR/ML 네이티브 구성요소는 설치와 시작 번들에서 계속 제외합니다.
-- **검증 가능한 Release:** 태그 빌드는 Windows·macOS 검사를 통과한 뒤 Community용 세 파일을 다시 만들고 GitHub artifact attestation을 발행합니다.
-- **남아 있는 외부 실행은 하나의 명시적 선택 기능:** DOCX는 사용자가 선택한 Pandoc을 실행할 수 있고, Word-to-PDF 미리보기는 사용자가 요청한 경우에만 실행합니다.
-- **Word 작업 기능 유지:** 크기 조절 가능한 3단 템플릿 편집기, 미저장 변경 보호, 스타일 연결, 설치·사용자 글꼴 검색과 Pandoc이 실제로 만든 DOCX 패키지 미리보기를 유지합니다. 외부 변환은 사용자가 새로 고침이나 모드 선택을 직접 실행할 때만 시작합니다.
-- **툴바 기능 유지:** 2.4.2의 밝은·어두운 팔레트, 색상 선택기, 체크 상태 전환, 위·아래 첨자, 노트·주의 콜아웃과 실시간 미리보기 스위치를 유지합니다.
+- **안정적인 DOCX 메타데이터 처리:** Markdown 줄 정규화 전에 노트 맨 앞의 Obsidian YAML 프런트매터와 HanMark 원본 안내 콜아웃을 제거합니다. 콜론이 있는 제목, 별칭, 중첩 속성, BOM, CRLF 때문에 Pandoc DOCX 내보내기와 실제 패키지 미리보기가 깨지지 않습니다. 프런트매터를 닫지 않은 문서는 해결 방법이 포함된 오류를 표시합니다.
+- **하나로 합친 4형식 내보내기:** HWPX·DOCX·HTML·PDF를 반응형 2×2 그리드에서 고르고, 선택한 형식은 현재 HanMark 툴바 팔레트 색으로 강조합니다. 기존 명령 ID와 툴바 진입점은 호환됩니다.
+- **Obsidian 기본 PDF 연결:** PDF 카드는 Obsidian 자체 PDF 내보내기 명령과 설정 창을 엽니다. HanMark HWPX 템플릿 변환이 아니며 쪽 나눔은 Obsidian 인쇄 스타일을 따릅니다.
+- **저장 결과 확인:** Vault 내보내기가 끝나면 저장 경로를 표시합니다. **파일 위치 보기**는 사용자가 명시적으로 누른 경우에만 방금 저장한 Vault 결과를 운영체제 파일 관리자에서 선택해 보여줍니다.
+- **심사 안전장치 유지:** 새 의존성이나 백그라운드 실행 파일을 추가하지 않았습니다. 선택적 Pandoc·Word와 파일 관리자 실행은 모두 사용자가 직접 요청해야 하며 OCR·ML 네이티브 구성요소는 시작 번들에서 계속 제외합니다.
 
 ### 2.x 핵심 기능
 
@@ -143,21 +139,22 @@ HanMark 2.4.3의 HWPX 생성·가져오기·원본 수정·검증·이미지 포
 - **다중 사용자 템플릿:** 템플릿을 제한 없이 만들고, HWPX에서 가져오고, 복제·이름 변경·편집·선택·삭제할 수 있습니다.
 - **문서 스타일 규칙:** 템플릿 하나에 바탕글·제목 1~6의 글꼴, 문단 간격·들여쓰기, 페이지 규칙과 선택적인 표 스타일을 함께 저장합니다.
 - **한컴오피스 편집 호환:** 생성된 스타일의 실제 글꼴명과 문단 속성을 한컴오피스 상단 도구 모음과 F6 스타일 창에서 확인하고 다시 편집할 수 있습니다.
-- **간결한 내보내기 센터:** HWPX 작업은 첫 탭에, 원본 수정·HTML·선택적 Pandoc DOCX는 기타 형식 탭에 모았습니다.
+- **통합 내보내기 센터:** HWPX·DOCX·HTML·PDF를 하나의 반응형 형식 그리드에서 고르며, HWPX 전용 세부 방식은 HWPX를 선택했을 때만 표시합니다.
 - **확대·크기 조절 가능한 창:** 내보내기 센터와 템플릿 관리자가 좁은 고정 창에 잘리지 않습니다.
 - **pypandoc-hwpx HWPX 절차 종료:** 모든 HWPX 명령과 설정에서 Python 설치 및 실행 파일 경로 절차를 제거했습니다.
 
 ### 내보내기 모드
 
-| 위치 | 결과 | 엔진 | 외부 설치 |
+| 형식 | 결과 | 엔진 | 외부 설치 |
 | --- | --- | --- | --- |
 | HWPX | 빠른 HWPX | Kordoc 4.2.5 + 선택 템플릿 | 없음 |
 | HWPX | 한국 공문서 HWPX | Kordoc 4.2.5 공문서 프리셋 | 없음 |
-| 기타 형식 | 별도 HWP/HWPX 수정본 | Kordoc 4.2.5 | 없음 |
-| 기타 형식 | HTML | HanMark 내장 변환 | 없음 |
-| 기타 형식 | DOCX | Pandoc + HanMark Word 템플릿 | Pandoc만 선택 설치 |
+| HWPX | 별도 HWP/HWPX 수정본 | Kordoc 4.2.5 | 없음 |
+| DOCX | 스타일이 적용된 Word 문서 | Pandoc + HanMark Word 템플릿 | Pandoc만 선택 설치 |
+| HTML | 브라우저용 HTML | HanMark 내장 변환 | 없음 |
+| PDF | Obsidian PDF 내보내기 설정 | Obsidian 기본 명령 | 없음 |
 
-Pandoc 설정은 DOCX에만 표시됩니다. HWPX와 HTML은 Pandoc 경로를 읽지 않습니다.
+Pandoc 설정은 DOCX에만 표시됩니다. HWPX·HTML·PDF는 Pandoc 경로를 읽지 않습니다. PDF는 Obsidian에 위임하므로 HanMark HWPX 또는 Word 템플릿을 적용하지 않습니다.
 
 빠른 DOCX 미리보기는 사용자가 모드를 선택하거나 **새로 고침**을 누른 뒤 Pandoc이 실제로 만든 DOCX 패키지를 렌더링합니다. 뷰 열기, 입력, 활성 노트 변경, 템플릿 변경은 기존 결과를 오래된 상태로 표시할 뿐 Pandoc을 백그라운드에서 실행하지 않습니다. DOCX 생성이 불가능하면 문서 스타일 기반 간이 미리보기로 전환합니다.
 
@@ -165,8 +162,8 @@ Pandoc 설정은 DOCX에만 표시됩니다. HWPX와 HTML은 Pandoc 경로를 �
 
 1. Obsidian 커뮤니티 플러그인 탐색에서 **HanMark**를 설치하고 활성화합니다.
 2. 내보낼 Markdown 노트를 엽니다.
-3. 툴바에서 **HWPX**를 선택하거나 명령 팔레트에서 **HanMark: 내보내기**를 실행합니다.
-4. 내장 또는 사용자 템플릿을 고르고 **HWPX 만들기**를 누릅니다.
+3. 툴바의 내보내기 버튼을 선택하거나 명령 팔레트에서 **HanMark: 내보내기**를 실행합니다.
+4. 형식 그리드에서 HWPX·DOCX·HTML·PDF 중 하나를 고르고 세부 옵션을 확인한 뒤 내보냅니다.
 
 HWPX 템플릿 버튼은 템플릿 라이브러리를 엽니다. 내장 템플릿은 직접 변경하지 않고 복제 후 편집합니다. 사용자 템플릿은 Vault 전체에 적용되며 이름 변경과 삭제가 가능합니다.
 
@@ -199,14 +196,15 @@ HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 Markdown으로 가져옵니다. 추출
 - 표지, 결재란, 머리말·꼬리말, 텍스트 상자와 임의 좌표의 그리기 개체를 통째로 복제하지 않습니다.
 - Kordoc HWPX SVG 미리보기는 편집 보조 화면이며 한컴오피스와 완전히 같은 WYSIWYG가 아닙니다. 수식·차트·머리말·꼬리말은 다르게 보일 수 있습니다.
 - 빠른 DOCX 미리보기는 실제 생성된 패키지를 렌더링하지만 Microsoft Word 자체는 아니므로 쪽 나눔과 일부 레이아웃은 다를 수 있습니다.
-- HanMark 2.4.3은 데스크톱 전용이며 모바일은 지원하지 않습니다.
+- PDF는 Obsidian 기본 PDF 내보내기와 인쇄 스타일을 사용합니다. HanMark HWPX 템플릿으로 렌더링하는 기능이 아닙니다.
+- HanMark 2.4.4는 데스크톱 전용이며 모바일은 지원하지 않습니다.
 - Sharp, ONNX, PDFium 같은 선택적 OCR·ML 구성요소는 플러그인 시작 번들에서 불러오지 않습니다.
 
 ### 개인정보와 접근 권한
 
 - **네트워크:** 사용자가 HTTP(S) 이미지가 포함된 Markdown을 미리보거나 내보낼 때만 노트에 적힌 해당 이미지 URL로 요청합니다. 다른 문서 내용은 업로드하지 않습니다.
 - **파일:** Vault 첨부 파일과 사용자가 직접 선택한 파일을 읽습니다. 가져온 첨부 파일과 사용자가 요청한 결과 파일은 Obsidian Vault와 브라우저 파일 API로 저장합니다. 원본 형식 보존용으로 선택한 원본은 콘텐츠 해시 기반 비공개 플러그인 캐시에 저장될 수 있으며 원본은 덮어쓰지 않습니다.
-- **외부 프로그램:** HWPX와 HTML은 외부 실행 파일을 사용하지 않습니다. 사용자가 지정한 Pandoc은 명시적인 DOCX 내보내기, 빠른 DOCX **새로 고침**, 또는 사용자가 직접 미리보기 방식을 선택했을 때만 실행합니다. Windows Word-to-PDF 미리보기 역시 **새로 고침**이나 직접적인 방식 선택 뒤에만 Word를 호출합니다.
+- **외부 프로그램:** HWPX와 HTML은 외부 변환기를 사용하지 않습니다. PDF는 Obsidian 기본 PDF 명령에 위임합니다. 사용자가 지정한 Pandoc은 명시적인 DOCX 내보내기, 빠른 DOCX **새로 고침**, 또는 사용자가 직접 미리보기 방식을 선택했을 때만 실행합니다. Windows Word-to-PDF 미리보기 역시 **새로 고침**이나 직접적인 방식 선택 뒤에만 Word를 호출합니다. 방금 저장한 Vault 결과의 **파일 위치 보기**는 사용자가 버튼을 누른 경우에만 운영체제 파일 관리자를 실행해 해당 파일을 선택합니다.
 - **클립보드와 동적 실행:** 클립보드를 읽거나 쓰지 않으며 다운로드하거나 생성한 JavaScript를 동적으로 실행하지 않습니다.
 - **데이터 수집:** 계정, 분석, 텔레메트리, 광고, 결제, 원격 기능 플래그가 없습니다.
 

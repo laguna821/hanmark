@@ -2,7 +2,7 @@ name: Publish verified plugin
 
 on:
   push:
-    tags: ["2.4.3"]
+    tags: ["2.4.4"]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -74,5 +74,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           release/main.js release/manifest.json release/styles.css
           --verify-tag
-          --title "HanMark 2.4.3 — Community review hardening / 자동심사 안전성 개선"
-          --notes-file "release-notes/2.4.3.md"
+          --title "HanMark 2.4.4 — Reliable DOCX and unified export / DOCX 복구·통합 내보내기"
+          --notes-file "release-notes/2.4.4.md"
