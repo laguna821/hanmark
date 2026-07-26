@@ -25,29 +25,189 @@
 
 /* ── HanMark 2.x: bundled Kordoc export center and quick HWPX preview ── */
 .hanmark-export-modal {
-  width: min(680px, calc(100vw - 48px));
-  max-width: 680px;
+  --hanmark-export-key-color: var(--interactive-accent);
+  --hanmark-export-key-text: var(--text-on-accent);
+  --hanmark-export-logo-body: #1565c0;
+  --hanmark-export-logo-accent: #42adff;
+  --hanmark-export-logo-muted: #283593;
+  --hanmark-export-logo-text: #fff;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: none;
 }
 
-.hanmark-export-tabs {
+.hanmark-export-modal.hwp-toolbar-skin-light,
+.hanmark-export-modal.hwp-toolbar-skin-auto {
+  --hanmark-export-key-color: var(--hwp-toolbar-light-btn-border, var(--interactive-accent));
+  --hanmark-export-logo-body: var(--hwp-toolbar-light-logo-body, #1565c0);
+  --hanmark-export-logo-accent: var(--hwp-toolbar-light-logo-accent, #42adff);
+  --hanmark-export-logo-muted: var(--hwp-toolbar-light-logo-muted, #283593);
+  --hanmark-export-logo-text: var(--hwp-toolbar-light-logo-text, #fff);
+}
+
+.hanmark-export-modal.hwp-toolbar-skin-dark,
+.theme-dark .hanmark-export-modal.hwp-toolbar-skin-auto {
+  --hanmark-export-key-color: var(--hwp-toolbar-dark-btn-border, var(--interactive-accent));
+  --hanmark-export-logo-body: var(--hwp-toolbar-dark-logo-body, #94d600);
+  --hanmark-export-logo-accent: var(--hwp-toolbar-dark-logo-accent, #b6ff00);
+  --hanmark-export-logo-muted: var(--hwp-toolbar-dark-logo-muted, #5f7a0a);
+  --hanmark-export-logo-text: var(--hwp-toolbar-dark-logo-text, #121212);
+}
+
+.hanmark-export-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.hanmark-export-header h2,
+.hanmark-export-header p {
+  margin: 0;
+}
+
+.hanmark-export-header p {
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.hanmark-export-header .hanmark-window-size-hint {
+  flex: 0 0 auto;
+  margin: 5px 0 0;
+  text-align: right;
+}
+
+.hanmark-export-format-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin: 8px 0 14px;
-  padding: 4px;
-  border-radius: 10px;
+  gap: 12px;
+}
+
+.hanmark-export-format-card {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 132px;
+  margin: 0;
+  padding: 18px;
+  border: 2px solid var(--background-modifier-border);
+  border-radius: 16px;
   background: var(--background-secondary);
+  color: var(--text-normal);
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
 }
 
-.hanmark-export-tabs button {
-  border-color: transparent;
-  background: transparent;
+.hanmark-export-format-card:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--hanmark-export-key-color) 60%,
+    var(--background-modifier-border)
+  );
+  background: var(--background-modifier-hover);
+  transform: translateY(-1px);
 }
 
-.hanmark-export-tabs button.is-active {
-  border-color: var(--interactive-accent);
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
+.hanmark-export-format-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--hanmark-export-key-color) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.hanmark-export-format-card.is-selected {
+  border-color: var(--hanmark-export-key-color);
+  background: color-mix(
+    in srgb,
+    var(--hanmark-export-key-color) 12%,
+    var(--background-secondary)
+  );
+  box-shadow: 0 0 0 1px var(--hanmark-export-key-color);
+}
+
+.hanmark-export-format-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  color: var(--hanmark-export-key-color);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.hanmark-export-format-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hanmark-export-modal.hwp-toolbar-skin-light .hanmark-export-format-icon.is-hwpx,
+.hanmark-export-modal.hwp-toolbar-skin-auto .hanmark-export-format-icon.is-hwpx {
+  background-image: var(--hwp-toolbar-light-logo-hwp);
+}
+
+.hanmark-export-modal.hwp-toolbar-skin-light .hanmark-export-format-icon.is-docx,
+.hanmark-export-modal.hwp-toolbar-skin-auto .hanmark-export-format-icon.is-docx {
+  background-image: var(--hwp-toolbar-light-logo-word);
+}
+
+.hanmark-export-modal.hwp-toolbar-skin-dark .hanmark-export-format-icon.is-hwpx,
+.theme-dark .hanmark-export-modal.hwp-toolbar-skin-auto .hanmark-export-format-icon.is-hwpx {
+  background-image: var(--hwp-toolbar-dark-logo-hwp);
+}
+
+.hanmark-export-modal.hwp-toolbar-skin-dark .hanmark-export-format-icon.is-docx,
+.theme-dark .hanmark-export-modal.hwp-toolbar-skin-auto .hanmark-export-format-icon.is-docx {
+  background-image: var(--hwp-toolbar-dark-logo-word);
+}
+
+.hanmark-export-modal.hwp-toolbar-skin-light .hanmark-export-format-icon:is(.is-hwpx, .is-docx) svg,
+.hanmark-export-modal.hwp-toolbar-skin-dark .hanmark-export-format-icon:is(.is-hwpx, .is-docx) svg,
+.hanmark-export-modal.hwp-toolbar-skin-auto .hanmark-export-format-icon:is(.is-hwpx, .is-docx) svg {
+  visibility: hidden;
+}
+
+.hanmark-export-format-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hanmark-export-format-copy strong {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.hanmark-export-format-copy small {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.45;
+}
+
+.hanmark-export-detail {
+  padding: 18px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 16px;
+  background: var(--background-primary-alt);
+}
+
+.hanmark-export-detail h3,
+.hanmark-export-detail > p {
+  margin-top: 0;
+}
+
+.hanmark-export-detail > p:last-child {
+  margin-bottom: 0;
 }
 
 .hanmark-compact-engine-line {
@@ -58,13 +218,9 @@
 
 .hanmark-export-template-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
   gap: 8px;
   align-items: center;
-  padding: 12px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 10px;
-  background: var(--background-secondary);
 }
 
 .hanmark-export-template-row select {
@@ -73,57 +229,192 @@
 }
 
 .hanmark-export-template-row small {
-  grid-column: 1 / -1;
+  grid-column: 2;
   color: var(--text-muted);
 }
 
-.hanmark-export-primary-actions,
-.hanmark-export-gongmun-row {
-  display: flex;
-  align-items: center;
+.hanmark-export-field-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-export-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 16px;
 }
 
-.hanmark-export-primary-actions button:first-child {
-  flex: 1;
-}
-
-.hanmark-export-gongmun-row {
-  padding-top: 10px;
-  border-top: 1px solid var(--background-modifier-border);
-}
-
-.hanmark-export-gongmun-row select {
-  flex: 1;
-  min-width: 0;
-}
-
-.hanmark-other-export-list {
+.hanmark-export-variant {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.hanmark-other-export-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
+  gap: 4px;
+  min-height: 88px;
   padding: 12px;
   border: 1px solid var(--background-modifier-border);
-  border-radius: 10px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  text-align: left;
+  white-space: normal;
+}
+
+.hanmark-export-variant.is-selected {
+  border-color: var(--hanmark-export-key-color);
+  background: color-mix(
+    in srgb,
+    var(--hanmark-export-key-color) 10%,
+    var(--background-secondary)
+  );
+}
+
+.hanmark-export-variant small {
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.hanmark-export-option-row {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.hanmark-export-option-row select {
+  min-width: 0;
+  width: 100%;
+}
+
+.hanmark-export-secondary-action {
+  margin-top: 12px;
+}
+
+.hanmark-export-summary-card {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(0, 1fr);
+  gap: 5px 12px;
+  align-items: baseline;
+  padding: 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
   background: var(--background-secondary);
 }
 
-.hanmark-other-export-row > div {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.hanmark-export-summary-card > span {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
 }
 
-.hanmark-other-export-row small {
+.hanmark-export-summary-card small {
+  grid-column: 1 / -1;
   color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.hanmark-export-secondary-actions,
+.hanmark-export-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hanmark-export-native-note {
+  display: block;
+  padding: 10px 12px;
+  border-left: 3px solid var(--hanmark-export-key-color);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+}
+
+.hanmark-export-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--color-green) 55%,
+    var(--background-modifier-border)
+  );
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--color-green) 9%,
+    var(--background-secondary)
+  );
+}
+
+.hanmark-export-result code {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.hanmark-export-result ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-muted);
+}
+
+.hanmark-export-footer {
+  position: sticky;
+  bottom: -16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.hanmark-export-primary-button {
+  flex: 1;
+  min-height: 42px;
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-export-footer .hanmark-modal-close {
+  min-height: 42px;
+  margin-top: 0;
+}
+
+@container (max-width: 700px) {
+  .hanmark-export-format-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hanmark-export-format-card {
+    min-height: 104px;
+  }
+
+  .hanmark-export-variant-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hanmark-export-header {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .hanmark-export-header .hanmark-window-size-hint {
+    text-align: left;
+  }
+
+  .hanmark-export-template-row,
+  .hanmark-export-option-row,
+  .hanmark-export-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .hanmark-export-template-row small,
+  .hanmark-export-summary-card small {
+    grid-column: 1;
+  }
 }
 
 .hanmark-engine-status {
@@ -339,17 +630,22 @@
 }
 
 @media (max-width: 600px) {
-  .hanmark-export-modal,
   .hanmark-template-manager {
     width: calc(100vw - 24px);
   }
 
-  .hanmark-other-export-row {
+  .hanmark-export-format-grid,
+  .hanmark-export-variant-grid {
     grid-template-columns: 1fr;
   }
 
-  .hanmark-other-export-row button {
-    width: 100%;
+  .hanmark-export-format-card {
+    min-height: 104px;
+  }
+
+  .hanmark-export-footer {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

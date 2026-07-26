@@ -1,4 +1,5 @@
 import {
+  FileSystemAdapter,
   MarkdownView,
   Notice,
   Platform,
@@ -23,10 +24,26 @@ import {
   defaultDocumentStyleProfile,
   type DocumentStyleProfile
 } from "./io/documentStyle";
+import type {
+  HanmarkExportFormat,
+  HanmarkExportOutcome
+} from "./io/exportTypes";
 import { createFileGateway, type FileGateway } from "./io/fileGateway";
-import { readSourceContract } from "./io/frontmatter";
+import {
+  extractEditableBodyStrict,
+  readSourceContract
+} from "./io/frontmatter";
 import { importDocument } from "./io/kordocImport";
-import { exportKordocHwpx, patchSourceExperimental } from "./io/kordocSave";
+import {
+  exportKordocHwpx,
+  exportKordocHwpxWithOutcome,
+  patchSourceExperimental,
+  patchSourceExperimentalWithOutcome
+} from "./io/kordocSave";
+import {
+  revealVaultOutputUserInitiated,
+  trustSavedVaultOutput
+} from "./io/outputReveal";
 import { activeTableProfile } from "./io/tableStyle";
 import {
   createDefaultWordTemplate,
@@ -54,13 +71,12 @@ import {
   QUICK_HWPX_PREVIEW_VIEW
 } from "./ui/QuickHwpxPreviewView";
 import {
+  applyToolbarSkin,
   editorFormatting,
   ToolbarController
 } from "./ui/ToolbarController";
 import { WordTemplateManagerModal } from "./ui/WordTemplateManagerModal";
 import { errorMessage } from "./utils/errors";
-
-type ExportTab = "hwpx" | "other";
 
 interface SettingsController {
   open(): void;
@@ -69,6 +85,14 @@ interface SettingsController {
 
 interface AppWithSettings {
   setting: SettingsController;
+}
+
+interface CommandManager {
+  executeCommandById(id: string): boolean;
+}
+
+interface AppWithCommands {
+  commands: CommandManager;
 }
 
 function runtimePlatform(): HanmarkRuntimePlatform {
@@ -86,7 +110,7 @@ function registerHeadingCommand(plugin: Plugin, level: number): void {
 }
 
 /**
- * HanMark 2.4.3 runtime.
+ * HanMark 2.4.4 runtime.
  *
  * HWPX is generated in-process by Kordoc. The only external process boundary is
  * the optional, user-triggered Pandoc/Word path used by advanced DOCX features.
@@ -143,7 +167,8 @@ export default class HanmarkPlugin extends Plugin {
       {
         importDocument: () => void importDocument(this.app, this),
         openHwpxExport: () => this.openExportCenter("hwpx"),
-        openOtherExport: () => this.openExportCenter("other"),
+        openDocxExport: () => this.openExportCenter("docx"),
+        openHtmlExport: () => this.openExportCenter("html"),
         toggleHwpxPreview: () => void this.toggleQuickPreview(),
         openTemplateManager: () => this.openTemplateManager(),
         openSettings: () => this.openPluginSettings(),
@@ -300,12 +325,17 @@ export default class HanmarkPlugin extends Plugin {
     this.addCommand({
       id: "export-docx",
       name: "DOCX 내보내기",
-      callback: () => this.openExportCenter("other")
+      callback: () => this.openExportCenter("docx")
     });
     this.addCommand({
       id: "export-html",
       name: "HTML 내보내기",
-      callback: () => this.openExportCenter("other")
+      callback: () => this.openExportCenter("html")
+    });
+    this.addCommand({
+      id: "export-pdf",
+      name: "PDF 내보내기",
+      callback: () => this.openExportCenter("pdf")
     });
     this.addCommand({
       id: "select-template",
@@ -359,7 +389,7 @@ export default class HanmarkPlugin extends Plugin {
     });
   }
 
-  private openExportCenter(initialTab: ExportTab): void {
+  private openExportCenter(initialFormat: HanmarkExportFormat): void {
     new HanmarkExportModal(
       this.app,
       {
@@ -389,23 +419,35 @@ export default class HanmarkPlugin extends Plugin {
         },
         openTemplateManager: () => this.openTemplateManager(),
         exportKordoc: (mode, preset) =>
-          exportKordocHwpx(this.app, this, {
+          exportKordocHwpxWithOutcome(this.app, this, {
             mode,
             gongmunPreset: preset
           }),
-        patchSource: () => patchSourceExperimental(this.app, this),
+        patchSource: () =>
+          patchSourceExperimentalWithOutcome(this.app, this),
         runOther: (mode) => this.runOtherExport(mode),
-        openPreview: () => this.toggleQuickPreview(false)
+        openPreview: () => this.toggleQuickPreview(false),
+        openDocxPreview: () => this.toggleDocxPreview(false),
+        activeWordTemplateName: () =>
+          this.settings.activeWordTemplateId === "default"
+            ? "HanMark 기본 Word 템플릿"
+            : this.settings.activeWordTemplateId,
+        openPandocSettings: () => this.openPluginSettings(),
+        exportPdf: async () => this.delegatePdfExport(),
+        revealOutput: (outcome) => this.revealExportOutput(outcome),
+        applySkin: (root) => applyToolbarSkin(root, this.settings)
       },
-      initialTab
+      initialFormat
     ).open();
   }
 
-  private async runOtherExport(mode: "docx" | "html"): Promise<void> {
+  private async runOtherExport(
+    mode: "docx" | "html"
+  ): Promise<HanmarkExportOutcome | null> {
     const source = this.currentDocxSource();
     if (!source) {
       new Notice("내보낼 Markdown 문서를 여세요.");
-      return;
+      return null;
     }
     if (mode === "docx") {
       const progress = new Notice("Pandoc으로 DOCX를 만드는 중…", 0);
@@ -417,26 +459,84 @@ export default class HanmarkPlugin extends Plugin {
         if (!result.saved.cancelled) {
           new Notice(`DOCX 저장 완료: ${result.saved.displayPath}`);
         }
+        return {
+          format: "docx",
+          status: result.saved.cancelled ? "cancelled" : "saved",
+          fileName: result.saved.fileName,
+          displayPath: result.saved.displayPath,
+          vaultPath: result.saved.vaultPath
+        };
       } catch (error) {
         new Notice(`DOCX 내보내기 실패: ${errorMessage(error)}`, 8_000);
+        return null;
       } finally {
         progress.hide();
       }
-      return;
     }
 
-    const bytes = renderStandaloneHtmlBytes(source.markdown, {
-      title: source.title,
-      documentStyle: activeDocumentStyle(this)
-    });
+    const bytes = renderStandaloneHtmlBytes(
+      extractEditableBodyStrict(source.markdown),
+      {
+        title: source.title,
+        documentStyle: activeDocumentStyle(this)
+      }
+    );
     const saved = source.sourcePath
-        ? await this.gateway.saveVaultSibling(
+      ? await this.gateway.saveVaultSibling(
           bytes,
           `${source.title}_html.html`,
           source.sourcePath
         )
       : await this.gateway.saveFile(bytes, `${source.title}_html.html`);
     if (!saved.cancelled) new Notice(`HTML 저장 완료: ${saved.displayPath}`);
+    return {
+      format: "html",
+      status: saved.cancelled ? "cancelled" : "saved",
+      fileName: saved.fileName,
+      displayPath: saved.displayPath,
+      vaultPath: saved.vaultPath
+    };
+  }
+
+  private delegatePdfExport(): HanmarkExportOutcome | null {
+    const source = this.currentMarkdownView();
+    if (!source?.file) {
+      new Notice("PDF로 내보낼 Markdown 문서를 여세요.");
+      return null;
+    }
+    const commands = (this.app as unknown as AppWithCommands).commands;
+    if (!commands.executeCommandById("workspace:export-pdf")) {
+      new Notice(
+        "Obsidian의 PDF 내보내기 명령을 열 수 없습니다. 데스크톱 앱을 업데이트한 뒤 다시 시도하세요.",
+        8_000
+      );
+      return null;
+    }
+    return { format: "pdf", status: "delegated" };
+  }
+
+  private async revealExportOutput(
+    outcome: HanmarkExportOutcome
+  ): Promise<void> {
+    if (!Platform.isDesktopApp) {
+      throw new Error("파일 위치 보기는 Obsidian 데스크톱 앱에서만 사용할 수 있습니다.");
+    }
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      throw new Error("현재 Vault에서는 운영체제 파일 위치를 확인할 수 없습니다.");
+    }
+    const output = trustSavedVaultOutput(outcome);
+    if (!output) {
+      throw new Error("Vault 안에 방금 저장한 파일만 위치를 열 수 있습니다.");
+    }
+    await revealVaultOutputUserInitiated(
+      {
+        output,
+        platform: runtimePlatform(),
+        resolveVaultPath: (vaultPath) => adapter.getFullPath(vaultPath)
+      },
+      createUserInitiatedAction("modal")
+    );
   }
 
   private async toggleQuickPreview(closeWhenOpen = true): Promise<void> {

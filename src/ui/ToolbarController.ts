@@ -31,7 +31,8 @@ interface AppWithCommands {
 export interface ToolbarActions {
   importDocument: () => void;
   openHwpxExport: () => void;
-  openOtherExport: () => void;
+  openDocxExport: () => void;
+  openHtmlExport: () => void;
   toggleHwpxPreview: () => void;
   openTemplateManager: () => void;
   openSettings: () => void;
@@ -645,13 +646,13 @@ export class ToolbarController {
       icon: "file-text",
       label: "DOCX 내보내기",
       text: "DOCX",
-      action: this.actions.openOtherExport
+      action: this.actions.openDocxExport
     });
     this.addButton(exports, {
       icon: "code",
       label: "HTML 내보내기",
       text: "HTML",
-      action: this.actions.openOtherExport
+      action: this.actions.openHtmlExport
     });
 
     this.addDivider(root);
