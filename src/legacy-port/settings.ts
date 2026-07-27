@@ -97,7 +97,7 @@ export interface CustomFontEntry {
  * small prevents the retired Python and one-slot HWPX settings from returning.
  */
 export interface HanmarkSettings extends Record<string, unknown> {
-  settingsVersion: 7;
+  settingsVersion: 8;
   pandocPath: string;
   toolbarPosition: ToolbarPosition;
   showToolbarOnStartup: boolean;
@@ -108,6 +108,11 @@ export interface HanmarkSettings extends Record<string, unknown> {
   docxPreviewMode: DocxPreviewMode;
   htmlExportTheme: HtmlExportTheme;
   importedImageDestination: ImportedImageDestination;
+  /**
+   * Optional Vault-relative folder override for images kept locally.
+   * An empty value preserves Obsidian's configured attachment policy.
+   */
+  importedImageFolder: string;
   cmdsEagleWorkerUrl: string;
   cmdsEaglePublicUrl: string;
   customFontDirs: string[];
@@ -119,7 +124,7 @@ export interface HanmarkSettings extends Record<string, unknown> {
 }
 
 export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze({
-  settingsVersion: 7,
+  settingsVersion: 8,
   pandocPath: "pandoc",
   toolbarPosition: "top",
   showToolbarOnStartup: true,
@@ -131,6 +136,7 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   docxPreviewMode: "fast-docx",
   htmlExportTheme: "achmage-editorial",
   importedImageDestination: "vault",
+  importedImageFolder: "",
   cmdsEagleWorkerUrl: "",
   cmdsEaglePublicUrl: "",
   customFontDirs: [],
@@ -196,6 +202,36 @@ export function normalizeImportedImageDestination(
   value: unknown
 ): ImportedImageDestination {
   return value === "cmds-eagle-r2" || value === "ask" ? value : "vault";
+}
+
+/**
+ * Accept only a normal Vault-relative folder. Empty means “follow Obsidian's
+ * attachment policy”. In particular, never allow an import setting to target
+ * the private `.obsidian` configuration tree or escape the Vault root.
+ */
+export function normalizeImportedImageFolder(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const candidate = value.trim().replace(/\\/gu, "/");
+  if (!candidate) return "";
+  if (
+    candidate.startsWith("/")
+    || /^[a-z]:/iu.test(candidate)
+    || [...candidate].some((character) => character.charCodeAt(0) < 32)
+    || /[:*?"<>|#[\]^]/u.test(candidate)
+  ) {
+    return "";
+  }
+  const parts = candidate
+    .split("/")
+    .filter((part) => part && part !== ".");
+  if (
+    !parts.length
+    || parts.includes("..")
+    || parts[0].startsWith(".")
+  ) {
+    return "";
+  }
+  return parts.join("/");
 }
 
 export function normalizeToolbarHex(value: unknown, fallback: string): string {
@@ -286,7 +322,7 @@ export function normalizeHanmarkSettings(
 
   return {
     ...preserved,
-    settingsVersion: 7,
+    settingsVersion: 8,
     pandocPath: nonEmptyString(data.pandocPath, DEFAULT_HANMARK_SETTINGS.pandocPath),
     toolbarPosition: "top",
     showToolbarOnStartup:
@@ -304,6 +340,9 @@ export function normalizeHanmarkSettings(
     htmlExportTheme: normalizeHtmlExportTheme(data.htmlExportTheme),
     importedImageDestination: normalizeImportedImageDestination(
       data.importedImageDestination
+    ),
+    importedImageFolder: normalizeImportedImageFolder(
+      data.importedImageFolder
     ),
     cmdsEagleWorkerUrl:
       typeof data.cmdsEagleWorkerUrl === "string"

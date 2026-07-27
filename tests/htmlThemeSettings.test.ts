@@ -5,18 +5,20 @@ import {
   DEFAULT_HANMARK_SETTINGS,
   normalizeHanmarkSettings,
   normalizeHtmlExportTheme,
-  normalizeImportedImageDestination
+  normalizeImportedImageDestination,
+  normalizeImportedImageFolder
 } from "../src/legacy-port/settings";
 
-test("settings migrate to version 7 with safe HTML and imported-image defaults", () => {
+test("settings migrate to version 8 with safe HTML and imported-image defaults", () => {
   const settings = normalizeHanmarkSettings({
     settingsVersion: 5,
     unrelatedFutureSetting: "preserved"
   });
 
-  assert.equal(settings.settingsVersion, 7);
+  assert.equal(settings.settingsVersion, 8);
   assert.equal(settings.htmlExportTheme, "achmage-editorial");
   assert.equal(settings.importedImageDestination, "vault");
+  assert.equal(settings.importedImageFolder, "");
   assert.equal(settings.cmdsEagleWorkerUrl, "");
   assert.equal(settings.cmdsEaglePublicUrl, "");
   assert.equal(settings.unrelatedFutureSetting, "preserved");
@@ -30,12 +32,25 @@ test("imported-image settings preserve explicit cloud and ask choices", () => {
 
   const settings = normalizeHanmarkSettings({
     importedImageDestination: "cmds-eagle-r2",
+    importedImageFolder: " Attachments\\HanMark ",
     cmdsEagleWorkerUrl: " https://worker.example/ ",
     cmdsEaglePublicUrl: " https://cdn.example/ "
   });
   assert.equal(settings.importedImageDestination, "cmds-eagle-r2");
+  assert.equal(settings.importedImageFolder, "Attachments/HanMark");
   assert.equal(settings.cmdsEagleWorkerUrl, "https://worker.example/");
   assert.equal(settings.cmdsEaglePublicUrl, "https://cdn.example/");
+});
+
+test("imported-image folder accepts only safe Vault-relative paths", () => {
+  assert.equal(normalizeImportedImageFolder("Attachments/HanMark"), "Attachments/HanMark");
+  assert.equal(normalizeImportedImageFolder("  Images\\Imported  "), "Images/Imported");
+  assert.equal(normalizeImportedImageFolder(""), "");
+  assert.equal(normalizeImportedImageFolder("../outside"), "");
+  assert.equal(normalizeImportedImageFolder("C:\\outside"), "");
+  assert.equal(normalizeImportedImageFolder("/absolute"), "");
+  assert.equal(normalizeImportedImageFolder(".obsidian/plugins"), "");
+  assert.equal(normalizeImportedImageFolder("Images:Imported"), "");
 });
 
 test("HTML theme settings preserve Classic and reject unknown stored values", () => {
@@ -59,6 +74,8 @@ test("settings UI exposes clear Achmage Editorial and Classic choices", async ()
     /CMDS Eagle 현재 클라우드 \(R2 폴백 가능\)/u
   );
   assert.match(source, /가져올 때마다 묻기/u);
+  assert.match(source, /로컬 이미지 폴더/u);
+  assert.match(source, /Obsidian의 첨부 파일 위치 설정/u);
   assert.match(source, /API 키는 필요할 때 묻고 인증 성공 뒤 세션 메모리에만/u);
   assert.doesNotMatch(source, /innerHTML/u);
 });

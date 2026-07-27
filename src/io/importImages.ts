@@ -1,6 +1,7 @@
-import { App, normalizePath } from "obsidian";
+import type { App } from "obsidian";
 import type { ExtractedImage } from "kordoc";
 import { rewriteImportedImageReference } from "./imageLinks";
+import { normalizeImportedImageFolder } from "../legacy-port/settings";
 import { errorMessage } from "../utils/errors";
 
 export interface PersistImagesResult {
@@ -16,13 +17,33 @@ export interface PersistedCloudImage {
   filename: string;
   mimeType: string;
   data: Uint8Array;
+  /**
+   * Provenance guard for cleanup. This is set only after Vault.createBinary
+   * succeeds at a path that was confirmed not to exist.
+   */
+  ownedStagingFile: true;
 }
 
 export interface PersistImagesOptions {
   destination?: "vault" | "cmds-eagle-r2";
+  /** Empty preserves Obsidian's configured attachment policy. */
+  localFolder?: string;
 }
 
-const CLOUD_STAGING_FOLDER = "HanMark-Imported-Images";
+export const CLOUD_STAGING_FOLDER = "HanMark-Imported-Images";
+
+/**
+ * The image persistence layer only needs Obsidian's stable Vault-relative
+ * separator normalization. Keeping this tiny utility local means the module
+ * has no runtime dependency on Obsidian and can be exercised with a mock
+ * Vault, while the public `App` contract remains type checked.
+ */
+function normalizeVaultPath(value: string): string {
+  return value
+    .replace(/\\/gu, "/")
+    .replace(/\/{2,}/gu, "/")
+    .replace(/^\/+|\/+$/gu, "");
+}
 
 function safeFilename(value: string): string {
   const cleaned = value.replace(/[\\/:*?"<>|#[\]^]/g, "_").trim();
@@ -30,7 +51,7 @@ function safeFilename(value: string): string {
 }
 
 async function ensureParentFolders(app: App, path: string): Promise<void> {
-  const parent = normalizePath(path).split("/").slice(0, -1);
+  const parent = normalizeVaultPath(path).split("/").slice(0, -1);
   let current = "";
   for (const part of parent) {
     if (!part) continue;
@@ -77,12 +98,41 @@ function availableCloudPath(
   let attempt = 0;
   while (true) {
     const suffix = attempt === 0 ? "" : `-${attempt}`;
-    const path = normalizePath(
+    const path = normalizeVaultPath(
       `${CLOUD_STAGING_FOLDER}/hanmark-${fingerprint}-${index + 1}${suffix}.${extension}`
     );
     if (!app.vault.getAbstractFileByPath(path)) return path;
     attempt++;
   }
+}
+
+function availableFolderPath(
+  app: App,
+  folder: string,
+  preferredFilename: string
+): string {
+  const extension = /(\.[a-z0-9]{1,8})$/iu.exec(preferredFilename)?.[1] ?? "";
+  const stem = extension
+    ? preferredFilename.slice(0, -extension.length)
+    : preferredFilename;
+  let attempt = 0;
+  while (true) {
+    const suffix = attempt === 0 ? "" : `-${attempt}`;
+    const path = normalizeVaultPath(
+      `${folder}/${stem}${suffix}${extension}`
+    );
+    if (!app.vault.getAbstractFileByPath(path)) return path;
+    attempt += 1;
+  }
+}
+
+function permittedLocalFolder(app: App, value: string | undefined): string {
+  if (!value) return "";
+  const folder = normalizeImportedImageFolder(value);
+  if (!folder) return "";
+  const configDir = normalizeVaultPath(app.vault.configDir);
+  if (folder === configDir || folder.startsWith(`${configDir}/`)) return "";
+  return folder;
 }
 
 /** Save kordoc-extracted images through Obsidian's attachment policy and rewrite the note. */
@@ -102,6 +152,12 @@ export async function persistImportedImages(
   const warnings: string[] = [];
   const cloudCandidates: PersistedCloudImage[] = [];
   const noteBase = notePath.split("/").pop()?.replace(/\.md$/i, "") || "imported";
+  const localFolder = permittedLocalFolder(app, options.localFolder);
+  if (options.localFolder && !localFolder) {
+    warnings.push(
+      "가져온 이미지 폴더가 Vault 설정 폴더와 겹쳐 Obsidian의 첨부 파일 위치 설정을 사용했습니다."
+    );
+  }
 
   for (const [index, image] of images.entries()) {
     try {
@@ -111,36 +167,54 @@ export async function persistImportedImages(
       // percent escapes, Korean characters, or balanced parentheses.
       const attachmentPath = cloudDestination
         ? availableCloudPath(app, notePath, image, index)
-        : normalizePath(
-            await app.fileManager.getAvailablePathForAttachment(
-              safeFilename(`${noteBase}-${safeFilename(image.filename)}`),
-              notePath
+        : localFolder
+          ? availableFolderPath(
+              app,
+              localFolder,
+              safeFilename(`${noteBase}-${safeFilename(image.filename)}`)
             )
-          );
-      await ensureParentFolders(app, attachmentPath);
-      const buffer = image.data.slice().buffer;
-      const file = await app.vault.createBinary(attachmentPath, buffer);
+          : normalizeVaultPath(
+              await app.fileManager.getAvailablePathForAttachment(
+                safeFilename(`${noteBase}-${safeFilename(image.filename)}`),
+                notePath
+              )
+            );
       // Imported documents always use a Vault-root wiki embed. Depending on
       // Obsidian's `useMarkdownLinks` preference here used to produce an
       // ambiguous `![](name(with parentheses).bmp)` destination that HanMark
       // and other converters could truncate at the first closing parenthesis.
       const embed = cloudDestination
-        ? `![](${file.path})`
-        : `![[${file.path}]]`;
-      const result = rewriteImportedImageReference(rewritten, image.filename, embed);
+        ? `![](${attachmentPath})`
+        : `![[${attachmentPath}]]`;
+      const result = rewriteImportedImageReference(
+        rewritten,
+        image.filename,
+        embed
+      );
+      // Do not create an orphan file when Kordoc returned image bytes that are
+      // not referenced by the parsed Markdown. In cloud mode such a file would
+      // never become an upload candidate and could otherwise accumulate in the
+      // plugin staging folder indefinitely.
+      if (result.replacements === 0) {
+        warnings.push(
+          `본문 참조를 찾지 못해 이미지를 저장하지 않았습니다: ${image.filename}`
+        );
+        continue;
+      }
+      await ensureParentFolders(app, attachmentPath);
+      const buffer = image.data.slice().buffer;
+      const file = await app.vault.createBinary(attachmentPath, buffer);
       rewritten = result.markdown;
       saved++;
-      if (cloudDestination && result.replacements > 0) {
+      if (cloudDestination) {
         cloudCandidates.push({
           markdownUrl: file.path,
           vaultPath: file.path,
           filename: image.filename,
           mimeType: image.mimeType,
-          data: image.data.slice()
+          data: image.data.slice(),
+          ownedStagingFile: true
         });
-      }
-      if (result.replacements === 0) {
-        warnings.push(`이미지는 저장했지만 본문 참조를 찾지 못했습니다: ${image.filename}`);
       }
     } catch (error: unknown) {
       warnings.push(`이미지 저장 실패 (${image.filename}): ${errorMessage(error)}`);

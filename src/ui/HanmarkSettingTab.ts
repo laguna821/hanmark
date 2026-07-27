@@ -22,6 +22,7 @@ import type {
 } from "../legacy-port/settings";
 import {
   cloneToolbarSkin,
+  normalizeImportedImageFolder,
   normalizeToolbarHex,
   normalizeToolbarSkin,
   normalizeToolbarSkinMode,
@@ -173,6 +174,23 @@ export class HanmarkSettingTab extends PluginSettingTab {
             const destination: ImportedImageDestination =
               value === "cmds-eagle-r2" || value === "ask" ? value : "vault";
             void this.changeImportedImageDestination(destination);
+          });
+      });
+
+    new Setting(container)
+      .setName("로컬 이미지 폴더")
+      .setDesc(
+        "Vault 첨부 파일로 보관할 때 사용할 상대 경로입니다. 예: Attachments/HanMark. " +
+        "비워 두면 Obsidian의 첨부 파일 위치 설정을 그대로 사용합니다. " +
+        "클라우드 업로드가 완료된 HanMark 임시 이미지는 시스템 휴지통을 우선 사용해 정리하며, " +
+        "운영체제 휴지통을 사용할 수 없으면 Obsidian 로컬 휴지통에 안전하게 보존합니다."
+      )
+      .addText((text) => {
+        text
+          .setPlaceholder("Attachments/HanMark")
+          .setValue(this.host.settings.importedImageFolder)
+          .onChange((value) => {
+            void this.changeImportedImageFolder(value);
           });
       });
 
@@ -648,6 +666,19 @@ export class HanmarkSettingTab extends PluginSettingTab {
     } catch (error) {
       this.host.settings.importedImageDestination = previous;
       new Notice(`이미지 저장 방식을 저장하지 못했습니다: ${errorMessage(error)}`);
+      this.render();
+    }
+  }
+
+  private async changeImportedImageFolder(value: string): Promise<void> {
+    const previous = this.host.settings.importedImageFolder;
+    try {
+      this.host.settings.importedImageFolder =
+        normalizeImportedImageFolder(value);
+      await this.host.saveSettings();
+    } catch (error) {
+      this.host.settings.importedImageFolder = previous;
+      new Notice(`이미지 폴더를 저장하지 못했습니다: ${errorMessage(error)}`);
       this.render();
     }
   }

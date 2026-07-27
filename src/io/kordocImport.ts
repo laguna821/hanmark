@@ -10,6 +10,7 @@ import {
 import { parse } from "kordoc";
 import { BulkImportReportModal } from "./BulkImportReportModal";
 import {
+  CLOUD_STAGING_FOLDER,
   persistImportedImages,
   type PersistedCloudImage
 } from "./importImages";
@@ -25,11 +26,15 @@ import {
   splitFilename,
   type SelectedExternalFile
 } from "./fileGateway";
-import { transformMarkdownImageTokens } from "./markdownImageTokens";
+import {
+  markdownImageTokens,
+  transformMarkdownImageTokens
+} from "./markdownImageTokens";
 import { R2UploadError, uploadImageToR2 } from "./r2ImageUpload";
 import { uploadBatchWithSingleAuthenticationRefresh } from "./r2BatchUpload";
 import {
   normalizeImportedImageDestination,
+  normalizeImportedImageFolder,
   type ImportedImageDestination
 } from "../legacy-port/settings";
 
@@ -40,6 +45,7 @@ type ImportImageDestination = Exclude<ImportedImageDestination, "ask">;
 
 interface ImportCloudSettings {
   destination: ImportedImageDestination;
+  localFolder: string;
   workerUrl: string;
   publicUrl: string;
   executeCommandById?: (id: string) => boolean;
@@ -47,6 +53,11 @@ interface ImportCloudSettings {
 
 interface CloudImportResult {
   uploaded: number;
+  warnings: string[];
+}
+
+interface CloudCleanupResult {
+  removed: number;
   warnings: string[];
 }
 
@@ -84,6 +95,7 @@ function importCloudSettings(plugin: unknown): ImportCloudSettings {
     destination: normalizeImportedImageDestination(
       settings.importedImageDestination
     ),
+    localFolder: normalizeImportedImageFolder(settings.importedImageFolder),
     workerUrl:
       typeof settings.cmdsEagleWorkerUrl === "string"
         ? settings.cmdsEagleWorkerUrl.trim()
@@ -141,7 +153,7 @@ async function importOne(
       relative,
       result.markdown.trim(),
       result.images,
-      { destination }
+      { destination, localFolder: cloudSettings.localFolder }
     );
     const note = await app.vault.create(relative, persisted.markdown.trim() + "\n");
 
@@ -419,6 +431,175 @@ async function deleteCmdsStagingNote(
   }
 }
 
+function comparableVaultReference(value: string): string {
+  let decoded = value.trim().replace(/^<|>$/gu, "").replace(/\\/gu, "/");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const next = decodeURI(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  return normalizePath(decoded.replace(/^\.\//u, "").replace(/[?#].*$/u, ""))
+    .normalize("NFC");
+}
+
+function markdownReferencesVaultFile(
+  app: App,
+  markdown: string,
+  notePath: string,
+  target: TFile
+): boolean {
+  const targetPath = normalizePath(target.path).normalize("NFC");
+  const refersToTarget = (source: string): boolean => {
+    if (comparableVaultReference(source) === targetPath) return true;
+    return app.metadataCache.getFirstLinkpathDest(source, notePath)?.path
+      === target.path;
+  };
+  if (markdownImageTokens(markdown).some((token) => refersToTarget(token.source))) {
+    return true;
+  }
+  const wikiEmbed = /!\[\[([^\]]+)\]\]/gu;
+  for (const match of markdown.matchAll(wikiEmbed)) {
+    const source = (match[1] ?? "").split("|", 1)[0].split("#", 1)[0];
+    if (source && refersToTarget(source)) return true;
+  }
+  return false;
+}
+
+function hasOtherResolvedReference(
+  app: App,
+  targetPath: string,
+  excludedSourcePaths: ReadonlySet<string>
+): boolean {
+  for (const [sourcePath, destinations] of Object.entries(
+    app.metadataCache.resolvedLinks
+  )) {
+    if (excludedSourcePaths.has(sourcePath)) continue;
+    if ((destinations[targetPath] ?? 0) > 0) return true;
+  }
+  return false;
+}
+
+function bytesMatch(expected: Uint8Array, actual: ArrayBuffer): boolean {
+  const current = new Uint8Array(actual);
+  if (current.byteLength !== expected.byteLength) return false;
+  for (let index = 0; index < current.byteLength; index += 1) {
+    if (current[index] !== expected[index]) return false;
+  }
+  return true;
+}
+
+function isOwnedCloudStagingPath(path: string): boolean {
+  const normalized = normalizePath(path);
+  return normalized.startsWith(`${CLOUD_STAGING_FOLDER}/hanmark-`);
+}
+
+/**
+ * Remove only the disposable image files that this import just created and
+ * whose remote URL was verified in the final note. A byte mismatch or any
+ * remaining reference turns cleanup into a warning rather than a deletion.
+ */
+async function cleanupVerifiedCloudImages(
+  app: App,
+  note: TFile,
+  candidates: readonly PersistedCloudImage[],
+  verifiedSources: ReadonlySet<string>,
+  excludedSourcePaths: ReadonlySet<string>
+): Promise<CloudCleanupResult> {
+  if (!verifiedSources.size) return { removed: 0, warnings: [] };
+  const warnings: string[] = [];
+  let removed = 0;
+  const currentNote = await app.vault.read(note);
+  const excluded = new Set(excludedSourcePaths);
+  excluded.add(note.path);
+
+  for (const candidate of candidates) {
+    if (!verifiedSources.has(candidate.markdownUrl)) continue;
+    const abstract = app.vault.getAbstractFileByPath(candidate.vaultPath);
+    if (!candidate.ownedStagingFile || !isOwnedCloudStagingPath(candidate.vaultPath)) {
+      warnings.push(
+        `소유권을 확인할 수 없어 업로드된 로컬 이미지를 보존했습니다: ${candidate.vaultPath}`
+      );
+      continue;
+    }
+    if (!(abstract instanceof TFile)) {
+      // A missing file is already outside the Vault and needs no further work.
+      if (!abstract) removed += 1;
+      else {
+        warnings.push(
+          `임시 이미지 경로가 파일이 아니어서 정리하지 못했습니다: ${candidate.vaultPath}`
+        );
+      }
+      continue;
+    }
+    if (
+      markdownReferencesVaultFile(app, currentNote, note.path, abstract)
+      || hasOtherResolvedReference(app, abstract.path, excluded)
+    ) {
+      warnings.push(
+        `다른 노트가 참조하고 있어 업로드된 로컬 이미지를 보존했습니다: ${abstract.path}`
+      );
+      continue;
+    }
+    if (
+      abstract.stat.size !== candidate.data.byteLength
+      || !bytesMatch(candidate.data, await app.vault.readBinary(abstract))
+    ) {
+      warnings.push(
+        `임시 이미지가 생성 후 변경되어 안전을 위해 보존했습니다: ${abstract.path}`
+      );
+      continue;
+    }
+    try {
+      // These are fresh, content-verified HanMark staging files rather than
+      // user-authored attachments. Prefer the operating-system trash so an
+      // internal Vault trash folder cannot retain a second cloud copy.
+      const systemTrash = (app.vault as unknown as LegacyVaultTrash).trash.bind(app.vault);
+      await systemTrash(abstract, true);
+      removed += 1;
+    } catch {
+      warnings.push(
+        `업로드는 완료했지만 로컬 임시 이미지를 정리하지 못했습니다: ${abstract.path}`
+      );
+    }
+  }
+  return { removed, warnings };
+}
+
+async function waitForCommandStagingToSettle(
+  app: App,
+  stagingNote: TFile
+): Promise<boolean> {
+  let previous: string;
+  try {
+    previous = await app.vault.read(stagingNote);
+  } catch {
+    return false;
+  }
+  let stableReads = 0;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 250);
+    });
+    if (app.vault.getAbstractFileByPath(stagingNote.path) !== stagingNote) {
+      return false;
+    }
+    let current: string;
+    try {
+      current = await app.vault.read(stagingNote);
+    } catch {
+      return false;
+    }
+    if (current === previous) stableReads += 1;
+    else stableReads = 0;
+    previous = current;
+  }
+  return stableReads >= 2;
+}
+
 async function applyVerifiedCloudReplacements(
   app: App,
   note: TFile,
@@ -440,7 +621,8 @@ async function directR2Fallback(
   app: App,
   note: TFile,
   candidates: readonly PersistedCloudImage[],
-  settings: ImportCloudSettings
+  settings: ImportCloudSettings,
+  allowLocalCleanup: boolean
 ): Promise<CloudImportResult> {
   if (!settings.workerUrl || !settings.publicUrl) {
     return {
@@ -511,12 +693,32 @@ async function directR2Fallback(
     );
   }
 
-  if (replacements.size) {
-    const markdown = await app.vault.read(note);
-    const rewritten = replaceStagedImageUrls(markdown, replacements);
-    if (rewritten.markdown !== markdown) {
-      await app.vault.modify(note, rewritten.markdown);
-    }
+  const appliedSources = await applyVerifiedCloudReplacements(
+    app,
+    note,
+    [...replacements].map(([localSource, remoteUrl]) => ({
+      localSource,
+      remoteUrl
+    }))
+  );
+  if (appliedSources.size !== replacements.size) {
+    warnings.push(
+      "업로드한 URL 일부를 최종 노트에 적용하지 못해 해당 로컬 이미지를 보존했습니다."
+    );
+  }
+  if (allowLocalCleanup) {
+    const cleanup = await cleanupVerifiedCloudImages(
+      app,
+      note,
+      candidates,
+      appliedSources,
+      new Set<string>()
+    );
+    warnings.push(...cleanup.warnings);
+  } else if (appliedSources.size > 0) {
+    warnings.push(
+      "임시 staging 노트를 정리하지 못해 해당 노트가 참조하는 로컬 이미지를 보존했습니다."
+    );
   }
   return { uploaded: replacements.size, warnings };
 }
@@ -559,10 +761,26 @@ async function moveImportedImagesToCloud(
     if (bridge.status === "success") {
       const warnings: string[] = [];
       if (allVerifiedReplacementsApplied) {
-        if (!(await deleteCmdsStagingNote(app, stagingNote))) {
+        const commandSettled =
+          !bridge.commandDispatched
+          || await waitForCommandStagingToSettle(app, stagingNote);
+        if (!commandSettled) {
+          warnings.push(
+            `늦은 CMDS 쓰기 가능성이 있어 staging 노트와 로컬 이미지를 보존했습니다: ${stagingNote.path}`
+          );
+        } else if (!(await deleteCmdsStagingNote(app, stagingNote))) {
           warnings.push(
             `업로드는 완료했지만 임시 staging 노트를 정리하지 못했습니다: ${stagingNote.path}`
           );
+        } else {
+          const cleanup = await cleanupVerifiedCloudImages(
+            app,
+            note,
+            candidates,
+            appliedSources,
+            new Set([stagingNote.path])
+          );
+          warnings.push(...cleanup.warnings);
         }
       } else {
         warnings.push(
@@ -598,8 +816,10 @@ async function moveImportedImagesToCloud(
     }
 
     const cleanupWarnings: string[] = [];
+    let stagingNoteRemoved = false;
     if (bridge.status === "unavailable") {
-      if (!(await deleteCmdsStagingNote(app, stagingNote))) {
+      stagingNoteRemoved = await deleteCmdsStagingNote(app, stagingNote);
+      if (!stagingNoteRemoved) {
         cleanupWarnings.push(
           `실행되지 않은 임시 staging 노트를 정리하지 못했습니다: ${stagingNote.path}`
         );
@@ -622,7 +842,13 @@ async function moveImportedImagesToCloud(
         warnings: cleanupWarnings
       };
     }
-    const direct = await directR2Fallback(app, note, remaining, settings);
+    const direct = await directR2Fallback(
+      app,
+      note,
+      remaining,
+      settings,
+      stagingNoteRemoved
+    );
     return {
       uploaded: bridge.replacements.length + direct.uploaded,
       warnings: [...cleanupWarnings, ...direct.warnings]
