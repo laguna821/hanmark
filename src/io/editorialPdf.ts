@@ -9,9 +9,15 @@ import type { HanmarkExportOutcome } from "./exportTypes";
 export const EDITORIAL_PDF_MIN_CHROMIUM = 131;
 export const EDITORIAL_PDF_BODY_CLASS = "hanmark-editorial-pdf-active";
 export const EDITORIAL_PDF_ROOT_CLASS = "hanmark-editorial-pdf-root";
+export const EDITORIAL_PDF_OBSIDIAN_PRINT_CLASS = "print";
 const EDITORIAL_PDF_STYLE_CLASS = "hanmark-editorial-pdf-style";
-const DEFAULT_WATCHDOG_MS = 5 * 60 * 1000;
+const DEFAULT_WATCHDOG_MS = 10 * 60 * 1000;
 const DEFAULT_ASSET_TIMEOUT_MS = 20 * 1000;
+// Windows can open a second "Save PDF" dialog after the browser print dialog
+// has already emitted `afterprint`. Keep the prepared DOM alive long enough
+// for that native save step to finish; a new export or plugin unload still
+// disposes it immediately.
+const POST_PRINT_CLEANUP_DELAY_MS = 5 * 60 * 1000;
 const MAX_EDITORIAL_PDF_RENDER_DEPTH = 128;
 const SAFE_IMAGE_DATA_URI = /^data:image\/(?:png|jpeg|gif|bmp);base64,[a-z0-9+/=\s]+$/i;
 const SAFE_LINK = /^(?:https?:|mailto:)/i;
@@ -178,11 +184,30 @@ export function createEditorialPdfStyles(headerTitle: string): string {
 }
 
 .${EDITORIAL_PDF_ROOT_CLASS} {
-  display: none;
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: -100000px;
+  display: block;
+  width: 170mm;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 @media print {
+  html {
+    height: auto;
+    overflow: visible;
+  }
+
   html body.${EDITORIAL_PDF_BODY_CLASS} {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
     background: #ffffff;
   }
 
@@ -191,7 +216,14 @@ export function createEditorialPdfStyles(headerTitle: string): string {
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} {
+    position: static;
+    inset: auto;
     display: block;
+    width: auto;
+    min-height: 0;
+    overflow: visible;
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS},
@@ -202,6 +234,8 @@ export function createEditorialPdfStyles(headerTitle: string): string {
   .${EDITORIAL_PDF_ROOT_CLASS} {
     color: #172130;
     background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
     font-family: "HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif;
     font-size: 10pt;
     line-height: 1.55;
@@ -569,8 +603,11 @@ export function buildEditorialPdfRoot(
   fileTitle: string
 ): HTMLElement {
   const root = createHtmlElement(ownerDocument, "section");
-  root.className = EDITORIAL_PDF_ROOT_CLASS;
-  root.setAttribute("aria-hidden", "true");
+  // Obsidian's host print stylesheet hides every direct body child that does
+  // not carry its reserved `print` class. Without this class the native print
+  // dialog opens normally but receives an empty document.
+  root.className =
+    `${EDITORIAL_PDF_ROOT_CLASS} ${EDITORIAL_PDF_OBSIDIAN_PRINT_CLASS}`;
 
   const cover = createHtmlElement(ownerDocument, "section");
   cover.className = "hanmark-editorial-pdf-cover";
@@ -657,6 +694,18 @@ export async function waitForEditorialPdfAssets(
   }));
 }
 
+export async function waitForEditorialPdfLayout(
+  root: HTMLElement,
+  view: Window
+): Promise<void> {
+  await new Promise<void>((resolve) => {
+    view.requestAnimationFrame(() => {
+      view.requestAnimationFrame(() => resolve());
+    });
+  });
+  root.getBoundingClientRect();
+}
+
 function editorialPdfUnsupportedMessage(support: EditorialPdfRuntimeSupport): string {
   if (support.chromiumMajor === null) {
     return `Achmage Editorial PDF requires Chromium ${support.minimum} or newer, but this Obsidian runtime could not be identified.`;
@@ -693,11 +742,13 @@ export class EditorialPdfService {
 
     let cleaned = false;
     let watchdog: number | undefined;
+    let delayedCleanup: number | undefined;
     const cleanup = (): void => {
       if (cleaned) return;
       cleaned = true;
       if (watchdog) view.clearTimeout(watchdog);
-      view.removeEventListener("afterprint", cleanup);
+      if (delayedCleanup) view.clearTimeout(delayedCleanup);
+      view.removeEventListener("afterprint", schedulePostPrintCleanup);
       view.removeEventListener("error", cleanup);
       view.removeEventListener("beforeunload", cleanup);
       root.remove();
@@ -707,8 +758,14 @@ export class EditorialPdfService {
       }
       if (this.activeCleanup === cleanup) this.activeCleanup = null;
     };
+    const schedulePostPrintCleanup = (): void => {
+      if (cleaned || delayedCleanup) return;
+      delayedCleanup = view.setTimeout(cleanup, POST_PRINT_CLEANUP_DELAY_MS);
+    };
     this.activeCleanup = cleanup;
-    view.addEventListener("afterprint", cleanup, { once: true });
+    view.addEventListener("afterprint", schedulePostPrintCleanup, {
+      once: true
+    });
     view.addEventListener("error", cleanup, { once: true });
     view.addEventListener("beforeunload", cleanup, { once: true });
     watchdog = view.setTimeout(
@@ -722,6 +779,7 @@ export class EditorialPdfService {
         root,
         request.assetTimeoutMs ?? DEFAULT_ASSET_TIMEOUT_MS
       );
+      await waitForEditorialPdfLayout(root, view);
       view.print();
       return {
         format: "pdf",

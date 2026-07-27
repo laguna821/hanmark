@@ -2,16 +2,27 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
+  EDITORIAL_PDF_OBSIDIAN_PRINT_CLASS,
   EDITORIAL_PDF_MIN_CHROMIUM,
   createEditorialPdfStyles,
   detectChromiumMajor,
   escapeEditorialPdfCssString,
   getEditorialPdfRuntimeSupport,
   truncateEditorialPdfHeader,
-  waitForEditorialPdfAssets
+  waitForEditorialPdfAssets,
+  waitForEditorialPdfLayout
 } from "../src/io/editorialPdf";
 
 describe("Achmage Editorial PDF helpers", () => {
+  it("uses Obsidian's print-root class so the host stylesheet cannot hide the document", async () => {
+    assert.equal(EDITORIAL_PDF_OBSIDIAN_PRINT_CLASS, "print");
+    const source = await readFile("src/io/editorialPdf.ts", "utf8");
+    assert.match(
+      source,
+      /root\.className\s*=\s*`\$\{EDITORIAL_PDF_ROOT_CLASS\} \$\{EDITORIAL_PDF_OBSIDIAN_PRINT_CLASS\}`/u
+    );
+  });
+
   it("detects the Chromium major version and enforces the page-margin-box gate", () => {
     assert.equal(
       detectChromiumMajor(
@@ -63,6 +74,23 @@ describe("Achmage Editorial PDF helpers", () => {
     assert.match(css, /widows: 3;/u);
     assert.match(css, /orphans: 3;/u);
     assert.match(css, /"HanMark Pretendard"/u);
+    assert.match(css, /print-color-adjust: exact;/u);
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-root \{[\s\S]*?display: block;[\s\S]*?visibility: hidden;/u
+    );
+    assert.match(
+      css,
+      /@media print \{[\s\S]*?html \{[\s\S]*?height: auto;[\s\S]*?overflow: visible;/u
+    );
+    assert.match(
+      css,
+      /body\.hanmark-editorial-pdf-active[\s\S]*?height: auto;[\s\S]*?overflow: visible;/u
+    );
+    assert.match(
+      css,
+      /section\.hanmark-editorial-pdf-root[\s\S]*?position: static;[\s\S]*?visibility: visible;/u
+    );
     assert.doesNotMatch(css, /COLLOQUIUM|author|subtitle|tag/u);
     assert.doesNotMatch(css, /!important/u);
   });
@@ -124,17 +152,54 @@ describe("Achmage Editorial PDF helpers", () => {
     );
   });
 
+  it("settles two animation frames and forces layout before opening print", async () => {
+    const order: string[] = [];
+    const callbacks: FrameRequestCallback[] = [];
+    const view = {
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        order.push("frame-request");
+        callbacks.push(callback);
+        return callbacks.length;
+      }
+    } as unknown as Window;
+    const root = {
+      getBoundingClientRect: () => {
+        order.push("layout");
+        return {} as DOMRect;
+      }
+    } as unknown as HTMLElement;
+
+    const settled = waitForEditorialPdfLayout(root, view);
+    callbacks.shift()?.(0);
+    callbacks.shift()?.(16);
+    await settled;
+
+    assert.deepEqual(order, [
+      "frame-request",
+      "frame-request",
+      "layout"
+    ]);
+  });
+
   it("owns an idempotent print lifecycle without private Electron APIs", async () => {
     const source = await readFile("src/io/editorialPdf.ts", "utf8");
 
     assert.match(source, /let cleaned = false;/u);
     assert.match(source, /if \(cleaned\) return;\s*cleaned = true;/u);
-    assert.match(source, /addEventListener\("afterprint", cleanup/u);
+    assert.match(
+      source,
+      /addEventListener\("afterprint", schedulePostPrintCleanup/u
+    );
+    assert.match(
+      source,
+      /delayedCleanup = view\.setTimeout\(cleanup, POST_PRINT_CLEANUP_DELAY_MS\)/u
+    );
     assert.match(source, /addEventListener\("error", cleanup/u);
     assert.match(source, /addEventListener\("beforeunload", cleanup/u);
     assert.match(source, /watchdog = view\.setTimeout\(/u);
     assert.match(source, /root\.remove\(\);\s*style\.remove\(\);/u);
     assert.match(source, /view\.print\(\);/u);
+    assert.match(source, /await waitForEditorialPdfLayout\(root, view\);/u);
     assert.match(source, /MAX_EDITORIAL_PDF_RENDER_DEPTH = 128/u);
     assert.match(
       source,
