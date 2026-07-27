@@ -74,7 +74,7 @@ const FORMAT_CARDS: readonly FormatCard[] = [
   {
     id: "pdf",
     title: "PDF",
-    description: "공유·인쇄·강의자료용 PDF 설정 창을 엽니다."
+    description: "표지와 페이지 머리말을 갖춘 Editorial PDF로 인쇄합니다."
   }
 ];
 
@@ -378,10 +378,26 @@ export class HanmarkExportModal extends Modal {
       };
     }
 
-    const preview = root.createEl("button", {
+    const previewDescriptionId =
+      "hanmark-export-hwpx-preview-description";
+    const previewRow = root.createDiv({
+      cls: "hanmark-export-preview-row"
+    });
+    const previewCopy = previewRow.createDiv({
+      cls: "hanmark-export-preview-copy"
+    });
+    previewCopy.createEl("strong", { text: "내보내기 전에 확인" });
+    previewCopy.createEl("small", {
+      text: "현재 템플릿과 문서 내용을 빠른 미리보기로 확인합니다.",
+      attr: { id: previewDescriptionId }
+    });
+    const preview = previewRow.createEl("button", {
       text: "빠른 HWPX 미리보기",
       cls: "hanmark-export-secondary-action",
-      attr: { type: "button" }
+      attr: {
+        type: "button",
+        "aria-describedby": previewDescriptionId
+      }
     });
     preview.disabled = this.busy;
     preview.onclick = async () => {
@@ -398,15 +414,20 @@ export class HanmarkExportModal extends Modal {
     disabled = false
   ): void {
     const selected = this.hwpxVariant === id;
+    const descriptionId = `hanmark-export-${id}-description`;
     const button = root.createEl("button", {
       cls: `hanmark-export-variant${selected ? " is-selected" : ""}`,
       attr: {
         type: "button",
-        "aria-pressed": String(selected)
+        "aria-pressed": String(selected),
+        "aria-describedby": descriptionId
       }
     });
     button.createEl("strong", { text: title });
-    button.createEl("small", { text: description });
+    button.createEl("small", {
+      text: description,
+      attr: { id: descriptionId }
+    });
     button.disabled = this.busy || disabled;
     if (disabled) {
       button.setAttribute(
@@ -503,13 +524,13 @@ export class HanmarkExportModal extends Modal {
   }
 
   private renderPdfDetail(root: HTMLElement): void {
-    root.createEl("h3", { text: "PDF 내보내기" });
+    root.createEl("h3", { text: "Achmage Editorial PDF" });
     root.createEl("p", {
-      text: "Obsidian의 기본 PDF 내보내기 설정 창을 엽니다. 페이지 크기·여백·가로/세로 방향을 확인한 뒤 저장하세요."
+      text: "A4 첫 장에는 Markdown 파일명만 표지로 넣고, 2쪽부터 파일명 머리말·위아래 실선·페이지 번호와 함께 본문을 자동 배치합니다."
     });
     root.createEl("small", {
       cls: "hanmark-export-native-note",
-      text: "PDF는 Obsidian의 인쇄 스타일을 사용하므로 HanMark HWPX 템플릿과 화면이 다를 수 있습니다."
+      text: "원문은 변경하지 않으며 이미지와 Pretendard 글꼴을 준비한 뒤 운영체제의 PDF 저장 인쇄 창을 엽니다."
     });
   }
 
@@ -596,7 +617,7 @@ export class HanmarkExportModal extends Modal {
   private primaryActionLabel(): string {
     if (this.format === "docx") return "DOCX 내보내기";
     if (this.format === "html") return "HTML 내보내기";
-    if (this.format === "pdf") return "PDF 설정 열기";
+    if (this.format === "pdf") return "Editorial PDF 인쇄";
     if (this.hwpxVariant === "gongmun") return "공문서 HWPX 내보내기";
     return "HWPX 내보내기";
   }
@@ -609,8 +630,8 @@ export class HanmarkExportModal extends Modal {
       return this.actions.runOther("html");
     }
     if (this.format === "pdf") {
-      // Let Obsidian's native PDF dialog own focus instead of opening behind
-      // the resizable HanMark workspace modal.
+      // Let the system print dialog own focus instead of opening behind the
+      // resizable HanMark workspace modal.
       super.close();
       return this.actions.exportPdf?.();
     }

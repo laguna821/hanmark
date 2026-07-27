@@ -1,12 +1,12 @@
 {
   "name": "hanmark",
-  "version": "2.5.1",
-  "description": "No-setup Markdown export to image-inclusive HWPX and self-contained offline HTML.",
+  "version": "2.5.2",
+  "description": "No-setup Markdown export to HWPX, self-contained HTML, and Editorial PDF.",
   "main": "main.js",
   "scripts": {
-    "gen-assets": "node scripts/gen-embedded-assets.mjs",
-    "dev": "node scripts/gen-embedded-assets.mjs && node esbuild.config.mjs",
-    "build": "node scripts/gen-embedded-assets.mjs && tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "gen-assets": "node scripts/gen-embedded-assets.mjs && node scripts/gen-font-css.mjs",
+    "dev": "npm run gen-assets && node esbuild.config.mjs",
+    "build": "npm run gen-assets && tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
     "test": "node scripts/run-tests.mjs",
     "lint": "eslint src package.json manifest.json --max-warnings 0",
     "check-bundle": "node scripts/check-bundle.mjs",
@@ -27,6 +27,7 @@
     "docx-preview": "0.4.0",
     "jszip": "^3.10.1",
     "kordoc": "4.2.5",
+    "markdown-it": "14.3.0",
     "pdfjs-dist": "4.10.38"
   },
   "overrides": {
@@ -40,7 +41,9 @@
     "sharp": "0.35.3"
   },
   "devDependencies": {
+    "@fontsource/pretendard": "5.3.0",
     "@eslint/json": "0.14.0",
+    "@types/markdown-it": "14.1.2",
     "@types/node": "^20.0.0",
     "@typescript-eslint/parser": "8.65.0",
     "esbuild": "0.28.1",

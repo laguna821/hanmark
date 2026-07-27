@@ -24,7 +24,7 @@ describe("HanMark unified export center", () => {
       ["hwpx", "편집 가능한 한글 문서로 내보냅니다."],
       ["docx", "Word 문서로 내보냅니다. Pandoc이 필요합니다."],
       ["html", "모바일 브라우저에 적합한 HTML로 내보냅니다."],
-      ["pdf", "공유·인쇄·강의자료용 PDF 설정 창을 엽니다."]
+      ["pdf", "표지와 페이지 머리말을 갖춘 Editorial PDF로 인쇄합니다."]
     ] as const;
 
     for (const [format, microcopy] of cards) {
@@ -52,24 +52,29 @@ describe("HanMark unified export center", () => {
     assert.match(modal, /"aria-pressed": String\(selected\)/u);
   });
 
-  it("delegates PDF to Obsidian and explains that it is not HWPX-template output", async () => {
+  it("prints a self-contained Editorial PDF without the legacy Obsidian command", async () => {
     const { modal, main } = await exportSources();
+    const pdf = await readFile("src/io/editorialPdf.ts", "utf8");
 
+    assert.doesNotMatch(main, /workspace:export-pdf/u);
+    assert.match(main, /new EditorialPdfService\(\)/u);
+    assert.match(main, /this\.editorialPdf\.print\(\{/u);
+    assert.match(main, /prepareSelfContainedHtmlMarkdown\(body,/u);
+    assert.match(main, /choosePdfImageFailureAction/u);
+    assert.match(main, /this\.editorialPdf\.dispose\(\)/u);
+    assert.match(pdf, /EDITORIAL_PDF_MIN_CHROMIUM = 131/u);
+    assert.match(pdf, /@page :first/u);
+    assert.match(pdf, /@top-center/u);
+    assert.match(pdf, /@bottom-center/u);
+    assert.match(pdf, /view\.print\(\)/u);
+    assert.doesNotMatch(pdf, /!important/u);
     assert.match(
-      main,
-      /this\.executeCommandById\("workspace:export-pdf"\)/u
-    );
-    assert.match(
-      main,
-      /executeCommandById\(id: string\): boolean[\s\S]*?commands\.executeCommandById\(id\)/u
+      modal,
+      /A4 첫 장에는 Markdown 파일명만 표지로 넣고/u
     );
     assert.match(
       modal,
-      /Obsidian의 기본 PDF 내보내기 설정 창을 엽니다/u
-    );
-    assert.match(
-      modal,
-      /PDF는 Obsidian의 인쇄 스타일을 사용하므로 HanMark HWPX 템플릿과 화면이 다를 수 있습니다/u
+      /원문은 변경하지 않으며 이미지와 Pretendard 글꼴을 준비한 뒤/u
     );
     assert.match(
       modal,
@@ -123,7 +128,7 @@ describe("HanMark unified export center", () => {
   });
 
   it("uses a two-column grid that collapses to one column", async () => {
-    const { css } = await exportSources();
+    const { modal, css } = await exportSources();
 
     assert.match(
       css,
@@ -135,6 +140,26 @@ describe("HanMark unified export center", () => {
     );
     assert.match(css, /\.hanmark-export-format-card\.is-selected/u);
     assert.match(css, /border-color: var\(--hanmark-export-key-color\)/u);
+    assert.match(
+      css,
+      /\.hanmark-export-variant-grid \{\s*display: grid;\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u
+    );
+    assert.doesNotMatch(
+      css,
+      /\.hanmark-export-variant-grid \{[\s\S]{0,140}?repeat\(3,/u
+    );
+    assert.match(
+      css,
+      /@container \(max-width: 700px\) \{[\s\S]{0,360}?\.hanmark-export-variant-grid \{\s*grid-template-columns: 1fr;/u
+    );
+    assert.match(
+      modal,
+      /cls: "hanmark-export-preview-row"[\s\S]{0,600}?cls: "hanmark-export-secondary-action"[\s\S]{0,180}?"aria-describedby": previewDescriptionId/u
+    );
+    assert.match(
+      modal,
+      /const descriptionId = `hanmark-export-\$\{id\}-description`;[\s\S]{0,300}?"aria-describedby": descriptionId/u
+    );
   });
 
   it("does not reintroduce unsafe HTML or Electron escape hatches", async () => {

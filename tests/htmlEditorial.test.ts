@@ -103,8 +103,8 @@ test("HTML renderer allows only explicit web and mail links and validated raster
   assert.doesNotMatch(html, /src="data:image\/svg\+xml/);
   assert.doesNotMatch(html, /<iframe(?:\s|>)/i);
   assert.doesNotMatch(html, /<script(?:\s|>)/i);
-  assert.match(html, /&lt;iframe src="https:\/\/example\.com"/);
-  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /example\.com" onload/);
+  assert.doesNotMatch(html, /alert\(1\)/);
 });
 
 test("masthead title keeps literal hash and equals characters", () => {
@@ -133,16 +133,87 @@ test("Editorial callouts remove Obsidian markers while preserving safe visible t
   const markdown = [
     "# 콜아웃",
     "> [!note] **참고 제목**",
-    "> [!WARNING]- 접힌 경고",
+    "> 이어지는 설명",
+    "",
     "> 일반 인용문"
   ].join("\n");
   const html = renderStandaloneHtml(markdown, { title: "콜아웃" });
 
-  assert.equal((html.match(/class="hanmark-callout"/g) ?? []).length, 3);
-  assert.match(html, /<aside class="hanmark-callout"><strong>참고 제목<\/strong><\/aside>/);
-  assert.match(html, /<aside class="hanmark-callout">접힌 경고<\/aside>/);
-  assert.match(html, /<aside class="hanmark-callout">일반 인용문<\/aside>/);
-  assert.doesNotMatch(html, /\[!(?:note|warning)\]/i);
+  assert.equal((html.match(/class="hanmark-callout"/g) ?? []).length, 1);
+  assert.match(
+    html,
+    /<aside class="hanmark-callout" data-callout="note"><p class="hanmark-line hanmark-body"><strong>참고 제목<\/strong> 이어지는 설명<\/p><\/aside>/
+  );
+  assert.match(html, /<blockquote class="hanmark-quote">/);
+  assert.match(html, /일반 인용문/);
+  assert.doesNotMatch(html, /\[!note\]/i);
+});
+
+test("Editorial normalizes physical lines and blank runs without changing hard breaks", () => {
+  const markdown = [
+    "# 줄바꿈",
+    "",
+    "첫 줄",
+    "둘째 줄  ",
+    "셋째 줄\\",
+    "넷째 줄",
+    "",
+    "",
+    "",
+    "새 문단"
+  ].join("\n");
+  const html = renderStandaloneHtml(markdown, { title: "줄바꿈" });
+
+  assert.match(
+    html,
+    /<p class="hanmark-line hanmark-body">첫 줄 둘째 줄<br>셋째 줄<br>넷째 줄<\/p>/
+  );
+  assert.equal(
+    (html.match(/<p class="hanmark-line hanmark-body"/g) ?? []).length,
+    2
+  );
+  assert.doesNotMatch(html, /class="hanmark-line hanmark-empty"/);
+});
+
+test("Editorial renders the safe HanMark toolbar subset and unwraps unknown tags", () => {
+  const markdown = [
+    "# 서식",
+    "",
+    "<p align=\"center\"><font color=\"#123456\">색상</font> <u>밑줄</u> <sup>위</sup> <sub>아래</sub> <mark style=\"background-color:#ffee00\">표시</mark></p>",
+    "",
+    "<custom onclick=\"alert(1)\">보존할 글자</custom>",
+    "",
+    "<script>절대 보이면 안 됨</script>"
+  ].join("\n");
+  const html = renderStandaloneHtml(markdown, { title: "서식" });
+
+  assert.match(
+    html,
+    /<p class="hanmark-line hanmark-body" style="text-align:center">/
+  );
+  assert.match(html, /<span style="color:#123456">색상<\/span>/);
+  assert.match(html, /<u>밑줄<\/u>/);
+  assert.match(html, /<sup>위<\/sup>/);
+  assert.match(html, /<sub>아래<\/sub>/);
+  assert.match(
+    html,
+    /<mark style="background-color:#ffee00">표시<\/mark>/
+  );
+  assert.match(html, />보존할 글자</);
+  assert.doesNotMatch(html, /custom|onclick|alert\(1\)|절대 보이면 안 됨/);
+});
+
+test("Editorial keeps raw HTML literal inside fenced code", () => {
+  const html = renderStandaloneHtml(
+    "# 코드\n\n```html\n<u onclick=\"bad()\">문자 그대로</u>\n```",
+    { title: "코드" }
+  );
+
+  assert.match(
+    html,
+    /&lt;u onclick="bad\(\)"&gt;문자 그대로&lt;\/u&gt;/
+  );
+  assert.doesNotMatch(html, /<u onclick=/);
 });
 
 test("Classic theme retains page and document-style rendering", () => {

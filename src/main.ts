@@ -39,6 +39,7 @@ import {
   prepareSelfContainedHtmlMarkdown
 } from "./io/htmlExportService";
 import type { ImageFailure } from "./io/imageAssets";
+import { EditorialPdfService } from "./io/editorialPdf";
 import { importDocument } from "./io/kordocImport";
 import {
   createCleanLegacyImportCopy,
@@ -106,6 +107,7 @@ interface AppWithCommands {
 }
 
 type HtmlImageFailureAction = "retry" | "continue" | "cancel";
+type PdfImageFailureAction = "retry" | "cancel";
 
 function chooseHtmlImageFailureAction(
   app: App,
@@ -167,6 +169,58 @@ function chooseHtmlImageFailureAction(
   });
 }
 
+function choosePdfImageFailureAction(
+  app: App,
+  failures: ImageFailure[]
+): Promise<PdfImageFailureAction> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (action: PdfImageFailureAction): void => {
+      if (resolved) return;
+      resolved = true;
+      resolve(action);
+    };
+    const modal = new Modal(app);
+    modal.titleEl.setText(`PDF 이미지 ${failures.length}개를 포함하지 못했습니다`);
+    modal.contentEl.createEl("p", {
+      text: "PDF에는 누락된 이미지를 조용히 제외하지 않습니다. 네트워크 또는 첨부 경로를 확인해 다시 시도하거나 인쇄를 취소하세요."
+    });
+    const list = modal.contentEl.createEl("ul");
+    for (const failure of failures.slice(0, 10)) {
+      list.createEl("li", {
+        text: `${failure.alt || failure.source || "이미지"}: ${failure.message}`
+      });
+    }
+    if (failures.length > 10) {
+      modal.contentEl.createEl("p", {
+        text: `외 ${failures.length - 10}개`
+      });
+    }
+    const controls = modal.contentEl.createDiv({
+      cls: "hanmark-export-secondary-actions"
+    });
+    const retry = controls.createEl("button", {
+      text: "다시 시도",
+      cls: "mod-cta",
+      attr: { type: "button" }
+    });
+    retry.onclick = () => {
+      finish("retry");
+      modal.close();
+    };
+    const cancel = controls.createEl("button", {
+      text: "인쇄 취소",
+      attr: { type: "button" }
+    });
+    cancel.onclick = () => {
+      finish("cancel");
+      modal.close();
+    };
+    modal.onClose = () => finish("cancel");
+    modal.open();
+  });
+}
+
 function runtimePlatform(): HanmarkRuntimePlatform {
   if (Platform.isWin) return "windows";
   if (Platform.isMacOS) return "macos";
@@ -182,7 +236,7 @@ function registerHeadingCommand(plugin: Plugin, level: number): void {
 }
 
 /**
- * HanMark 2.5.1 runtime.
+ * HanMark 2.5.2 runtime.
  *
  * HWPX is generated in-process by Kordoc. The single external process boundary
  * is used only after an explicit user action: optional Pandoc/Word conversion
@@ -195,6 +249,7 @@ export default class HanmarkPlugin extends Plugin {
   private wordTemplateStore!: WordTemplateStore;
   private wordFontCatalog!: WordFontCatalog;
   private docxExporter!: DocxExportService;
+  private readonly editorialPdf = new EditorialPdfService();
   private toolbar: ToolbarController | null = null;
   private settingTab: HanmarkSettingTab | null = null;
   private lastMarkdownView: MarkdownView | null = null;
@@ -278,6 +333,7 @@ export default class HanmarkPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.editorialPdf.dispose();
     this.toolbar?.destroy();
     this.toolbar = null;
     this.app.workspace
@@ -536,7 +592,7 @@ export default class HanmarkPlugin extends Plugin {
             throw error;
           }
         },
-        exportPdf: async () => this.delegatePdfExport(),
+        exportPdf: async () => this.exportEditorialPdf(),
         revealOutput: (outcome) => this.revealExportOutput(outcome),
         applySkin: (root) => applyToolbarSkin(root, this.settings)
       },
@@ -653,20 +709,51 @@ export default class HanmarkPlugin extends Plugin {
     }
   }
 
-  private delegatePdfExport(): HanmarkExportOutcome | null {
-    const source = this.currentMarkdownView();
-    if (!source?.file) {
+  private async exportEditorialPdf(): Promise<HanmarkExportOutcome | null> {
+    const view = this.currentMarkdownView();
+    if (!view?.file) {
       new Notice("PDF로 내보낼 Markdown 문서를 여세요.");
       return null;
     }
-    if (!this.executeCommandById("workspace:export-pdf")) {
-      new Notice(
-        "Obsidian의 PDF 내보내기 명령을 열 수 없습니다. 데스크톱 앱을 업데이트한 뒤 다시 시도하세요.",
-        8_000
-      );
+    const body = extractEditableBodyStrict(view.editor.getValue());
+    const progress = new Notice("Editorial PDF 이미지를 준비하는 중…", 0);
+    try {
+      let prepared: Awaited<
+        ReturnType<typeof prepareSelfContainedHtmlMarkdown>
+      >;
+      while (true) {
+        prepared = await prepareSelfContainedHtmlMarkdown(body, {
+          loader: createObsidianImageLoader(this.app, view.file),
+          onProgress: (imageProgress) => {
+            progress.setMessage(
+              `PDF 이미지 처리 중 ${imageProgress.completed}/${
+                imageProgress.total
+              } · ${imageProgress.status === "embedded" ? "포함" : "실패"}`
+            );
+          }
+        });
+        if (!prepared.failures.length) break;
+        progress.setMessage("일부 이미지를 PDF에 포함하지 못했습니다.");
+        const action = await choosePdfImageFailureAction(
+          this.app,
+          prepared.failures
+        );
+        if (action === "cancel") {
+          return { format: "pdf", status: "cancelled" };
+        }
+        progress.setMessage("PDF 이미지를 다시 불러오는 중…");
+      }
+      progress.setMessage("Editorial PDF 인쇄 화면을 여는 중…");
+      return await this.editorialPdf.print({
+        markdown: prepared.markdown,
+        fileName: view.file.basename
+      });
+    } catch (error) {
+      new Notice(`PDF 내보내기 실패: ${errorMessage(error)}`, 8_000);
       return null;
+    } finally {
+      progress.hide();
     }
-    return { format: "pdf", status: "delegated" };
   }
 
   /**
@@ -701,7 +788,6 @@ export default class HanmarkPlugin extends Plugin {
       },
       createUserInitiatedAction("modal")
     );
-    new Notice("파일 관리자에서 결과 위치를 열었습니다.");
   }
 
   private async toggleQuickPreview(closeWhenOpen = true): Promise<void> {

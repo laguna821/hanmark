@@ -3,6 +3,12 @@ import type {
   DocumentStyleRole,
   RoleStyleProfile
 } from "../io/documentStyle";
+import {
+  parseEditorialDocument,
+  safeEditorialImageUrl,
+  type EditorialBlock,
+  type EditorialInline
+} from "../io/editorialDocument";
 import { transformMarkdownImageTokens } from "../io/markdownImageTokens";
 
 export interface HtmlPageLayout {
@@ -546,82 +552,138 @@ ${renderDocumentHead(options.title, css)}
 </html>`;
 }
 
-function plainHeadingTitle(markdown: string): string | null {
-  const firstContentLine = markdown
-    .split(/\r?\n/)
-    .find((line) => line.trim().length > 0)
-    ?.trim();
-  const heading = firstContentLine?.match(/^#\s+(.+)$/);
-  if (!heading) return null;
-  return heading[1]
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\[\[[^|\]]+\|([^\]]+)\]\]/g, "$1")
-    .replace(/\[\[([^\]]+)\]\]/g, "$1")
-    .replace(/`([^`\r\n]+)`/g, "$1")
-    .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/(?<!\*)\*([^*\r\n]+)\*(?!\*)/g, "$1")
-    .replace(/(?<!\w)_([^_\r\n]+)_(?!\w)/g, "$1")
-    .replace(/~~(.+?)~~/g, "$1")
-    .replace(/==(.+?)==/g, "$1")
-    .trim() || null;
+function renderEditorialInlines(inlines: EditorialInline[]): string {
+  const output: string[] = [];
+  const pending: Array<{ inline: EditorialInline } | { close: string }> = [];
+  for (let index = inlines.length - 1; index >= 0; index -= 1) {
+    pending.push({ inline: inlines[index] });
+  }
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item) break;
+    if ("close" in item) {
+      output.push(item.close);
+      continue;
+    }
+    const inline = item.inline;
+    if (inline.type === "text") {
+      output.push(escapeHtml(inline.value));
+    } else if (inline.type === "hardbreak") {
+      output.push("<br>");
+    } else if (inline.type === "code") {
+      output.push(
+        `<code class="hanmark-inline-code">${escapeHtml(inline.value)}</code>`
+      );
+    } else if (inline.type === "image") {
+      const src = safeEditorialImageUrl(inline.src);
+      if (src) {
+        output.push(
+          `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(inline.alt)}" loading="lazy">`
+        );
+      } else {
+        output.push(escapeHtml(inline.alt));
+      }
+    } else if (inline.type === "wikilink") {
+      output.push(
+        `<span class="hanmark-wikilink">${escapeHtml(inline.label)}</span>`
+      );
+    } else {
+      let open = "";
+      let close = "";
+      if (inline.type === "link") {
+        open = `<a href="${escapeAttribute(inline.href)}" target="_blank" rel="noopener noreferrer">`;
+        close = "</a>";
+      } else {
+        const style = [
+          inline.color ? `color:${inline.color}` : "",
+          inline.backgroundColor
+            ? `background-color:${inline.backgroundColor}`
+            : ""
+        ].filter(Boolean).join(";");
+        const styleAttribute = style
+          ? ` style="${escapeAttribute(style)}"`
+          : "";
+        const tagByStyle: Record<typeof inline.style, string> = {
+          strong: "strong",
+          emphasis: "em",
+          delete: "del",
+          mark: "mark",
+          underline: "u",
+          superscript: "sup",
+          subscript: "sub",
+          span: "span"
+        };
+        const tag = tagByStyle[inline.style];
+        open = `<${tag}${styleAttribute}>`;
+        close = `</${tag}>`;
+      }
+      output.push(open);
+      pending.push({ close });
+      for (let index = inline.children.length - 1; index >= 0; index -= 1) {
+        pending.push({ inline: inline.children[index] });
+      }
+    }
+  }
+  return output.join("");
 }
 
-function renderEditorialBlock(block: HtmlBlock): string {
-  if (block.type === "empty") {
-    return `<div class="hanmark-line hanmark-empty" aria-hidden="true">&nbsp;</div>`;
-  }
-  if (block.type === "hr") return "<hr>";
-  if (block.type === "table") {
-    return `<div class="hanmark-table-wrap">${block.html}</div>`;
-  }
-  if (block.type === "codeblock") {
-    return `<div class="hanmark-codeblock">${block.html}</div>`;
-  }
-  if (block.type === "quote") {
-    const calloutContent = block.html.replace(
-      /^\[![A-Za-z0-9_-]+\][+-]?\s*/i,
-      ""
-    );
-    return `<aside class="hanmark-callout">${calloutContent}</aside>`;
-  }
-  if (block.type === "list") {
-    const level = Math.max(0, Math.min(6, block.indent));
-    return `<div class="hanmark-line hanmark-list hanmark-indent-${level}">${block.html}</div>`;
-  }
-  if (/^h[1-6]$/.test(block.type)) {
-    return `<${block.type} class="hanmark-heading">${block.html}</${block.type}>`;
-  }
-  return `<p class="hanmark-line hanmark-body">${block.html}</p>`;
-}
-
-function editorialDocument(markdown: string, fallbackTitle: string): {
-  title: string;
-  masthead: string;
-  body: string;
-} {
-  const blocks = preprocessMarkdownForHtml(markdown);
-  const firstContentIndex = blocks.findIndex((block) => block.type !== "empty");
-  const leadingHeading =
-    firstContentIndex >= 0 && blocks[firstContentIndex].type === "h1"
-      ? blocks[firstContentIndex]
-      : null;
-  if (leadingHeading && firstContentIndex >= 0) {
-    blocks.splice(firstContentIndex, 1);
-  }
-  return {
-    title: plainHeadingTitle(markdown) ?? fallbackTitle,
-    masthead: leadingHeading?.html ?? escapeHtml(fallbackTitle),
-    body: blocks.map(renderEditorialBlock).join("\n")
-  };
+function renderEditorialBlocks(blocks: EditorialBlock[]): string {
+  return blocks.map((block) => {
+    if (block.type === "thematic-break") return "<hr>";
+    if (block.type === "code") {
+      const language = block.language
+        ? ` class="language-${escapeAttribute(block.language)}"`
+        : "";
+      return `<div class="hanmark-codeblock"><pre><code${language}>${escapeHtml(block.value)}</code></pre></div>`;
+    }
+    if (block.type === "heading") {
+      const tag = `h${block.level}`;
+      return `<${tag} class="hanmark-heading">${renderEditorialInlines(block.inlines)}</${tag}>`;
+    }
+    if (block.type === "paragraph") {
+      const alignment = block.alignment
+        ? ` style="text-align:${block.alignment}"`
+        : "";
+      return `<p class="hanmark-line hanmark-body"${alignment}>${renderEditorialInlines(block.inlines)}</p>`;
+    }
+    if (block.type === "quote") {
+      return `<blockquote class="hanmark-quote">${renderEditorialBlocks(block.blocks)}</blockquote>`;
+    }
+    if (block.type === "callout") {
+      return `<aside class="hanmark-callout" data-callout="${escapeAttribute(block.kind)}">${renderEditorialBlocks(block.blocks)}</aside>`;
+    }
+    if (block.type === "list") {
+      const tag = block.ordered ? "ol" : "ul";
+      const start = block.ordered && block.start !== undefined
+        ? ` start="${block.start}"`
+        : "";
+      const items = block.items.map((listItem) => {
+        const task = listItem.checked === undefined
+          ? ""
+          : `<span class="hanmark-task" role="img" aria-label="${listItem.checked ? "완료" : "미완료"}">${listItem.checked ? "☑" : "☐"}</span> `;
+        return `<li>${task}${renderEditorialBlocks(listItem.blocks)}</li>`;
+      }).join("");
+      return `<${tag} class="hanmark-list"${start}>${items}</${tag}>`;
+    }
+    const head = block.header.length
+      ? `<thead><tr>${block.header.map((cell) =>
+          `<th>${renderEditorialInlines(cell)}</th>`
+        ).join("")}</tr></thead>`
+      : "";
+    const body = block.rows.map((row) =>
+      `<tr>${row.map((cell) =>
+        `<td>${renderEditorialInlines(cell)}</td>`
+      ).join("")}</tr>`
+    ).join("");
+    return `<div class="hanmark-table-wrap"><table>${head}<tbody>${body}</tbody></table></div>`;
+  }).join("\n");
 }
 
 function renderEditorialStandaloneHtml(
   markdown: string,
   options: HtmlExportOptions
 ): string {
-  const document = editorialDocument(markdown, options.title);
+  const document = parseEditorialDocument(markdown, options.title);
   const css = `
 :root {
   --hanmark-white: #FFFFFF;
@@ -700,14 +762,15 @@ h3.hanmark-heading { font-size: 1.28rem; }
 h4.hanmark-heading, h5.hanmark-heading, h6.hanmark-heading { font-size: 1.08rem; }
 .hanmark-line { margin: 0; }
 .hanmark-body { margin: 0 0 .72em; }
-.hanmark-empty { min-height: .72em; }
-.hanmark-list { position: relative; margin: .32em 0; padding-left: 1.35em; }
-.hanmark-indent-1 { margin-left: 1.4em; }
-.hanmark-indent-2 { margin-left: 2.8em; }
-.hanmark-indent-3 { margin-left: 4.2em; }
-.hanmark-indent-4 { margin-left: 5.6em; }
-.hanmark-indent-5 { margin-left: 7em; }
-.hanmark-indent-6 { margin-left: 8.4em; }
+.hanmark-list { margin: .5em 0 1em; padding-left: 1.6em; }
+.hanmark-list .hanmark-list { margin: .25em 0; }
+.hanmark-list li { margin: .28em 0; }
+.hanmark-list li > .hanmark-body:first-of-type { display: inline; margin: 0; }
+.hanmark-list li > .hanmark-body:not(:first-of-type) {
+  display: block;
+  margin: .55em 0 .72em;
+}
+.hanmark-task { white-space: nowrap; }
 .hanmark-callout {
   margin: 1.6em 0;
   padding: 18px 20px;
@@ -717,6 +780,14 @@ h4.hanmark-heading, h5.hanmark-heading, h6.hanmark-heading { font-size: 1.08rem;
   background: rgba(0, 181, 173, .08);
   color: #183F4B;
 }
+.hanmark-quote {
+  margin: 1.4em 0;
+  padding: .2em 0 .2em 1.2em;
+  border-left: 4px solid var(--hanmark-rule);
+  color: var(--hanmark-muted);
+}
+.hanmark-quote .hanmark-body:last-child,
+.hanmark-callout .hanmark-body:last-child { margin-bottom: 0; }
 a { color: var(--hanmark-blue); text-decoration-thickness: .08em; text-underline-offset: .15em; }
 .hanmark-wikilink { color: var(--hanmark-blue); }
 img {
@@ -764,7 +835,6 @@ hr { margin: 2.2em 0; border: 0; border-top: 2px solid var(--hanmark-rule); }
   }
   .hanmark-masthead { margin-bottom: 38px; }
   .hanmark-masthead h1 { font-size: clamp(28px, 9vw, 38px); }
-  .hanmark-indent-4, .hanmark-indent-5, .hanmark-indent-6 { margin-left: 4.2em; }
 }
 @page { size: A4; margin: 18mm 17mm 20mm; }
 @media print {
@@ -792,10 +862,10 @@ ${renderDocumentHead(document.title, css)}
 <main class="hanmark-paper">
 <header class="hanmark-masthead">
 <p class="hanmark-kicker">HanMark Editorial</p>
-<h1>${document.masthead}</h1>
+<h1>${renderEditorialInlines(document.masthead)}</h1>
 <div class="hanmark-masthead-rule" aria-hidden="true"></div>
 </header>
-${document.body}
+${renderEditorialBlocks(document.blocks)}
 </main>
 </body>
 </html>`;
