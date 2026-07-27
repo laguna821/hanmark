@@ -2,6 +2,14 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.5.4
+
+- Isolated the built-in Editorial PDF from Obsidian's light and dark themes by establishing a fixed light print color scheme and a complete scoped paper, body, navy, teal, border, code, and highlight palette.
+- Fixed semantic leaf elements—including emphasis, links, list markers, inline code, tables, callouts, decorations, and images—so inherited theme colors, filters, and opacity cannot leak into the printed result.
+- Normalized explicit inline text and background colors to the Editorial PDF palette for deterministic output across themes and computers; supported HTML colors and all HWPX/DOCX behavior remain unchanged.
+- Preserved 2.5.3 large-code splitting, adaptive table pagination, safe deep-structure handling, native print lifecycle protection, full-bleed cover, page furniture, and imported BMP rendering.
+- Preserved the Markdown source, Kordoc 4.2.5 HWPX generation, templates, optional Pandoc DOCX path, imports, CMDS Eagle bridge, and existing command IDs.
+
 ## 2.5.3
 
 - Hardened the built-in Editorial PDF path for large code blocks, multi-page and very wide tables, oversized quotes and callouts, image-heavy containers, long prose, nested lists, and deeply nested structures.
@@ -125,6 +133,14 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.5.4
+
+- 내장 Editorial PDF에 고정된 라이트 인쇄 색상 체계와 지면·본문·남색·청록색·테두리·코드·강조색 팔레트를 설정해 Obsidian 라이트·다크 테마로부터 격리했습니다.
+- 강조·링크·목록 기호·인라인 코드·표·콜아웃·장식·이미지 등 말단 의미 요소에 색상 규칙을 고정해 테마의 상속 색상, 필터와 투명도가 인쇄 결과에 섞이지 않게 했습니다.
+- 명시적인 인라인 글자색과 배경색을 Editorial PDF 표준 팔레트로 정규화해 테마와 컴퓨터가 달라도 결정론적인 PDF를 만듭니다. HTML에서 지원하던 색상과 HWPX·DOCX 동작은 그대로 유지합니다.
+- 2.5.3의 대형 코드 분할, 표 자동 배치, 깊은 구조 안전 처리, 네이티브 인쇄 수명주기 보호, 전면 표지·본문 지면과 가져온 BMP 렌더링을 유지합니다.
+- Markdown 원문, Kordoc 4.2.5 HWPX 생성, 템플릿, 선택형 Pandoc DOCX 경로, 가져오기, CMDS Eagle 브리지와 기존 명령 ID를 유지합니다.
 
 ### 2.5.3
 

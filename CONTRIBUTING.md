@@ -1,6 +1,6 @@
 # Contributing to HanMark
 
-HanMark keeps each published line as a historical branch. Do not rewrite, force-push, delete, merge into, or rebase `main`, any published version branch (`1.2.0`, `2.4.2` through `2.5.3`), or any published tag history. Start maintenance work from the latest published commit on a branch named exactly for the next version.
+HanMark keeps each published line as a historical branch. Do not rewrite, force-push, delete, merge into, or rebase `main`, any published version branch (`1.2.0`, `2.4.2` through `2.5.4`), or any published tag history. Start maintenance work from the latest published commit on a branch named exactly for the next version.
 
 ## Development checklist
 
@@ -21,7 +21,7 @@ Release tags are published by GitHub Actions. The tag must match `manifest.json`
 
 # HanMark 기여 안내
 
-HanMark는 공개 버전별 브랜치를 개발 기록으로 보존합니다. `main`, 모든 공개 버전 브랜치(`1.2.0`, `2.4.2`부터 `2.5.3`까지)와 기존 태그를 리베이스·강제 푸시·삭제·덮어쓰기하지 않습니다. 다음 버전 번호와 정확히 같은 새 브랜치에서 작업합니다.
+HanMark는 공개 버전별 브랜치를 개발 기록으로 보존합니다. `main`, 모든 공개 버전 브랜치(`1.2.0`, `2.4.2`부터 `2.5.4`까지)와 기존 태그를 리베이스·강제 푸시·삭제·덮어쓰기하지 않습니다. 다음 버전 번호와 정확히 같은 새 브랜치에서 작업합니다.
 
 ## 개발 확인 항목
 
