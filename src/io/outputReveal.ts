@@ -130,12 +130,11 @@ export function buildOutputRevealRequest(
   if (platform === "windows") {
     return {
       executable: "explorer.exe",
-      args: ["/select,", fullPath],
-      timeoutMs: 10_000,
-      maxBufferBytes: 64 * 1024,
-      // Explorer is a shell broker: a successful hand-off commonly exits 1
-      // without stderr when an existing Explorer process receives the request.
-      successExitCodes: [0, 1]
+      // `/select,` may reuse an existing Explorer window without surfacing it.
+      // `/n` asks Explorer to create a new visible window for this user click.
+      args: ["/n", "/select,", fullPath],
+      windowsHide: false,
+      completionMode: "spawn"
     };
   }
   if (platform === "macos") {

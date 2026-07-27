@@ -20,6 +20,16 @@ export interface ProcessRequest {
   timeoutMs?: number;
   maxBufferBytes?: number;
   /**
+   * Keeps converter console windows hidden by default. GUI launchers can opt
+   * out when the requested result is the visible application window itself.
+   */
+  windowsHide?: boolean;
+  /**
+   * `exit` captures output and waits for a process result. `spawn` completes
+   * once the operating system has accepted a GUI launcher request.
+   */
+  completionMode?: "exit" | "spawn";
+  /**
    * Exit codes that mean the requested operation was handed off successfully.
    * Most processes use the default `[0]`; launcher-style platform utilities
    * may document additional non-error completion codes.
@@ -92,13 +102,42 @@ function checkedSuccessExitCodes(values: readonly number[] | undefined): Set<num
 export const runUserProcess: UserProcessRunner = async (request, action) => {
   assertUserInitiatedAction(action);
   const executable = cleanExecutable(request.executable);
+  const completionMode = request.completionMode ?? "exit";
+  const windowsHide = request.windowsHide ?? true;
+
+  if (completionMode === "spawn") {
+    return new Promise<ProcessResult>((resolve, reject) => {
+      const child = spawn(executable, [...request.args], {
+        windowsHide,
+        shell: false,
+        stdio: "ignore"
+      });
+      let settled = false;
+
+      child.once("error", (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      });
+      child.once("spawn", () => {
+        if (settled) return;
+        settled = true;
+        child.unref();
+        resolve({
+          stdout: new Uint8Array(),
+          stderr: ""
+        });
+      });
+    });
+  }
+
   const timeoutMs = request.timeoutMs ?? 60_000;
   const maxBufferBytes = request.maxBufferBytes ?? 20 * 1024 * 1024;
   const successExitCodes = checkedSuccessExitCodes(request.successExitCodes);
 
   return new Promise<ProcessResult>((resolve, reject) => {
     const child = spawn(executable, [...request.args], {
-      windowsHide: true,
+      windowsHide,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"]
     });

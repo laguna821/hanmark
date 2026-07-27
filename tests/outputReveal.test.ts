@@ -66,10 +66,9 @@ test("reveal requests use fixed executables and argument arrays", () => {
     buildOutputRevealRequest("windows", "C:\\Vault\\Exports\\paper.hwpx"),
     {
       executable: "explorer.exe",
-      args: ["/select,", "C:\\Vault\\Exports\\paper.hwpx"],
-      timeoutMs: 10_000,
-      maxBufferBytes: 64 * 1024,
-      successExitCodes: [0, 1]
+      args: ["/n", "/select,", "C:\\Vault\\Exports\\paper.hwpx"],
+      windowsHide: false,
+      completionMode: "spawn"
     }
   );
   assert.deepEqual(
@@ -120,6 +119,37 @@ test("process exit 1 remains an error unless a launcher explicitly accepts it", 
   assert.equal(accepted.stderr, "");
 });
 
+test("spawn completion resolves on launch without waiting or timeout-killing", async () => {
+  const result = await runUserProcess(
+    {
+      executable: process.execPath,
+      args: ["-e", "setTimeout(() => process.exit(7), 100)"],
+      timeoutMs: 1,
+      completionMode: "spawn",
+      windowsHide: false
+    },
+    createUserInitiatedAction("modal")
+  );
+
+  assert.equal(result.stdout.byteLength, 0);
+  assert.equal(result.stderr, "");
+
+  await assert.rejects(
+    runUserProcess(
+      {
+        executable: `hanmark-missing-executable-${process.pid}`,
+        args: [],
+        completionMode: "spawn"
+      },
+      createUserInitiatedAction("modal")
+    ),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+});
+
 test("resolved reveal paths must be absolute for their platform", () => {
   assert.throws(
     () => buildOutputRevealRequest("windows", "Vault\\paper.hwpx"),
@@ -165,9 +195,12 @@ test("reveal execution requires both opaque output and UI action tokens", async 
   );
   assert.equal(requests.length, 1);
   assert.deepEqual(requests[0].args, [
+    "/n",
     "/select,",
     "C:\\Vault\\Exports\\paper.hwpx"
   ]);
+  assert.equal(requests[0].windowsHide, false);
+  assert.equal(requests[0].completionMode, "spawn");
 
   await assert.rejects(
     revealVaultOutputUserInitiated(
