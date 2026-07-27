@@ -24,7 +24,7 @@ describe("HanMark unified export center", () => {
       ["hwpx", "편집 가능한 한글 문서로 내보냅니다."],
       ["docx", "Word 문서로 내보냅니다. Pandoc이 필요합니다."],
       ["html", "모바일 브라우저에 적합한 HTML로 내보냅니다."],
-      ["pdf", "표지와 페이지 머리말을 갖춘 Editorial PDF로 인쇄합니다."]
+      ["pdf", "52/48 전면 표지와 브랜드 머리말을 갖춘 Editorial PDF로 인쇄합니다."]
     ] as const;
 
     for (const [format, microcopy] of cards) {
@@ -63,14 +63,21 @@ describe("HanMark unified export center", () => {
     assert.match(main, /choosePdfImageFailureAction/u);
     assert.match(main, /this\.editorialPdf\.dispose\(\)/u);
     assert.match(pdf, /EDITORIAL_PDF_MIN_CHROMIUM = 131/u);
-    assert.match(pdf, /@page :first/u);
-    assert.match(pdf, /@top-center/u);
-    assert.match(pdf, /@bottom-center/u);
+    assert.match(pdf, /@page hanmark-cover/u);
+    assert.match(pdf, /@page hanmark-body/u);
+    assert.match(pdf, /@top-left/u);
+    assert.match(pdf, /@top-right/u);
+    assert.match(pdf, /@bottom-left/u);
+    assert.match(pdf, /@bottom-right/u);
     assert.match(pdf, /view\.print\(\)/u);
     assert.doesNotMatch(pdf, /!important/u);
     assert.match(
       modal,
-      /A4 첫 장에는 Markdown 파일명만 표지로 넣고/u
+      /A4 첫 장은 여백 없는 52\/48 HanMark Editorial 표지로 구성하고/u
+    );
+    assert.match(
+      modal,
+      /2쪽부터 브랜드 머리말·청록 실선·푸터·페이지 번호와 함께/u
     );
     assert.match(
       modal,

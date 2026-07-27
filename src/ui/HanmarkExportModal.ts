@@ -74,7 +74,7 @@ const FORMAT_CARDS: readonly FormatCard[] = [
   {
     id: "pdf",
     title: "PDF",
-    description: "표지와 페이지 머리말을 갖춘 Editorial PDF로 인쇄합니다."
+    description: "52/48 전면 표지와 브랜드 머리말을 갖춘 Editorial PDF로 인쇄합니다."
   }
 ];
 
@@ -526,7 +526,7 @@ export class HanmarkExportModal extends Modal {
   private renderPdfDetail(root: HTMLElement): void {
     root.createEl("h3", { text: "Achmage Editorial PDF" });
     root.createEl("p", {
-      text: "A4 첫 장에는 Markdown 파일명만 표지로 넣고, 2쪽부터 파일명 머리말·위아래 실선·페이지 번호와 함께 본문을 자동 배치합니다."
+      text: "A4 첫 장은 여백 없는 52/48 HanMark Editorial 표지로 구성하고, 2쪽부터 브랜드 머리말·청록 실선·푸터·페이지 번호와 함께 본문을 자동 배치합니다."
     });
     root.createEl("small", {
       cls: "hanmark-export-native-note",
