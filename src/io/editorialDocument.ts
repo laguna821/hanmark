@@ -135,6 +135,7 @@ const MARKDOWN = new MarkdownIt({
   linkify: false,
   typographer: false
 });
+const DEFAULT_MARKDOWN_VALIDATE_LINK = MARKDOWN.validateLink.bind(MARKDOWN);
 
 const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const RASTER_BASE64_SIGNATURES: Record<string, string> = {
@@ -293,6 +294,13 @@ export function safeEditorialImageUrl(value: string): string {
   }
   return "";
 }
+
+// markdown-it deliberately rejects BMP data URLs in its default link
+// validator. HanMark imports BMP images from HWPX, so allow only the same
+// signature-checked raster data URLs that the Editorial renderer can emit.
+MARKDOWN.validateLink = (value: string): boolean =>
+  DEFAULT_MARKDOWN_VALIDATE_LINK(value) ||
+  safeEditorialImageUrl(value) !== "";
 
 export function safeEditorialLinkUrl(value: string): string {
   const trimmed = value.trim();

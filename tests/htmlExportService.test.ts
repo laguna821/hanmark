@@ -5,6 +5,7 @@ import {
   prepareSelfContainedHtmlMarkdown
 } from "../src/io/htmlExportService";
 import { collectImageReferences, type ImageLoader } from "../src/io/imageAssets";
+import { renderStandaloneHtml } from "../src/legacy-port/htmlExport";
 
 const PNG_1X1 = Uint8Array.from(
   Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==", "base64")
@@ -103,6 +104,28 @@ describe("self-contained HTML image preparation", () => {
         /^data:image\/(?:png|jpeg|gif|bmp);base64,/i.test(reference.source)
       )
     );
+  });
+
+  it("prepares and renders an imported BMP image end to end", async () => {
+    const result = await prepareSelfContainedHtmlMarkdown(
+      "![Imported scan.bmp](imported-scan.bmp)",
+      {
+        loader: async () => ({ data: BMP_1X1, contentType: "image/bmp" })
+      }
+    );
+    const html = renderStandaloneHtml(result.markdown, {
+      title: "Imported document"
+    });
+    const encoded = Buffer.from(BMP_1X1).toString("base64");
+
+    assert.match(
+      html,
+      new RegExp(
+        `<img src="data:image/bmp;base64,${encoded}" alt="Imported scan\\.bmp" loading="lazy">`
+      )
+    );
+    assert.equal((html.match(new RegExp(encoded, "g")) ?? []).length, 1);
+    assert.doesNotMatch(html, /!\[Imported scan\.bmp\]/u);
   });
 
   it("rejects SVG and never preserves its source as an active image", async () => {

@@ -129,6 +129,23 @@ test("large embedded images render without recursive regular-expression overflow
   });
 });
 
+test("HWPX-imported BMP data images render as images instead of literal base64 text", () => {
+  const bmp = Buffer.alloc(26);
+  bmp[0] = 0x42;
+  bmp[1] = 0x4d;
+  const source = `data:image/bmp;base64,${bmp.toString("base64")}`;
+  const html = renderStandaloneHtml(
+    `# BMP 가져오기\n\n![가져온 그림.bmp](${source})`,
+    { title: "BMP 가져오기" }
+  );
+
+  assert.match(
+    html,
+    new RegExp(`<img src="${source}" alt="가져온 그림\\.bmp" loading="lazy">`)
+  );
+  assert.doesNotMatch(html, /<p[^>]*>!\[가져온 그림\.bmp\]/u);
+});
+
 test("Editorial callouts remove Obsidian markers while preserving safe visible text", () => {
   const markdown = [
     "# 콜아웃",
