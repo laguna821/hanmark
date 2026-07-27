@@ -1,9 +1,9 @@
 {
   "id": "hanmark",
   "name": "HanMark",
-  "version": "2.5.1",
-  "minAppVersion": "1.5.7",
-  "description": "Export Markdown to styled, image-inclusive HWPX, DOCX, and offline HTML. No Python setup required.",
+  "version": "2.5.2",
+  "minAppVersion": "1.8.9",
+  "description": "Export Markdown to styled HWPX, DOCX, offline HTML, and Editorial PDF. No Python setup required.",
   "author": "Achmage",
   "authorUrl": "https://github.com/laguna821",
   "isDesktopOnly": true

@@ -12,13 +12,28 @@ const [manifest, pkg, lock, versions, releaseWorkflow] = await Promise.all([
 const version = manifest.version;
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid manifest version: ${version}`);
 if (pkg.version !== version) throw new Error(`package.json ${pkg.version} != manifest.json ${version}`);
+if (manifest.minAppVersion !== "1.8.9") {
+  throw new Error(`Editorial PDF requires minAppVersion 1.8.9, found ${manifest.minAppVersion}`);
+}
 if (versions[version] !== manifest.minAppVersion) {
   throw new Error(`versions.json ${versions[version]} != minAppVersion ${manifest.minAppVersion}`);
 }
 if (pkg.dependencies?.kordoc !== "4.2.5") throw new Error("kordoc must be pinned exactly to 4.2.5");
+if (pkg.dependencies?.["markdown-it"] !== "14.3.0") {
+  throw new Error("markdown-it must be pinned exactly to 14.3.0");
+}
+if (pkg.devDependencies?.["@fontsource/pretendard"] !== "5.3.0") {
+  throw new Error("@fontsource/pretendard must be pinned exactly to 5.3.0");
+}
 if (lock.packages?.[""]?.version !== version) throw new Error("package-lock root version does not match");
 if (lock.packages?.["node_modules/kordoc"]?.version !== "4.2.5") {
   throw new Error("package-lock must resolve Kordoc exactly to 4.2.5");
+}
+if (lock.packages?.["node_modules/markdown-it"]?.version !== "14.3.0") {
+  throw new Error("package-lock must resolve markdown-it exactly to 14.3.0");
+}
+if (lock.packages?.["node_modules/@fontsource/pretendard"]?.version !== "5.3.0") {
+  throw new Error("package-lock must resolve @fontsource/pretendard exactly to 5.3.0");
 }
 
 const requiredOverrides = {

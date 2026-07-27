@@ -2,6 +2,18 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.5.2
+
+- Added a shared semantic Editorial document model for Achmage Editorial HTML and PDF, normalizing soft line breaks while preserving headings, nested lists, tasks, tables, quotes, callouts, code, links, wiki links, and images.
+- Normalized supported raw HTML into safe elements and removed scripts, event handlers, unsafe URLs, and unsupported subtrees; the selectable Classic HTML theme retains its previous compatibility behavior.
+- Replaced generic Obsidian PDF delegation with a built-in Chromium Editorial print pipeline: an A4 filename-only cover followed by a filename header, top and bottom rules, and actual page numbers.
+- Made PDF image preparation fail closed with retry or cancellation, kept the Markdown source unchanged, and left Pandoc outside the PDF path.
+- Embedded Pretendard 400 and 600 in `styles.css` under the SIL Open Font License 1.1, adding roughly 2 MB while removing the need for a separately installed PDF font.
+- Launched Windows Explorer as a visible non-blocking Show-in-folder handoff with the saved file selected, without weakening converter exit-code or timeout handling.
+- Added a configurable Vault-relative imported-image folder, skipped unreferenced extracted images, and cleaned only verified HanMark-owned temporary copies after successful CMDS cloud replacement.
+- Preserved Kordoc 4.2.5 HWPX generation, templates, optional Pandoc DOCX, document import, CMDS Eagle and optional R2 image paths, toolbar editing, and existing command IDs.
+- Raised the minimum desktop Obsidian version to 1.8.9 for the required Chromium print capabilities.
+
 ## 2.5.1
 
 - Replaced truncating Markdown image regular expressions with a shared iterative scanner that supports Korean, percent-encoded spaces, angle destinations, escaped characters, and balanced parentheses.
@@ -102,6 +114,18 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.5.2
+
+- Achmage Editorial HTML과 PDF가 제목·중첩 목록·할 일·표·인용·콜아웃·코드·링크·위키 링크·이미지를 공유하는 의미 구조를 사용하게 하고 소프트 줄바꿈을 정규화했습니다.
+- 지원하는 원시 HTML을 안전한 요소로 정규화하고 스크립트·이벤트 핸들러·안전하지 않은 URL과 지원하지 않는 하위 구조를 제거했습니다. Classic HTML 테마의 이전 호환 동작은 유지합니다.
+- 일반 Obsidian PDF 위임을 내장 Chromium Editorial 인쇄 파이프라인으로 교체해 A4 파일명 전용 표지와 2쪽 이후 파일명 머리말·위아래 실선·실제 쪽 번호를 제공합니다.
+- PDF 이미지 준비를 재시도 또는 취소만 가능한 실패 폐쇄 방식으로 바꾸고, Markdown 원문을 변경하지 않으며 PDF 경로에서 Pandoc을 사용하지 않습니다.
+- SIL Open Font License 1.1에 따라 Pretendard 400·600을 `styles.css`에 포함했습니다. 용량은 약 2 MB 늘지만 PDF 글꼴을 따로 설치할 필요가 없습니다.
+- Windows Explorer를 보이는 비차단 방식으로 실행해 저장 파일을 선택하되, 변환기 종료코드와 시간 제한 판정은 약화하지 않았습니다.
+- 가져온 이미지용 Vault 상대 폴더를 지정할 수 있게 하고, 본문에서 참조하지 않는 추출 이미지는 저장하지 않으며, CMDS 클라우드 교체 성공 뒤 검증된 HanMark 소유 임시 사본만 정리합니다.
+- Kordoc 4.2.5 HWPX 생성·템플릿, 선택적 Pandoc DOCX, 문서 가져오기, CMDS Eagle·선택형 R2 이미지 경로, 툴바 편집과 기존 명령 ID를 보존했습니다.
+- 필요한 Chromium 인쇄 기능을 위해 데스크톱 Obsidian 최소 버전을 1.8.9로 올렸습니다.
 
 ### 2.5.1
 

@@ -2,7 +2,7 @@
 
 **A desktop Obsidian plugin that connects durable Markdown notes with editable Korean HWP/HWPX documents.**
 
-HanMark 2.5.1 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files and self-contained HTML requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
+HanMark 2.5.2 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files, self-contained HTML, and Editorial PDF requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
 
 > Keep the source of knowledge in portable Markdown. Produce HWPX, DOCX, HTML, or PDF when an institution requires it.
 
@@ -12,17 +12,17 @@ HanMark 2.5.1 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 
 ## English
 
-### What changed in 2.5.1
+### What changed in 2.5.2
 
-- **Imported images survive the full workflow:** Korean, percent-encoded, spaced, and balanced-parenthesis paths are parsed without truncation in live HWPX preview and HWPX, DOCX, and HTML export.
-- **CMDS Eagle bridge:** imported images can stay in the Vault, be uploaded by CMDS Eagle to its active provider, or be decided per import. A disposable image-only staging note isolates the current command integration from the imported document, URL replacement is verified, and a direct R2 fallback is explicit and credential-safe.
-- **Large HTML images no longer overflow the renderer:** image destinations and base64 data are processed iteratively instead of expanding or capturing giant strings.
-- **Reliable Show in folder on Windows:** Explorer's documented handoff-style exit behavior is accepted only for that fixed launcher; other processes still require an ordinary success exit.
-- **Achmage Editorial by default:** HTML export now uses a deterministic editorial layout with a masthead, clear heading bars, readable tables, callouts, code blocks, and responsive media. The previous HanMark HTML appearance remains available as **Classic**.
-- **Offline, self-contained output:** local and remote PNG, JPEG, GIF, and BMP images are validated and embedded as data URIs. The completed HTML has no external stylesheet, font, CDN, or script dependency.
-- **Strict export boundary:** generated HTML contains a restrictive Content Security Policy, no JavaScript or event handlers, and allows ordinary links only through `http:`, `https:`, or `mailto:`.
-- **Document-aware presentation:** the first leading H1 becomes the masthead title and is removed once from the article body. The layout adapts to narrow mobile screens and includes dedicated A4 print rules.
-- **Predictable compatibility:** the saved name stays `${title}_html.html`. An image failure is never silent: HanMark offers retry, continuation with an explicit missing-image label, or cancellation.
+- **Shared Editorial document model:** Achmage Editorial HTML and PDF parse the same semantic headings, nested lists, tasks, tables, quotes, callouts, code, links, wiki links, and images. Soft line breaks become ordinary spaces instead of accidental vertical gaps.
+- **Safe HTML normalization:** supported raw HTML is normalized into safe document elements; scripts, event handlers, unsafe URLs, and unsupported subtrees are not copied. The selectable **Classic** HTML theme keeps its previous compatibility behavior.
+- **Built-in Editorial PDF:** an A4 filename-only cover is followed by pages with a filename header, top and bottom rules, and the actual page number. The operating system print dialog handles **Save as PDF** and destination selection.
+- **No Pandoc for PDF:** Editorial PDF uses the built-in Chromium print pipeline and never calls the previous generic Obsidian PDF command. Images fail closed with retry or cancellation instead of disappearing silently.
+- **Deterministic PDF type:** Pretendard 400 and 600 are embedded in `styles.css`; the stylesheet is therefore roughly 2 MB larger, but no separate font installation is required.
+- **Visible Show in folder on Windows:** Explorer is launched as a visible non-blocking handoff with the saved file selected. Converter processes keep their existing strict exit and timeout handling.
+- **Cleaner imported-image storage:** choose a Vault-relative attachment folder, skip extracted images not referenced by the imported Markdown, and remove only verified HanMark-owned temporary copies after a successful CMDS cloud upload.
+- **Existing image workflow preserved:** Vault attachments, the CMDS Eagle active-cloud bridge, ask-every-import, and the optional direct R2 fallback continue to work as in 2.5.1.
+- **Source remains portable:** HTML and PDF export do not rewrite the Markdown note.
 
 ### Core 2.x workflow
 
@@ -43,9 +43,9 @@ HanMark 2.5.1 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 | HWPX | Korean public-document HWPX | Kordoc 4.2.5 preset | None |
 | DOCX | Styled Word document | Pandoc + HanMark Word template | Optional Pandoc only |
 | HTML | Self-contained Achmage Editorial or Classic HTML | Built-in HanMark writer | None |
-| PDF | Obsidian PDF export settings | Native Obsidian command | None |
+| PDF | A4 Editorial PDF with cover and page furniture | Built-in Chromium print pipeline | None |
 
-Pandoc settings appear only for DOCX. HWPX, HTML, and PDF do not read the Pandoc path. PDF delegates to Obsidian; it does not apply a HanMark HWPX or Word template.
+Pandoc settings appear only for DOCX. HWPX, HTML, and PDF do not read the Pandoc path. Editorial PDF opens the operating system print dialog; choose **Save as PDF** there. It does not apply a HanMark HWPX or Word template and never changes the source note.
 
 HTML uses **Achmage Editorial** by default. You can switch to **Classic** in HanMark settings or the export center when compatibility with the earlier appearance matters. Achmage Editorial turns the first leading H1 into a masthead, applies the fixed white/ivory/navy/blue/teal system, fits images and code to narrow screens, and supplies A4 print rules. Export remains deterministic and script-free: CSS is inline, validated local/remote PNG/JPEG/GIF/BMP assets are embedded, and no CDN, web font, external stylesheet, or JavaScript is loaded. The file name remains `${title}_html.html`.
 
@@ -62,7 +62,7 @@ The HWPX template button opens the template library. Built-in templates are immu
 
 ### Images
 
-Each unique image is loaded once and can be placed multiple times. Remote images need a network connection during export; preview and export share an in-memory cache during the current Obsidian session. HWPX and Achmage Editorial HTML accept validated PNG/JPEG/GIF/BMP assets. HTML converts them to embedded data URIs so the saved document can be opened offline. If an image cannot be downloaded, resolved from the Vault, decoded, or embedded, HanMark asks whether to retry, continue with an explicit missing-image label, or cancel.
+Each unique image is loaded once and can be placed multiple times. Remote images need a network connection during export; preview and export share an in-memory cache during the current Obsidian session. HWPX, Achmage Editorial HTML, and Editorial PDF accept validated PNG/JPEG/GIF/BMP assets. HTML converts them to embedded data URIs so the saved document can be opened offline. HTML can continue with an explicit missing-image label after a warning; PDF instead fails closed and offers retry or cancellation so a missing image cannot be overlooked in the printed result.
 
 ### Document styles and fonts
 
@@ -91,15 +91,15 @@ For compatible notes imported by an earlier HanMark release, the command-palette
 - Fast DOCX preview renders the actual generated package, but it is not Microsoft Word; page breaks and some layout can differ.
 - HTML intentionally excludes SVG, WebP, video, iframe, script, event-handler, raw user CSS, external font, and CDN resources. Ordinary links are limited to `http:`, `https:`, and `mailto:`.
 - The generated HTML Content Security Policy is `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`.
-- PDF uses Obsidian's native PDF export and print styles. It is not rendered through a HanMark HWPX template.
-- HanMark 2.5.1 is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
+- Editorial PDF uses the desktop Chromium print engine. It is not rendered through a HanMark HWPX template, and final pagination can vary with the selected printer/PDF settings.
+- HanMark 2.5.2 requires Obsidian 1.8.9 or newer and is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
 - Optional OCR/ML components such as Sharp, ONNX, and PDFium are not loaded by the plugin startup bundle.
 
 ### Privacy and capabilities
 
 - **Network:** HanMark requests the exact HTTP(S) image URL present in a note only when the user previews or exports that note. If the user explicitly selects CMDS Eagle's active cloud for imported images, the extracted image bytes are uploaded through CMDS Eagle's configured provider; only when that bridge is unavailable and the user has configured the optional fallback does HanMark send those image bytes to the entered HTTPS Worker URL. No document text is uploaded. The fallback API key is cached in memory only after a successful authenticated upload, cleared after an authentication rejection, and never written to HanMark settings. Achmage Editorial embeds validated images into the saved HTML, which makes that output independent of the network after export.
 - **Files:** HanMark reads Vault attachments and files explicitly selected by the user. It writes imported attachments and user-requested export files through Obsidian Vault and browser file APIs. New imports do not cache the original source. If the user invokes the legacy source-patching command for an older imported note, HanMark may ask for the original again and stores only the private data required for that explicit compatibility action; it never overwrites the original.
-- **External programs:** HWPX and HTML use no external converter. PDF delegates to Obsidian's built-in PDF command. A user-configured Pandoc executable can run only after an explicit DOCX export, an explicit Fast DOCX Preview open, **Refresh**, or direct preview-mode selection. Workspace restoration, view lifecycle events, typing, active-note changes, and template changes never start Pandoc. Optional Windows Word-to-PDF preview invokes Word only after a corresponding explicit preview request. For a newly saved Vault result, **Show in folder** can start the operating system's file manager with that result selected, only after the user clicks the button.
+- **External programs:** HWPX and HTML use no external converter. Editorial PDF uses the built-in Chromium print pipeline and opens the operating system print dialog without starting Pandoc. A user-configured Pandoc executable can run only after an explicit DOCX export, an explicit Fast DOCX Preview open, **Refresh**, or direct preview-mode selection. Workspace restoration, view lifecycle events, typing, active-note changes, and template changes never start Pandoc. Optional Windows Word-to-PDF preview invokes Word only after a corresponding explicit preview request. For a newly saved Vault result, **Show in folder** can start the operating system's file manager with that result selected, only after the user clicks the button.
 - **Clipboard and dynamic execution:** HanMark does not read or write the clipboard and does not evaluate downloaded or generated JavaScript.
 - **Data collection:** no accounts, analytics, telemetry, advertising, payments, or remote feature flags.
 
@@ -124,6 +124,7 @@ in [`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md).
 - [chrisryugj/kordoc](https://github.com/chrisryugj/kordoc) — bundled HWP/HWPX import, Markdown-to-HWPX, source patching, validation, format profiles, and SVG preview.
 - [docx-preview](https://github.com/VolodymyrBaydalka/docxjs) 0.4.0 by Volodymyr Baydalka — browser rendering of user-requested DOCX packages; [Apache License 2.0](https://github.com/VolodymyrBaydalka/docxjs/blob/master/LICENSE).
 - [Kami](https://github.com/tw93/kami) by Tw93 — the Achmage Editorial visual language adapts selected document-design principles under the MIT License; no Kami package, font, build script, or content is bundled. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- [Pretendard](https://github.com/orioncactus/pretendard) 400/600 via `@fontsource/pretendard` 5.3.0 — embedded for Editorial PDF under the SIL Open Font License 1.1. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - [Pandoc](https://pandoc.org/) — optional DOCX conversion only.
 - [msjang/pypandoc-hwpx](https://github.com/msjang/pypandoc-hwpx) — the project that powered HanMark's earlier HWPX workflow.
 
@@ -133,19 +134,19 @@ in [`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md).
 
 **Obsidian Markdown과 편집 가능한 한글 HWP/HWPX를 잇는 데스크톱 플러그인입니다.**
 
-HanMark 2.5.1의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX와 독립형 HTML을 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
+HanMark 2.5.2의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX·독립형 HTML·Editorial PDF를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
 
-### 2.5.1 핵심 변화
+### 2.5.2 핵심 변화
 
-- **가져온 이미지의 전체 경로 보존:** 한글·공백·`%20`·균형 괄호가 섞인 이미지 경로를 잘라 먹지 않아 HWPX 라이브 미리보기와 HWPX·DOCX·HTML 내보내기까지 이어집니다.
-- **CMDS Eagle 브리지:** 가져온 이미지를 Vault에 두거나, CMDS Eagle의 현재 제공자로 업로드하거나, 매번 선택할 수 있습니다. 현재 명령 연동은 이미지 전용 임시 스테이징 노트로 원문과 격리하고 URL 교체를 실제로 검증하며, 직접 R2 폴백은 명시적으로만 안전하게 작동합니다.
-- **대형 HTML 이미지 스택 오류 수정:** 거대한 이미지 목적지와 base64 문자열을 배열로 펼치거나 통째로 캡처하지 않고 반복형 스캐너로 처리합니다.
-- **Windows 파일 위치 보기 복구:** 고정된 Explorer 실행기의 전달 완료 종료코드만 허용하고 다른 외부 프로세스의 성공 판정은 그대로 엄격하게 유지합니다.
-- **Achmage Editorial 기본 적용:** HTML 내보내기에 마스트헤드, 분명한 제목 막대, 읽기 쉬운 표·콜아웃·코드 블록과 반응형 미디어를 갖춘 결정론적 편집 디자인을 기본 적용합니다. 이전 HanMark HTML 외형은 **Classic**으로 계속 선택할 수 있습니다.
-- **오프라인 독립형 결과:** 로컬·원격 PNG·JPEG·GIF·BMP 이미지를 검증해 data URI로 포함합니다. 완성된 HTML은 외부 스타일시트, 글꼴, CDN 또는 스크립트에 의존하지 않습니다.
-- **엄격한 내보내기 경계:** 생성된 HTML에 제한적인 Content Security Policy를 넣고 JavaScript·이벤트 핸들러를 배제하며 일반 링크는 `http:`, `https:`, `mailto:`만 허용합니다.
-- **문서 구조를 살린 표현:** 맨 앞 첫 H1을 마스트헤드 제목으로 사용하고 본문에서는 한 번 제거합니다. 좁은 모바일 화면과 A4 인쇄에 각각 맞는 스타일을 제공합니다.
-- **예측 가능한 호환:** 저장 이름은 `${title}_html.html`을 유지합니다. 이미지 실패는 조용히 지나가지 않고 재시도, 명시적인 누락 표시로 계속, 취소 중 하나를 선택하게 합니다.
+- **공통 Editorial 문서 구조:** Achmage Editorial HTML과 PDF가 제목·중첩 목록·할 일·표·인용·콜아웃·코드·링크·위키 링크·이미지의 같은 의미 구조를 사용합니다. 소프트 줄바꿈은 뜻하지 않은 세로 공백 대신 일반 공백으로 정규화합니다.
+- **안전한 HTML 정규화:** 지원하는 원시 HTML은 안전한 문서 요소로 정규화하며 스크립트·이벤트 핸들러·안전하지 않은 URL과 지원하지 않는 하위 구조는 복사하지 않습니다. 선택 가능한 **Classic** HTML 테마는 이전 호환 동작을 유지합니다.
+- **내장 Editorial PDF:** A4 첫 장에는 파일명만 표시하고, 2쪽부터 파일명 머리말·위아래 실선·실제 쪽 번호를 넣습니다. 운영체제 인쇄 창에서 **PDF로 저장**과 위치를 선택합니다.
+- **PDF에 Pandoc 불필요:** 내장 Chromium 인쇄 파이프라인을 사용하며 이전의 일반 Obsidian PDF 명령을 호출하지 않습니다. 이미지 실패 시 조용히 누락하지 않고 재시도 또는 취소합니다.
+- **일정한 PDF 글꼴:** Pretendard 400·600을 `styles.css`에 포함했습니다. 스타일시트가 약 2 MB 커지는 대신 별도 글꼴 설치가 필요하지 않습니다.
+- **Windows 파일 위치 보기 가시성:** Explorer를 보이는 비차단 방식으로 열어 저장된 파일을 선택합니다. 변환기 프로세스의 엄격한 종료코드·시간 제한은 유지합니다.
+- **깔끔한 가져오기 이미지 저장:** Vault 상대 첨부 폴더를 지정하고, 가져온 Markdown에서 참조하지 않는 추출 이미지는 저장하지 않으며, CMDS 클라우드 업로드 성공 뒤 검증된 HanMark 소유 임시 사본만 안전하게 정리합니다.
+- **기존 이미지 흐름 유지:** Vault 첨부, CMDS Eagle 현재 클라우드 브리지, 가져올 때마다 묻기, 선택형 직접 R2 폴백은 2.5.1과 같은 방식으로 계속 작동합니다.
+- **원문 이식성 유지:** HTML·PDF 내보내기는 Markdown 노트를 다시 쓰지 않습니다.
 
 ### 2.x 핵심 기능
 
@@ -166,9 +167,9 @@ HanMark 2.5.1의 HWPX 생성·가져오기·레거시 원본 수정·검증·이
 | HWPX | 한국 공문서 HWPX | Kordoc 4.2.5 공문서 프리셋 | 없음 |
 | DOCX | 스타일이 적용된 Word 문서 | Pandoc + HanMark Word 템플릿 | Pandoc만 선택 설치 |
 | HTML | Achmage Editorial 또는 Classic 독립형 HTML | HanMark 내장 변환 | 없음 |
-| PDF | Obsidian PDF 내보내기 설정 | Obsidian 기본 명령 | 없음 |
+| PDF | 표지와 페이지 장식을 갖춘 A4 Editorial PDF | 내장 Chromium 인쇄 파이프라인 | 없음 |
 
-Pandoc 설정은 DOCX에만 표시됩니다. HWPX·HTML·PDF는 Pandoc 경로를 읽지 않습니다. PDF는 Obsidian에 위임하므로 HanMark HWPX 또는 Word 템플릿을 적용하지 않습니다.
+Pandoc 설정은 DOCX에만 표시됩니다. HWPX·HTML·PDF는 Pandoc 경로를 읽지 않습니다. Editorial PDF는 운영체제 인쇄 창을 열며 그곳에서 **PDF로 저장**을 선택합니다. HanMark HWPX 또는 Word 템플릿을 적용하지 않고 원본 노트를 변경하지도 않습니다.
 
 HTML은 기본으로 **Achmage Editorial**을 사용합니다. 이전 외형과의 호환이 필요하면 HanMark 설정 또는 내보내기 센터에서 **Classic**을 선택할 수 있습니다. Achmage Editorial은 맨 앞 첫 H1을 마스트헤드로 옮기고, 고정된 white/ivory/navy/blue/teal 색상 체계와 좁은 화면에 맞는 이미지·코드, A4 인쇄 규칙을 적용합니다. CSS는 문서 내부에 있으며 검증된 로컬·원격 PNG·JPEG·GIF·BMP는 data URI로 포함됩니다. CDN, 웹 글꼴, 외부 스타일시트와 JavaScript는 불러오지 않습니다. 파일명은 `${title}_html.html`을 그대로 사용합니다.
 
@@ -185,7 +186,7 @@ HWPX 템플릿 버튼은 템플릿 라이브러리를 엽니다. 내장 템플�
 
 ### 이미지
 
-동일한 이미지는 한 번만 읽어 여러 위치에 배치합니다. 원격 이미지는 내보낼 때 인터넷 연결이 필요하며, 현재 Obsidian 실행 중에는 미리보기와 내보내기가 메모리 캐시를 공유합니다. HWPX와 Achmage Editorial HTML은 검증된 PNG·JPEG·GIF·BMP를 사용합니다. HTML은 이미지를 data URI로 포함하므로 저장 후에는 오프라인으로 열 수 있습니다. 다운로드·Vault 경로·디코딩·포함이 실패하면 재시도, 명시적인 누락 표시로 계속하기, 취소 중 하나를 선택할 수 있습니다.
+동일한 이미지는 한 번만 읽어 여러 위치에 배치합니다. 원격 이미지는 내보낼 때 인터넷 연결이 필요하며, 현재 Obsidian 실행 중에는 미리보기와 내보내기가 메모리 캐시를 공유합니다. HWPX·Achmage Editorial HTML·Editorial PDF는 검증된 PNG·JPEG·GIF·BMP를 사용합니다. HTML은 이미지를 data URI로 포함하므로 저장 후에는 오프라인으로 열 수 있습니다. HTML은 경고 뒤에 명시적인 누락 표시로 계속할 수 있지만 PDF는 누락을 놓치지 않도록 실패 폐쇄 방식으로 재시도 또는 취소만 제공합니다.
 
 ### 문서 스타일과 글꼴
 
@@ -214,15 +215,15 @@ HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 가져옵니다.
 - 빠른 DOCX 미리보기는 실제 생성된 패키지를 렌더링하지만 Microsoft Word 자체는 아니므로 쪽 나눔과 일부 레이아웃은 다를 수 있습니다.
 - HTML은 SVG·WebP·동영상·iframe·스크립트·이벤트 핸들러·사용자 원시 CSS·외부 글꼴·CDN 자원을 의도적으로 제외합니다. 일반 링크는 `http:`, `https:`, `mailto:`만 허용합니다.
 - 생성된 HTML의 Content Security Policy는 `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`입니다.
-- PDF는 Obsidian 기본 PDF 내보내기와 인쇄 스타일을 사용합니다. HanMark HWPX 템플릿으로 렌더링하는 기능이 아닙니다.
-- HanMark 2.5.1은 데스크톱 전용이며 모바일 Obsidian은 지원하지 않습니다. 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
+- Editorial PDF는 데스크톱 Chromium 인쇄 엔진을 사용합니다. HanMark HWPX 템플릿으로 렌더링하지 않으며 최종 쪽 나눔은 선택한 프린터·PDF 설정에 따라 달라질 수 있습니다.
+- HanMark 2.5.2는 Obsidian 1.8.9 이상이 필요한 데스크톱 전용 플러그인입니다. 모바일 Obsidian은 지원하지 않지만 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
 - Sharp, ONNX, PDFium 같은 선택적 OCR·ML 구성요소는 플러그인 시작 번들에서 불러오지 않습니다.
 
 ### 개인정보와 접근 권한
 
 - **네트워크:** 사용자가 HTTP(S) 이미지가 포함된 노트를 미리보거나 내보낼 때만 노트에 적힌 해당 이미지 URL로 요청합니다. 가져온 이미지에 대해 사용자가 명시적으로 CMDS Eagle 현재 클라우드를 선택하면 추출된 이미지 바이트를 CMDS Eagle의 현재 제공자를 통해 업로드합니다. 그 브리지를 사용할 수 없고 사용자가 선택적 폴백을 설정한 경우에만 입력한 HTTPS Worker URL로 이미지 바이트를 보냅니다. 문서 본문은 업로드하지 않으며 폴백 API 키는 인증 업로드가 성공한 뒤에만 현재 Obsidian 세션 메모리에 보관하고 인증 거절 시 지우며 HanMark 설정에는 기록하지 않습니다. Achmage Editorial은 검증된 이미지를 저장할 HTML 안에 포함하므로 내보낸 뒤에는 네트워크가 필요하지 않습니다.
 - **파일:** Vault 첨부 파일과 사용자가 직접 선택한 파일을 읽습니다. 가져온 첨부 파일과 사용자가 요청한 결과 파일은 Obsidian Vault와 브라우저 파일 API로 저장합니다. 새 가져오기는 원본을 캐시하지 않습니다. 사용자가 예전 가져오기 노트에서 레거시 원본 수정 명령을 직접 실행한 경우에는 원본을 다시 선택하라고 요청할 수 있고 해당 호환 동작에 필요한 비공개 데이터만 저장합니다. 원본은 절대 덮어쓰지 않습니다.
-- **외부 프로그램:** HWPX와 HTML은 외부 변환기를 사용하지 않습니다. PDF는 Obsidian 기본 PDF 명령에 위임합니다. 사용자가 지정한 Pandoc은 명시적인 DOCX 내보내기, 빠른 DOCX 미리보기 직접 열기, **새로 고침**, 또는 사용자가 직접 미리보기 방식을 선택했을 때만 실행합니다. 작업공간 복원, 뷰 생명주기, 입력, 활성 노트 변경과 템플릿 변경은 Pandoc을 실행하지 않습니다. Windows Word-to-PDF 미리보기 역시 해당 미리보기 동작을 직접 요청한 뒤에만 Word를 호출합니다. 방금 저장한 Vault 결과의 **파일 위치 보기**는 사용자가 버튼을 누른 경우에만 운영체제 파일 관리자를 실행해 해당 파일을 선택합니다.
+- **외부 프로그램:** HWPX와 HTML은 외부 변환기를 사용하지 않습니다. Editorial PDF는 내장 Chromium 인쇄 파이프라인과 운영체제 인쇄 창을 사용하며 Pandoc을 실행하지 않습니다. 사용자가 지정한 Pandoc은 명시적인 DOCX 내보내기, 빠른 DOCX 미리보기 직접 열기, **새로 고침**, 또는 사용자가 직접 미리보기 방식을 선택했을 때만 실행합니다. 작업공간 복원, 뷰 생명주기, 입력, 활성 노트 변경과 템플릿 변경은 Pandoc을 실행하지 않습니다. Windows Word-to-PDF 미리보기 역시 해당 미리보기 동작을 직접 요청한 뒤에만 Word를 호출합니다. 방금 저장한 Vault 결과의 **파일 위치 보기**는 사용자가 버튼을 누른 경우에만 운영체제 파일 관리자를 실행해 해당 파일을 선택합니다.
 - **클립보드와 동적 실행:** 클립보드를 읽거나 쓰지 않으며 다운로드하거나 생성한 JavaScript를 동적으로 실행하지 않습니다.
 - **데이터 수집:** 계정, 분석, 텔레메트리, 광고, 결제, 원격 기능 플래그가 없습니다.
 
@@ -247,6 +248,7 @@ CMDS Eagle와 자격증명을 공유하지 않는 공개 연동 계약은
 - [chrisryugj/kordoc](https://github.com/chrisryugj/kordoc) — 내장 HWP/HWPX 가져오기, Markdown-to-HWPX, 원본 수정, 검증, 형식 프로필과 SVG 미리보기.
 - Volodymyr Baydalka의 [docx-preview](https://github.com/VolodymyrBaydalka/docxjs) 0.4.0 — 사용자가 요청한 DOCX 패키지를 Obsidian 안에서 렌더링하며 [Apache License 2.0](https://github.com/VolodymyrBaydalka/docxjs/blob/master/LICENSE)을 따릅니다.
 - Tw93의 [Kami](https://github.com/tw93/kami) — Achmage Editorial의 시각 언어는 MIT License로 공개된 문서 디자인 원칙 일부를 응용했습니다. Kami 패키지·글꼴·빌드 스크립트·콘텐츠는 포함하지 않습니다. 자세한 표기는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 참고하십시오.
+- [Pretendard](https://github.com/orioncactus/pretendard) 400·600 (`@fontsource/pretendard` 5.3.0) — SIL Open Font License 1.1에 따라 Editorial PDF용으로 포함합니다. 자세한 표기는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 참고하십시오.
 - [Pandoc](https://pandoc.org/) — 선택적 DOCX 변환에만 사용.
 - [msjang/pypandoc-hwpx](https://github.com/msjang/pypandoc-hwpx) — HanMark 초기 HWPX 경로의 기반이 된 프로젝트.
 
