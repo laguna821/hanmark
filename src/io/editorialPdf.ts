@@ -69,7 +69,6 @@ const EDITORIAL_PDF_COVER_TITLE_MIN_PT = 5;
 const POST_PRINT_CLEANUP_DELAY_MS = 5 * 60 * 1000;
 const MAX_EDITORIAL_PDF_RENDER_DEPTH = 128;
 const SAFE_LINK = /^(?:https?:|mailto:)/i;
-const SAFE_COLOR = /^(?:#[0-9a-f]{3,8}|rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\))$/i;
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const SAFE_EDITORIAL_PDF_ERROR_NAMES = new Set([
   "Error",
@@ -915,7 +914,9 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     margin: 0;
     padding: 0;
     overflow: visible;
-    background: #ffffff;
+    color-scheme: only light;
+    color: #182433;
+    background: #FFFFFF;
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > :not(.${EDITORIAL_PDF_ROOT_CLASS}):not(.${EDITORIAL_PDF_STYLE_CLASS}) {
@@ -939,8 +940,9 @@ export function createEditorialPdfStyles(headerTitle: string): string {
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} {
+    color-scheme: only light;
     color: #182433;
-    background: #ffffff;
+    background: #FFFFFF;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     font-family: "HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif;
@@ -961,7 +963,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     overflow: hidden;
     break-after: page;
     page-break-after: always;
-    background: #ffffff;
+    background: #FFFFFF;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-upper {
@@ -970,7 +972,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     flex-direction: column;
     align-items: center;
     padding: 24mm 27mm 18mm;
-    color: #ffffff;
+    color: #FFFFFF;
     background: #002E6E;
     text-align: center;
   }
@@ -1030,7 +1032,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     align-items: center;
     padding: 24mm 24mm 17mm;
     color: #002E6E;
-    background: #ffffff;
+    background: #FFFFFF;
     text-align: center;
   }
 
@@ -1055,7 +1057,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-detail {
     margin: 6mm 0 0;
-    color: #31537d;
+    color: #31537D;
     font-size: 7.5pt;
     font-weight: 600;
     line-height: 1.2;
@@ -1075,7 +1077,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     display: inline-block;
     padding: 1.3mm 3mm 1.1mm;
     border-radius: 999pt;
-    color: #ffffff;
+    color: #FFFFFF;
     background: #002E6E;
     font-size: 7pt;
     font-weight: 700;
@@ -1160,7 +1162,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     padding: 0.85em 1.05em;
     border: 0;
     border-radius: 0;
-    color: #ffffff;
+    color: #FFFFFF;
     background: #002E6E;
     break-inside: avoid-page;
     page-break-inside: avoid;
@@ -1192,7 +1194,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     padding: 0.95em 1.05em;
     border: 0;
     border-radius: 0;
-    color: #ffffff;
+    color: #FFFFFF;
     background: #002E6E;
     font-size: 8.5pt;
     line-height: 1.45;
@@ -1264,20 +1266,20 @@ export function createEditorialPdfStyles(headerTitle: string): string {
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body th,
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body td {
     padding: 0.45em 0.55em;
-    border: 0.5pt solid #d9e0e6;
+    border: 0.5pt solid #D9E0E6;
     vertical-align: top;
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body th {
-    color: #ffffff;
+    color: #FFFFFF;
     background: #002E6E;
     font-weight: 700;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body tbody tr:nth-child(even) {
-    background: #fafafa;
+    background: #FAFAFA;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_CLASS},
@@ -1319,7 +1321,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     display: block;
     margin: 0 0 0.35em;
     padding: 0.4em 0.65em;
-    color: #ffffff;
+    color: #FFFFFF;
     background: #002E6E;
     font-size: 8pt;
     font-weight: 700;
@@ -1339,7 +1341,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
     display: block;
     width: 100%;
     color: #182433;
-    background: transparent;
+    background: #FFFFFF;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_VALUE_CLASS} > p,
@@ -1348,7 +1350,7 @@ export function createEditorialPdfStyles(headerTitle: string): string {
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_HEADER_ROW_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_LABEL_CLASS} {
-    background: #31537d;
+    background: #31537D;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_CONTAINER_FALLBACK_CLASS} {
@@ -1371,13 +1373,210 @@ export function createEditorialPdfStyles(headerTitle: string): string {
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body mark {
-    background: #c7f1ee;
+    background: #C7F1EE;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body hr {
     margin: 1.2em 0;
     border: 0;
     border-top: 0.8pt solid #00B5AD;
+  }
+
+  /*
+   * The PDF tree is mounted under Obsidian's live body and therefore also
+   * inherits theme-dark/theme-light and print rules. Keep this isolation
+   * block last and more specific than ordinary host-theme selectors so every
+   * printable leaf resolves to the fixed HanMark light-paper palette.
+   */
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS},
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body {
+    color-scheme: only light;
+    color: #182433;
+    background: #FFFFFF;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover {
+    color-scheme: only light;
+    color: #002E6E;
+    background: #FFFFFF;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-upper {
+    color: #FFFFFF;
+    background: #002E6E;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-upper * {
+    color: inherit;
+    background: transparent;
+    text-decoration-color: #FFFFFF;
+    text-shadow: none;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-lower {
+    color: #002E6E;
+    background: #FFFFFF;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-lower * {
+    color: inherit;
+    background: transparent;
+    text-decoration-color: #002E6E;
+    text-shadow: none;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-detail {
+    color: #31537D;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-tag {
+    color: #FFFFFF;
+    background: #002E6E;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body p,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body li,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body ol,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body ul,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body span,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body strong,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body em,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body del,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body u,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body sup,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body sub {
+    color: inherit;
+    background: transparent;
+    text-decoration-color: #182433;
+    text-shadow: none;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_CLASS},
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_ROW_CLASS},
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_CELL_CLASS},
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_VALUE_CLASS},
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_CONTAINER_FALLBACK_CLASS},
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_CONTAINER_FALLBACK_BODY_CLASS} {
+    color: #182433;
+    background: #FFFFFF;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_LABEL_CLASS},
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_CONTAINER_FALLBACK_LABEL_CLASS} {
+    color: #FFFFFF;
+    background: #002E6E;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_HEADER_ROW_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_LABEL_CLASS} {
+    color: #FFFFFF;
+    background: #31537D;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body h1,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body h2,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body h3,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body h4,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body h5,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body h6 {
+    color: #002E6E;
+    background: transparent;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body li::marker,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body li > span[aria-hidden="true"] {
+    color: #31537D;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body :not(pre) > code {
+    padding: 0.08em 0.28em;
+    border: 0.5pt solid #D9E0E6;
+    border-radius: 0;
+    color: #002E6E;
+    background: #FAFAFA;
+    text-shadow: none;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body pre,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body pre code {
+    color: #FFFFFF;
+    background: #002E6E;
+    border-color: transparent;
+    text-shadow: none;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body table,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body thead,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body tbody,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body tr,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body td {
+    color: #182433;
+    background: #FFFFFF;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body th {
+    border-color: #D9E0E6;
+    color: #FFFFFF;
+    background: #002E6E;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body td {
+    border-color: #D9E0E6;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body tbody tr:nth-child(even),
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body tbody tr:nth-child(even) td {
+    color: #182433;
+    background: #FAFAFA;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body blockquote,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-callout {
+    color: #FFFFFF;
+    background: #002E6E;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body blockquote *,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-callout * {
+    color: inherit;
+    background: transparent;
+    text-decoration-color: #FFFFFF;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-callout-label {
+    color: #7FE2DC;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body a {
+    color: #002E6E;
+    background: transparent;
+    text-decoration-color: #002E6E;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body blockquote a,
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-callout a {
+    color: #FFFFFF;
+    background: transparent;
+    text-decoration-color: #7FE2DC;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body mark {
+    color: #182433;
+    background: #C7F1EE;
+    text-shadow: none;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body img {
+    color: #182433;
+    background: transparent;
+    filter: none;
+    opacity: 1;
+    mix-blend-mode: normal;
+  }
+
+  html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body hr {
+    color: #00B5AD;
+    background: transparent;
+    border-color: #00B5AD;
   }
 }
 `.trim();
@@ -1445,12 +1644,6 @@ function appendInlines(
           span: "span"
         };
         const styled = createHtmlElement(ownerDocument, tagByStyle[inline.style]);
-        if (inline.color && SAFE_COLOR.test(inline.color)) {
-          styled.style.color = inline.color;
-        }
-        if (inline.backgroundColor && SAFE_COLOR.test(inline.backgroundColor)) {
-          styled.style.backgroundColor = inline.backgroundColor;
-        }
         appendInlines(ownerDocument, styled, inline.children, depth + 1);
         parent.appendChild(styled);
         break;

@@ -489,6 +489,167 @@ describe("Achmage Editorial PDF helpers", () => {
     assert.doesNotMatch(css, /!important/u);
   });
 
+  it("isolates every Editorial PDF color from the active Obsidian theme", () => {
+    const css = createEditorialPdfStyles("Theme regression");
+    const palette = Array.from(
+      new Set(
+        Array.from(
+          css.matchAll(/#[0-9a-f]{6}\b/giu),
+          (match) => match[0].toUpperCase()
+        )
+      )
+    ).sort();
+    const expectedPalette = [
+      "#FFFFFF",
+      "#182433",
+      "#002E6E",
+      "#31537D",
+      "#00B5AD",
+      "#7FE2DC",
+      "#C7F1EE",
+      "#D9E0E6",
+      "#FAFAFA"
+    ].sort();
+
+    assert.deepEqual(palette, expectedPalette);
+    assert.doesNotMatch(
+      css,
+      /var\(\s*--(?:background|text|code|list|bold|italic|link|interactive)/iu
+    );
+    assert.doesNotMatch(
+      css,
+      /--(?:background|text|code|list|bold|italic|link|interactive)[\w-]*\s*:/iu
+    );
+    assert.doesNotMatch(css, /\bcurrentColor\b/u);
+    assert.doesNotMatch(css, /\.theme-(?:dark|light)\b/u);
+    assert.match(
+      css,
+      /html body\.hanmark-editorial-pdf-active \{[\s\S]*?color-scheme: only light;[\s\S]*?color: #182433;[\s\S]*?background: #FFFFFF;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-root \{[\s\S]*?color-scheme: only light;[\s\S]*?color: #182433;[\s\S]*?background: #FFFFFF;/u
+    );
+    assert.match(
+      css,
+      /section\.hanmark-editorial-pdf-root \.hanmark-editorial-pdf-cover-upper \{[\s\S]*?color: #FFFFFF;[\s\S]*?background: #002E6E;/u
+    );
+    assert.match(
+      css,
+      /section\.hanmark-editorial-pdf-root \.hanmark-editorial-pdf-cover-lower \{[\s\S]*?color: #002E6E;[\s\S]*?background: #FFFFFF;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body (?:strong|em|del|u|sup|sub)[\s\S]*?\{[\s\S]*?color: inherit;[\s\S]*?background: transparent;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body li::marker,[\s\S]*?color: #31537D;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body ol,[\s\S]*?\.hanmark-editorial-pdf-body ul,[\s\S]*?\{[\s\S]*?color: inherit;[\s\S]*?background: transparent;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body :not\(pre\) > code \{[\s\S]*?color: #002E6E;[\s\S]*?background: #FAFAFA;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body pre code \{[\s\S]*?color: #FFFFFF;[\s\S]*?background: #002E6E;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body td \{[\s\S]*?color: #182433;[\s\S]*?background: #FFFFFF;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body tbody tr:nth-child\(even\) td \{[\s\S]*?background: #FAFAFA;/u
+    );
+    assert.match(
+      css,
+      new RegExp(
+        `\\.${EDITORIAL_PDF_TABLE_FALLBACK_VALUE_CLASS},[\\s\\S]*?` +
+          `\\.${EDITORIAL_PDF_CONTAINER_FALLBACK_BODY_CLASS} \\{` +
+          "[\\s\\S]*?color: #182433;" +
+          "[\\s\\S]*?background: #FFFFFF;",
+        "u"
+      )
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body blockquote,[\s\S]*?color: #FFFFFF;[\s\S]*?background: #002E6E;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-callout a \{[\s\S]*?color: #FFFFFF;[\s\S]*?text-decoration-color: #7FE2DC;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body mark \{[\s\S]*?color: #182433;[\s\S]*?background: #C7F1EE;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body img \{[\s\S]*?filter: none;[\s\S]*?opacity: 1;[\s\S]*?mix-blend-mode: normal;/u
+    );
+    assert.match(
+      css,
+      /\.hanmark-editorial-pdf-body hr \{[\s\S]*?border-color: #00B5AD;/u
+    );
+    assert.doesNotMatch(css, /!important/u);
+  });
+
+  it("normalizes source-authored inline colors in PDF DOM without losing text", () => {
+    const root = buildEditorialPdfRoot(
+      createTestDocument(),
+      {
+        title: "Palette",
+        masthead: [],
+        blocks: [
+          {
+            type: "paragraph",
+            inlines: [
+              {
+                type: "styled",
+                style: "span",
+                color: "#ff0000",
+                backgroundColor: "#ffee00",
+                children: [{ type: "text", value: "custom" }]
+              },
+              {
+                type: "styled",
+                style: "strong",
+                color: "#123456",
+                children: [{ type: "text", value: "strong" }]
+              },
+              {
+                type: "styled",
+                style: "mark",
+                backgroundColor: "#ffff00",
+                children: [{ type: "text", value: "mark" }]
+              }
+            ]
+          }
+        ]
+      },
+      "Palette"
+    ) as unknown as TestElement;
+    const styledElements = testElements(
+      root,
+      (element) =>
+        (element.tagName === "SPAN" && element.textContent === "custom") ||
+        (element.tagName === "STRONG" && element.textContent === "strong") ||
+        (element.tagName === "MARK" && element.textContent === "mark")
+    );
+
+    assert.equal(styledElements.length, 3);
+    for (const element of styledElements) {
+      assert.equal(element.style.color, undefined);
+      assert.equal(element.style.backgroundColor, undefined);
+    }
+    assert.match(root.textContent, /customstrongmark/u);
+  });
+
   it("keeps short code in one chunk and physically chunks oversized code", () => {
     const shortCode = Array.from(
       { length: 10 },
@@ -625,7 +786,7 @@ describe("Achmage Editorial PDF helpers", () => {
       new RegExp(
         `\\.${EDITORIAL_PDF_TABLE_FALLBACK_VALUE_CLASS},[\\s\\S]*?` +
           `\\.${EDITORIAL_PDF_CONTAINER_FALLBACK_BODY_CLASS} \\{` +
-          "[\\s\\S]*?background: transparent;",
+          "[\\s\\S]*?background: #FFFFFF;",
         "u"
       )
     );
