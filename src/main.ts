@@ -236,7 +236,7 @@ function registerHeadingCommand(plugin: Plugin, level: number): void {
 }
 
 /**
- * HanMark 2.5.2 runtime.
+ * HanMark 2.5.3 runtime.
  *
  * HWPX is generated in-process by Kordoc. The single external process boundary
  * is used only after an explicit user action: optional Pandoc/Word conversion

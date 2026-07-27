@@ -2,7 +2,7 @@ name: Publish verified plugin
 
 on:
   push:
-    tags: ["2.5.2"]
+    tags: ["2.5.3"]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -74,5 +74,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           release/main.js release/manifest.json release/styles.css
           --verify-tag
-          --title "HanMark 2.5.2 — Editorial export reliability / 편집형 내보내기 안정화"
-          --notes-file "release-notes/2.5.2.md"
+          --title "HanMark 2.5.3 — Large-document PDF reliability / 대형 문서 PDF 안정화"
+          --notes-file "release-notes/2.5.3.md"

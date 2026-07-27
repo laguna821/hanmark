@@ -2,6 +2,17 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.5.3
+
+- Hardened the built-in Editorial PDF path for large code blocks, multi-page and very wide tables, oversized quotes and callouts, image-heavy containers, long prose, nested lists, and deeply nested structures.
+- Physically divided oversized code into bounded print chunks while preserving the exact source text and line endings.
+- Kept ordinary multi-page tables as native repeating-header tables, while moving exceptionally tall rows or headers and very wide tables to an ordinary-flow vertical fallback that preserves cell order, complete values, and images.
+- Kept the Obsidian print document visible and mounted through native Save-as-PDF handling, waited for layout to settle, rejected concurrent print requests safely, and swept stale HanMark print state before a new export.
+- Added bounded, privacy-safe stage diagnostics so failures identify the PDF step without exposing note text, local paths, image payloads, or private cause messages.
+- Refined the deterministic Editorial layout with a full-bleed HanMark cover, branded headers, precisely spaced teal rules, one-column body pages, and actual page numbers.
+- Rendered signature-validated BMP data images imported from HWPX as actual images in Achmage Editorial HTML instead of literal Markdown or base64 text.
+- Preserved the Markdown source, Kordoc 4.2.5 HWPX generation, templates, optional Pandoc DOCX path, imports, CMDS Eagle bridge, and existing command IDs.
+
 ## 2.5.2
 
 - Added a shared semantic Editorial document model for Achmage Editorial HTML and PDF, normalizing soft line breaks while preserving headings, nested lists, tasks, tables, quotes, callouts, code, links, wiki links, and images.
@@ -114,6 +125,17 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.5.3
+
+- 대형 코드 블록, 여러 페이지·초광폭 표, 큰 인용·콜아웃, 이미지가 많은 컨테이너, 장문, 중첩 목록과 깊은 구조에서도 내장 Editorial PDF가 안전하게 조판되도록 보강했습니다.
+- 매우 큰 코드 블록을 제한된 크기의 인쇄 청크로 물리적으로 나누면서 원래 코드 문자열과 줄바꿈을 정확히 보존합니다.
+- 일반적인 여러 페이지 표는 머리글이 반복되는 실제 표로 유지하고, 지나치게 높은 행·머리글과 매우 넓은 표는 셀 순서·전체 값·이미지를 보존하는 일반 흐름의 세로형 대체 배치로 전환합니다.
+- Obsidian 인쇄 문서를 네이티브 PDF 저장 단계까지 보이게 유지하고 조판 안정화를 기다리며, 중복 인쇄 요청은 안전하게 거절하고 다음 내보내기 전에 남은 HanMark 인쇄 상태를 정리합니다.
+- PDF 실패 단계를 알려 주면서도 노트 본문, 로컬 경로, 이미지 payload와 비공개 원인 메시지는 노출하지 않는 범위 제한 진단을 추가했습니다.
+- 전면 HanMark 표지, 브랜드 머리말, 정밀한 청록색 실선, 1단 본문과 실제 쪽 번호를 갖춘 결정론적 Editorial 배치를 다듬었습니다.
+- HWPX에서 가져온 서명 검증 BMP data 이미지가 Achmage Editorial HTML에서 Markdown 또는 base64 글자가 아니라 실제 이미지로 렌더링되도록 수정했습니다.
+- Markdown 원문, Kordoc 4.2.5 HWPX 생성, 템플릿, 선택형 Pandoc DOCX 경로, 가져오기, CMDS Eagle 브리지와 기존 명령 ID는 유지합니다.
 
 ### 2.5.2
 
