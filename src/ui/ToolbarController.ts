@@ -33,6 +33,7 @@ export interface ToolbarActions {
   openHwpxExport: () => void;
   openDocxExport: () => void;
   openHtmlExport: () => void;
+  openPdfExport: () => void;
   toggleHwpxPreview: () => void;
   openTemplateManager: () => void;
   openSettings: () => void;
@@ -635,7 +636,9 @@ export class ToolbarController {
     });
 
     this.addDivider(root);
-    const exports = root.createDiv({ cls: "hwp-toolbar-group" });
+    const exports = root.createDiv({
+      cls: "hwp-toolbar-group hwp-toolbar-export-group"
+    });
     this.addButton(exports, {
       icon: "file-output",
       label: "HWPX 내보내기",
@@ -653,6 +656,12 @@ export class ToolbarController {
       label: "HTML 내보내기",
       text: "HTML",
       action: this.actions.openHtmlExport
+    });
+    this.addButton(exports, {
+      icon: "printer",
+      label: "PDF 내보내기",
+      text: "PDF",
+      action: this.actions.openPdfExport
     });
 
     this.addDivider(root);

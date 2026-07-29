@@ -1013,6 +1013,13 @@
   flex-shrink: 0;
 }
 
+.hwp-toolbar-export-group {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .hwp-toolbar-divider {
   width: 1px;
   height: 20px;

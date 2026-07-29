@@ -89,14 +89,16 @@ describe("HanMark unified export center", () => {
     );
   });
 
-  it("opens the exact selected format from each existing toolbar button", async () => {
-    const { main, toolbar } = await exportSources();
+  it("opens the exact selected format from each toolbar button in document-format order", async () => {
+    const { main, toolbar, css } = await exportSources();
     const buttons = [
       ["HWPX", "openHwpxExport", "hwpx"],
       ["DOCX", "openDocxExport", "docx"],
-      ["HTML", "openHtmlExport", "html"]
+      ["HTML", "openHtmlExport", "html"],
+      ["PDF", "openPdfExport", "pdf"]
     ] as const;
 
+    let previousButton = -1;
     for (const [label, action, format] of buttons) {
       assert.match(
         main,
@@ -112,7 +114,29 @@ describe("HanMark unified export center", () => {
           "u"
         )
       );
+      const currentButton = toolbar.indexOf(`text: "${label}"`);
+      assert.ok(
+        currentButton > previousButton,
+        `${label} must follow the preceding export button`
+      );
+      previousButton = currentButton;
     }
+    assert.match(
+      toolbar,
+      /cls: "hwp-toolbar-group hwp-toolbar-export-group"/u
+    );
+    assert.match(
+      toolbar,
+      /icon: "printer",[\s\S]{0,120}?label: "PDF 내보내기",[\s\S]{0,120}?text: "PDF"/u
+    );
+    assert.match(
+      toolbar,
+      /"aria-label": options\.label,[\s\S]{0,80}?title: options\.label/u
+    );
+    assert.match(
+      css,
+      /\.hwp-toolbar-export-group \{[\s\S]{0,180}?flex-wrap: wrap;[\s\S]{0,180}?max-width: 100%;/u
+    );
   });
 
   it("offers file reveal only for a saved result carrying a Vault path", async () => {

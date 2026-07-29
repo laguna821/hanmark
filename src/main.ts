@@ -297,6 +297,7 @@ export default class HanmarkPlugin extends Plugin {
         openHwpxExport: () => this.openExportCenter("hwpx"),
         openDocxExport: () => this.openExportCenter("docx"),
         openHtmlExport: () => this.openExportCenter("html"),
+        openPdfExport: () => this.openExportCenter("pdf"),
         toggleHwpxPreview: () => void this.toggleQuickPreview(),
         openTemplateManager: () => this.openTemplateManager(),
         openSettings: () => this.openPluginSettings(),
