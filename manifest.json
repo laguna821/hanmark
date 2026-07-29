@@ -1,7 +1,7 @@
 {
   "id": "hanmark",
   "name": "HanMark",
-  "version": "2.5.4",
+  "version": "2.5.5",
   "minAppVersion": "1.8.9",
   "description": "Export Markdown to styled HWPX, DOCX, offline HTML, and Editorial PDF. No Python setup required.",
   "author": "Achmage",

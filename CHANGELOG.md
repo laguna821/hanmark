@@ -2,6 +2,12 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.5.5
+
+- Made the first Editorial PDF export after a fresh Obsidian launch deterministic by waiting for the attached print stylesheet, embedded Pretendard weights, images, and stable print layout before opening the native print dialog.
+- Added a directly discoverable PDF button to the top HanMark toolbar. It opens the unified export center with PDF selected and preserves the existing `export-pdf` command.
+- Kept the 2.5.4 theme-independent Editorial palette, full-bleed cover, headers, footers, page numbering, large-document safeguards, and all HWPX, DOCX, HTML, import, and template behavior unchanged.
+
 ## 2.5.4
 
 - Isolated the built-in Editorial PDF from Obsidian's light and dark themes by establishing a fixed light print color scheme and a complete scoped paper, body, navy, teal, border, code, and highlight palette.
@@ -133,6 +139,12 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.5.5
+
+- Obsidian을 새로 실행한 뒤 최초 Editorial PDF를 내보낼 때도 연결된 인쇄 스타일시트, 내장 Pretendard 굵기, 이미지와 인쇄 조판이 안정될 때까지 기다린 뒤 네이티브 인쇄 창을 열도록 해 결과를 결정론적으로 만들었습니다.
+- 상단 HanMark 툴바에 PDF 버튼을 추가했습니다. 통합 내보내기 센터를 PDF가 선택된 상태로 열며 기존 `export-pdf` 명령도 유지합니다.
+- 2.5.4의 테마 독립형 Editorial 팔레트, 전면 표지, 머리말·꼬리말, 쪽 번호, 대형 문서 보호와 HWPX·DOCX·HTML·가져오기·템플릿 동작은 그대로 유지합니다.
 
 ### 2.5.4
 

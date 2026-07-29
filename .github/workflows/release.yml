@@ -2,7 +2,7 @@ name: Publish verified plugin
 
 on:
   push:
-    tags: ["2.5.4"]
+    tags: ["2.5.5"]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -74,5 +74,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           release/main.js release/manifest.json release/styles.css
           --verify-tag
-          --title "HanMark 2.5.4 — Theme-independent Editorial PDF / 테마 독립형 Editorial PDF"
-          --notes-file "release-notes/2.5.4.md"
+          --title "HanMark 2.5.5 — First-print reliability and PDF toolbar / 최초 인쇄 안정화와 PDF 툴바"
+          --notes-file "release-notes/2.5.5.md"

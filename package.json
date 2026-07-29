@@ -1,6 +1,6 @@
 {
   "name": "hanmark",
-  "version": "2.5.4",
+  "version": "2.5.5",
   "description": "No-setup Markdown export to HWPX, self-contained HTML, and Editorial PDF.",
   "main": "main.js",
   "scripts": {
