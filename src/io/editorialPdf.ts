@@ -59,6 +59,20 @@ export const EDITORIAL_PDF_CONTAINER_FALLBACK_BODY_CLASS =
 const EDITORIAL_PDF_STYLE_CLASS = "hanmark-editorial-pdf-style";
 const DEFAULT_WATCHDOG_MS = 10 * 60 * 1000;
 const DEFAULT_ASSET_TIMEOUT_MS = 20 * 1000;
+const EDITORIAL_PDF_PRINT_FONT_FAMILY =
+  '"HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif';
+const EDITORIAL_PDF_FONT_PROBES = [
+  '400 10pt "HanMark Pretendard"',
+  '600 10pt "HanMark Pretendard"'
+] as const;
+const EDITORIAL_PDF_FONT_PROBE_TEXT =
+  "HanMark PDF 한글 표지 본문 가나다 ABCDEFG 0123456789";
+const EDITORIAL_PDF_FALLBACK_FONT_PROBES = [
+  `400 10pt ${EDITORIAL_PDF_PRINT_FONT_FAMILY}`,
+  `600 10pt ${EDITORIAL_PDF_PRINT_FONT_FAMILY}`
+] as const;
+const EDITORIAL_PDF_FALLBACK_FONT_PROBE_TEXT =
+  "한글 표지 본문 가나다";
 const EDITORIAL_PDF_HEADER_MAX_GRAPHEMES = 20;
 const EDITORIAL_PDF_COVER_TITLE_WIDTH_PT = 430;
 const EDITORIAL_PDF_COVER_TITLE_MIN_PT = 5;
@@ -100,6 +114,14 @@ const SAFE_EDITORIAL_PDF_ERROR_NAMES = new Set([
 interface FontFaceSetLike {
   ready: Promise<unknown>;
   load?: (font: string, text?: string) => Promise<unknown>;
+}
+
+interface EditorialPdfStyleElementLike {
+  isConnected?: boolean;
+  parentNode?: Node | null;
+  sheet?: {
+    cssRules?: ArrayLike<unknown>;
+  } | null;
 }
 
 interface SegmentPart {
@@ -897,6 +919,9 @@ export function createEditorialPdfStyles(headerTitle: string): string {
   width: 170mm;
   visibility: hidden;
   pointer-events: none;
+  font-family: ${EDITORIAL_PDF_PRINT_FONT_FAMILY};
+  font-size: 9pt;
+  line-height: 1.55;
 }
 
 @media print {
@@ -2239,29 +2264,210 @@ function waitForEventImage(
   });
 }
 
+function editorialPdfRemainingTimeout(deadline: number): number {
+  return Math.max(0, deadline - Date.now());
+}
+
+function waitForEditorialPdfPromise<T>(
+  operation: Promise<T>,
+  view: Window,
+  deadline: number,
+  label: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const remaining = editorialPdfRemainingTimeout(deadline);
+    if (remaining <= 0) {
+      reject(new Error(`Timed out waiting for ${label}.`));
+      return;
+    }
+
+    let settled = false;
+    const timeout = view.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`Timed out waiting for ${label}.`));
+    }, remaining);
+    operation.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        view.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        view.clearTimeout(timeout);
+        reject(
+          error instanceof Error
+            ? error
+            : new Error("Print asset preparation failed.")
+        );
+      }
+    );
+  });
+}
+
+function waitForEditorialPdfAnimationFrame(
+  view: Window,
+  deadline: number,
+  label: string
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const remaining = editorialPdfRemainingTimeout(deadline);
+    if (remaining <= 0) {
+      reject(new Error(`Timed out waiting for ${label}.`));
+      return;
+    }
+
+    let settled = false;
+    let frame = 0;
+    const timeout = view.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      if (typeof view.cancelAnimationFrame === "function") {
+        view.cancelAnimationFrame(frame);
+      }
+      reject(new Error(`Timed out waiting for ${label}.`));
+    }, remaining);
+    frame = view.requestAnimationFrame(() => {
+      if (settled) return;
+      settled = true;
+      view.clearTimeout(timeout);
+      resolve();
+    });
+  });
+}
+
+function editorialPdfStylesheetReady(style: HTMLStyleElement): boolean {
+  const candidate = style as HTMLStyleElement &
+    EditorialPdfStyleElementLike;
+  if (candidate.isConnected === false || candidate.parentNode === null) {
+    return false;
+  }
+  if (!candidate.sheet) return false;
+  try {
+    return (candidate.sheet.cssRules?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForEditorialPdfStylesheet(
+  style: HTMLStyleElement,
+  view: Window,
+  deadline: number
+): Promise<void> {
+  while (!editorialPdfStylesheetReady(style)) {
+    await waitForEditorialPdfAnimationFrame(
+      view,
+      deadline,
+      "the print stylesheet"
+    );
+  }
+}
+
+function editorialPdfFontFacesLoaded(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "length" in value
+  ) {
+    const length = (value as { length?: unknown }).length;
+    return typeof length === "number" && length > 0;
+  }
+  return false;
+}
+
+async function waitForEditorialPdfFonts(
+  fonts: FontFaceSetLike,
+  view: Window,
+  deadline: number
+): Promise<void> {
+  if (typeof fonts.load !== "function") {
+    throw new Error("The print document cannot verify its embedded fonts.");
+  }
+
+  while (true) {
+    const loadedFaces = await Promise.all(
+      EDITORIAL_PDF_FONT_PROBES.map((font) =>
+        waitForEditorialPdfPromise(
+          fonts.load?.(font, EDITORIAL_PDF_FONT_PROBE_TEXT) ??
+            Promise.resolve([]),
+          view,
+          deadline,
+          `${font} font`
+        )
+      )
+    );
+    if (loadedFaces.every(editorialPdfFontFacesLoaded)) break;
+    await waitForEditorialPdfAnimationFrame(
+      view,
+      deadline,
+      "the embedded print fonts"
+    );
+  }
+
+  await Promise.all(
+    EDITORIAL_PDF_FALLBACK_FONT_PROBES.map((font) =>
+      waitForEditorialPdfPromise(
+        fonts.load?.(font, EDITORIAL_PDF_FALLBACK_FONT_PROBE_TEXT) ??
+          Promise.resolve([]),
+        view,
+        deadline,
+        `${font} fallback font`
+      )
+    )
+  );
+
+  await waitForEditorialPdfPromise(
+    fonts.ready,
+    view,
+    deadline,
+    "the print font set"
+  );
+}
+
 export async function waitForEditorialPdfAssets(
   ownerDocument: Document,
   root: HTMLElement,
-  timeoutMs = DEFAULT_ASSET_TIMEOUT_MS
+  timeoutMs = DEFAULT_ASSET_TIMEOUT_MS,
+  style?: HTMLStyleElement
 ): Promise<void> {
-  const fonts = (ownerDocument as Document & { fonts?: FontFaceSetLike }).fonts;
-  if (fonts) {
-    await fonts.load?.(
-      '10pt "HanMark Pretendard"',
-      "가나다라마바사 ABCDEFG 0123456789"
-    );
-    await fonts.ready;
+  const view = ownerDocument.defaultView;
+  if (!view) throw new Error("The print document has no active window.");
+  const deadline = Date.now() + Math.max(1, timeoutMs);
+
+  if (style) {
+    await waitForEditorialPdfStylesheet(style, view, deadline);
   }
+
+  // The embedded HanMark face intentionally contains Latin glyphs only.
+  // Lay out the hidden subtree with the real print stack first so Chromium
+  // registers the Korean system fallback before `fonts.ready` is observed.
+  primeEditorialPdfPrintLayout(root, view);
+
+  const fonts = (ownerDocument as Document & { fonts?: FontFaceSetLike }).fonts;
+  if (!fonts) throw new Error("The print document has no font set.");
+  await waitForEditorialPdfFonts(fonts, view, deadline);
 
   const images = Array.from(root.querySelectorAll("img"));
   await Promise.all(images.map(async (image) => {
     try {
       if (typeof image.decode === "function") {
-        await image.decode();
+        await waitForEditorialPdfPromise(
+          image.decode(),
+          view,
+          deadline,
+          `image ${image.alt || "untitled image"}`
+        );
       } else if (!image.complete) {
-        const view = ownerDocument.defaultView;
-        if (!view) throw new Error("The print document has no active window.");
-        await waitForEventImage(image, timeoutMs, view);
+        await waitForEventImage(
+          image,
+          editorialPdfRemainingTimeout(deadline),
+          view
+        );
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -2275,14 +2481,63 @@ export async function waitForEditorialPdfAssets(
 
 export async function waitForEditorialPdfLayout(
   root: HTMLElement,
-  view: Window
+  view: Window,
+  timeoutMs = DEFAULT_ASSET_TIMEOUT_MS
 ): Promise<void> {
-  await new Promise<void>((resolve) => {
-    view.requestAnimationFrame(() => {
-      view.requestAnimationFrame(() => resolve());
-    });
-  });
+  const deadline = Date.now() + Math.max(1, timeoutMs);
+  await waitForEditorialPdfAnimationFrame(
+    view,
+    deadline,
+    "the first print layout frame"
+  );
+  await waitForEditorialPdfAnimationFrame(
+    view,
+    deadline,
+    "the second print layout frame"
+  );
   root.getBoundingClientRect();
+}
+
+export function primeEditorialPdfPrintLayout(
+  root: HTMLElement,
+  view: Window
+): void {
+  let cover: HTMLElement | null = null;
+  let body: HTMLElement | null = null;
+  try {
+    cover = root.querySelector<HTMLElement>(
+      ".hanmark-editorial-pdf-cover"
+    );
+    body = root.querySelector<HTMLElement>(
+      ".hanmark-editorial-pdf-body"
+    );
+  } catch {
+    return;
+  }
+
+  for (const element of [root, cover, body]) {
+    if (!element) continue;
+    try {
+      const computed = view.getComputedStyle(element);
+      void computed.display;
+      void computed.fontFamily;
+      void computed.fontWeight;
+      void computed.backgroundColor;
+      void computed.getPropertyValue("page");
+    } catch {
+      // Priming is a best-effort safeguard; print must never be cancelled by
+      // a transient computed-style failure from the host runtime.
+    }
+    try {
+      const bounds = element.getBoundingClientRect();
+      void bounds.width;
+      void bounds.height;
+      void bounds.top;
+      void bounds.left;
+    } catch {
+      // Geometry priming is likewise non-fatal during `beforeprint`.
+    }
+  }
 }
 
 function editorialPdfUnsupportedMessage(support: EditorialPdfRuntimeSupport): string {
@@ -2425,11 +2680,15 @@ export class EditorialPdfService {
       let cleaned = false;
       let watchdog: number | undefined;
       let delayedCleanup: number | undefined;
+      const primePrintLayout = (): void => {
+        primeEditorialPdfPrintLayout(root, view);
+      };
       const cleanup = (): void => {
         if (cleaned) return;
         cleaned = true;
         if (watchdog) view.clearTimeout(watchdog);
         if (delayedCleanup) view.clearTimeout(delayedCleanup);
+        view.removeEventListener("beforeprint", primePrintLayout);
         view.removeEventListener("afterprint", schedulePostPrintCleanup);
         view.removeEventListener("error", cleanup);
         view.removeEventListener("beforeunload", cleanup);
@@ -2445,6 +2704,9 @@ export class EditorialPdfService {
         delayedCleanup = view.setTimeout(cleanup, POST_PRINT_CLEANUP_DELAY_MS);
       };
       this.activeCleanup = cleanup;
+      view.addEventListener("beforeprint", primePrintLayout, {
+        once: true
+      });
       view.addEventListener("afterprint", schedulePostPrintCleanup, {
         once: true
       });
@@ -2461,12 +2723,17 @@ export class EditorialPdfService {
           () => waitForEditorialPdfAssets(
             ownerDocument,
             root,
-            request.assetTimeoutMs ?? DEFAULT_ASSET_TIMEOUT_MS
+            request.assetTimeoutMs ?? DEFAULT_ASSET_TIMEOUT_MS,
+            style
           )
         );
         await runEditorialPdfStageAsync(
           "페이지 조판",
-          () => waitForEditorialPdfLayout(root, view)
+          () => waitForEditorialPdfLayout(
+            root,
+            view,
+            request.assetTimeoutMs ?? DEFAULT_ASSET_TIMEOUT_MS
+          )
         );
         runEditorialPdfStage("인쇄 호출", () => view.print());
         return {

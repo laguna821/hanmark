@@ -42,6 +42,7 @@ import {
   estimateEditorialPdfTableRowRows,
   estimateEditorialPdfTableRows,
   getEditorialPdfRuntimeSupport,
+  primeEditorialPdfPrintLayout,
   splitEditorialPdfCodeChunks,
   truncateEditorialPdfFallbackLabel,
   truncateEditorialPdfHeader,
@@ -77,6 +78,8 @@ class TestElement implements TestDomNode {
   src = "";
   start = 1;
   removed = false;
+  sheet: { cssRules: unknown[] } | null = null;
+  onMeasure: (() => void) | null = null;
   private ownText = "";
   readonly classList = {
     add: (...tokens: string[]): void => {
@@ -96,7 +99,17 @@ class TestElement implements TestDomNode {
     }
   };
 
-  constructor(readonly tagName: string) {}
+  constructor(readonly tagName: string) {
+    if (tagName === "STYLE") this.sheet = { cssRules: [{}] };
+  }
+
+  get isConnected(): boolean {
+    return this.parent !== null;
+  }
+
+  get parentNode(): TestElement | null {
+    return this.parent;
+  }
 
   get textContent(): string {
     return this.ownText + this.children.map((child) => child.textContent).join("");
@@ -118,6 +131,7 @@ class TestElement implements TestDomNode {
   async decode(): Promise<void> {}
 
   getBoundingClientRect(): DOMRect {
+    this.onMeasure?.();
     return {} as DOMRect;
   }
 
@@ -200,20 +214,56 @@ interface PrintHarness {
   readonly head: TestElement;
   readonly body: TestElement;
   readonly view: Window;
+  readonly eventOrder: string[];
+  readonly fontLoadQueries: string[];
+  readonly fontLoadTexts: string[];
+  readonly dispatchEvent: (type: string) => void;
+  readonly listenerCount: (type: string) => number;
   readonly printCalls: () => number;
 }
 
-function createPrintHarness(fontsReady: Promise<unknown> = Promise.resolve()): PrintHarness {
+interface PrintHarnessOptions {
+  fontsReady?: Promise<unknown>;
+  fontReadyAfterAttempts?: number;
+  stylesheetReadyAfterFrames?: number;
+  throwOnComputedStyle?: boolean;
+}
+
+function createPrintHarness(options: PrintHarnessOptions = {}): PrintHarness {
   const head = new TestElement("HEAD");
   const body = new TestElement("BODY");
+  const eventOrder: string[] = [];
+  const fontLoadQueries: string[] = [];
+  const fontLoadTexts: string[] = [];
   let printCalls = 0;
   let nextTimer = 1;
+  let animationFrames = 0;
+  const fontAttempts = new Map<string, number>();
+  const createdStyles: TestElement[] = [];
   const listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  const onceListeners = new Map<
+    string,
+    Set<EventListenerOrEventListenerObject>
+  >();
+  const dispatchEvent = (type: string): void => {
+    const registered = Array.from(listeners.get(type) ?? []);
+    for (const listener of registered) {
+      if (typeof listener === "function") {
+        listener(new Event(type));
+      } else {
+        listener.handleEvent(new Event(type));
+      }
+      if (onceListeners.get(type)?.has(listener)) {
+        listeners.get(type)?.delete(listener);
+        onceListeners.get(type)?.delete(listener);
+      }
+    }
+  };
   const documentLike: {
     body: TestElement;
     defaultView?: Window;
     fonts: {
-      load: () => Promise<unknown>;
+      load: (font: string, text?: string) => Promise<unknown>;
       ready: Promise<unknown>;
     };
     head: TestElement;
@@ -224,12 +274,32 @@ function createPrintHarness(fontsReady: Promise<unknown> = Promise.resolve()): P
   } = {
     body,
     fonts: {
-      load: async () => undefined,
-      ready: fontsReady
+      load: async (font: string, text = "") => {
+        eventOrder.push(`font-load:${font}`);
+        fontLoadQueries.push(font);
+        fontLoadTexts.push(text);
+        const attempts = (fontAttempts.get(font) ?? 0) + 1;
+        fontAttempts.set(font, attempts);
+        return attempts > (options.fontReadyAfterAttempts ?? 0)
+          ? [{ family: "HanMark Pretendard" }]
+          : [];
+      },
+      ready: options.fontsReady ?? Promise.resolve()
     },
     head,
-    createElementNS: (_namespace: string, tag: string) =>
-      new TestElement(tag.toUpperCase()),
+    createElementNS: (_namespace: string, tag: string) => {
+      const element = new TestElement(tag.toUpperCase());
+      if (element.tagName === "STYLE") {
+        createdStyles.push(element);
+        if ((options.stylesheetReadyAfterFrames ?? 0) > 0) {
+          element.sheet = null;
+        }
+      }
+      element.onMeasure = () => {
+        eventOrder.push(`geometry:${element.className || element.tagName}`);
+      };
+      return element;
+    },
     createTextNode: (value: string) => new TestTextNode(value),
     querySelector: (selector: string) =>
       documentLike.querySelectorAll(selector)[0] ?? null,
@@ -250,16 +320,45 @@ function createPrintHarness(fontsReady: Promise<unknown> = Promise.resolve()): P
   const viewLike = {
     addEventListener: (
       type: string,
-      listener: EventListenerOrEventListenerObject
+      listener: EventListenerOrEventListenerObject,
+      eventOptions?: boolean | AddEventListenerOptions
     ): void => {
       const registered = listeners.get(type) ?? new Set();
       registered.add(listener);
       listeners.set(type, registered);
+      if (
+        typeof eventOptions === "object" &&
+        eventOptions !== null &&
+        eventOptions.once
+      ) {
+        const once = onceListeners.get(type) ?? new Set();
+        once.add(listener);
+        onceListeners.set(type, once);
+      }
     },
     clearTimeout: (_timer: number): void => {},
     document: documentLike,
     navigator: { userAgent: "Chrome/150.0.0.0" },
+    getComputedStyle: (element: Element): CSSStyleDeclaration => {
+      if (options.throwOnComputedStyle) {
+        throw new Error("transient print-media style failure");
+      }
+      eventOrder.push(
+        `computed:${(element as unknown as TestElement).className}`
+      );
+      return {
+        backgroundColor: "rgb(255, 255, 255)",
+        display: "block",
+        fontFamily: "HanMark Pretendard",
+        fontWeight: "400",
+        getPropertyValue: (property: string) =>
+          property === "page" ? "hanmark-body" : ""
+      } as unknown as CSSStyleDeclaration;
+    },
     print: (): void => {
+      eventOrder.push("print-call");
+      dispatchEvent("beforeprint");
+      eventOrder.push("print-snapshot");
       printCalls += 1;
     },
     removeEventListener: (
@@ -269,8 +368,21 @@ function createPrintHarness(fontsReady: Promise<unknown> = Promise.resolve()): P
       listeners.get(type)?.delete(listener);
     },
     requestAnimationFrame: (callback: FrameRequestCallback): number => {
-      queueMicrotask(() => callback(0));
-      return 1;
+      animationFrames += 1;
+      const frame = animationFrames;
+      queueMicrotask(() => {
+        if (
+          frame >= (options.stylesheetReadyAfterFrames ?? 0) &&
+          createdStyles.some((style) => style.sheet === null)
+        ) {
+          for (const style of createdStyles) {
+            if (style.sheet === null) style.sheet = { cssRules: [{}] };
+          }
+          eventOrder.push("stylesheet-ready");
+        }
+        callback(0);
+      });
+      return frame;
     },
     setTimeout: (
       _callback: TimerHandler,
@@ -280,8 +392,13 @@ function createPrintHarness(fontsReady: Promise<unknown> = Promise.resolve()): P
   documentLike.defaultView = viewLike;
   return {
     body,
+    dispatchEvent,
     document: documentLike as unknown as Document,
+    eventOrder,
+    fontLoadQueries,
+    fontLoadTexts,
     head,
+    listenerCount: (type: string) => listeners.get(type)?.size ?? 0,
     printCalls: () => printCalls,
     view: viewLike
   };
@@ -473,6 +590,16 @@ describe("Achmage Editorial PDF helpers", () => {
       css,
       /\.hanmark-editorial-pdf-root \{[\s\S]*?display: block;[\s\S]*?visibility: hidden;/u
     );
+    const hiddenRootCss = css.slice(
+      css.indexOf(".hanmark-editorial-pdf-root"),
+      css.indexOf("@media print")
+    );
+    assert.match(
+      hiddenRootCss,
+      /font-family: "HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif;/u
+    );
+    assert.match(hiddenRootCss, /font-size: 9pt;/u);
+    assert.match(hiddenRootCss, /line-height: 1\.55;/u);
     assert.match(
       css,
       /@media print \{[\s\S]*?html \{[\s\S]*?height: auto;[\s\S]*?overflow: visible;/u
@@ -1978,10 +2105,15 @@ describe("Achmage Editorial PDF helpers", () => {
 
   it("waits for fonts and every image decode before printing can continue", async () => {
     const order: string[] = [];
+    const fontTexts: string[] = [];
+    const harness = createPrintHarness();
     const ownerDocument = {
+      defaultView: harness.view,
       fonts: {
-        load: async () => {
-          order.push("font-load");
+        load: async (font: string, text = "") => {
+          order.push(`font-load:${font}`);
+          fontTexts.push(text);
+          return [{}];
         },
         ready: Promise.resolve().then(() => {
           order.push("fonts");
@@ -2001,12 +2133,26 @@ describe("Achmage Editorial PDF helpers", () => {
     } as unknown as HTMLElement;
 
     await waitForEditorialPdfAssets(ownerDocument, root);
-    assert.deepEqual(order, ["font-load", "fonts", "image"]);
+    assert.deepEqual(order, [
+      'font-load:400 10pt "HanMark Pretendard"',
+      'font-load:600 10pt "HanMark Pretendard"',
+      "fonts",
+      'font-load:400 10pt "HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif',
+      'font-load:600 10pt "HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif',
+      "image"
+    ]);
+    assert.equal(fontTexts.length, 4);
+    assert.ok(fontTexts.every((text) => text.includes("한글")));
   });
 
   it("fails closed when an included image cannot decode", async () => {
+    const harness = createPrintHarness();
     const ownerDocument = {
-      fonts: { ready: Promise.resolve() }
+      defaultView: harness.view,
+      fonts: {
+        load: async () => [{}],
+        ready: Promise.resolve()
+      }
     } as unknown as Document;
     const image = {
       alt: "깨진 사진",
@@ -2030,11 +2176,13 @@ describe("Achmage Editorial PDF helpers", () => {
     const order: string[] = [];
     const callbacks: FrameRequestCallback[] = [];
     const view = {
+      clearTimeout: (_timer: number) => {},
       requestAnimationFrame: (callback: FrameRequestCallback) => {
         order.push("frame-request");
         callbacks.push(callback);
         return callbacks.length;
-      }
+      },
+      setTimeout: (_callback: TimerHandler, _timeout?: number) => 1
     } as unknown as Window;
     const root = {
       getBoundingClientRect: () => {
@@ -2045,6 +2193,7 @@ describe("Achmage Editorial PDF helpers", () => {
 
     const settled = waitForEditorialPdfLayout(root, view);
     callbacks.shift()?.(0);
+    await Promise.resolve();
     callbacks.shift()?.(16);
     await settled;
 
@@ -2053,6 +2202,179 @@ describe("Achmage Editorial PDF helpers", () => {
       "frame-request",
       "layout"
     ]);
+  });
+
+  it("synchronously primes print-media styles and geometry for root, cover, and body", () => {
+    const harness = createPrintHarness();
+    const root = buildEditorialPdfRoot(
+      harness.document,
+      {
+        title: "Cold start",
+        masthead: [],
+        blocks: [{
+          type: "paragraph",
+          inlines: [{ type: "text", value: "First print body" }]
+        }]
+      },
+      "Cold start"
+    );
+    harness.body.appendChild(root as unknown as TestElement);
+
+    primeEditorialPdfPrintLayout(root, harness.view);
+
+    assert.equal(
+      harness.eventOrder.filter((entry) => entry.startsWith("computed:")).length,
+      3
+    );
+    assert.equal(
+      harness.eventOrder.filter((entry) => entry.startsWith("geometry:")).length,
+      3
+    );
+  });
+
+  it("waits through a cold stylesheet and empty font probes before the first print snapshot", async () => {
+    const harness = createPrintHarness({
+      fontReadyAfterAttempts: 1,
+      stylesheetReadyAfterFrames: 1
+    });
+    const service = new EditorialPdfService();
+
+    await service.print({
+      markdown: "# First cold export\n\nThe first PDF must be complete.",
+      fileName: "first-cold-export.md",
+      window: harness.view,
+      document: harness.document,
+      chromiumMajor: 150
+    });
+
+    assert.equal(harness.printCalls(), 1);
+    assert.deepEqual(harness.fontLoadQueries, [
+      '400 10pt "HanMark Pretendard"',
+      '600 10pt "HanMark Pretendard"',
+      '400 10pt "HanMark Pretendard"',
+      '600 10pt "HanMark Pretendard"',
+      '400 10pt "HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif',
+      '600 10pt "HanMark Pretendard", "Pretendard", "Apple SD Gothic Neo", sans-serif'
+    ]);
+    assert.ok(harness.fontLoadTexts.every((text) => text.includes("한글")));
+    const stylesheetReady = harness.eventOrder.indexOf("stylesheet-ready");
+    const firstFont = harness.eventOrder.findIndex((entry) =>
+      entry.startsWith("font-load:")
+    );
+    const hiddenLayout = harness.eventOrder.findIndex((entry) =>
+      entry.startsWith("computed:")
+    );
+    const printCall = harness.eventOrder.indexOf("print-call");
+    const firstPrintComputed = harness.eventOrder.findIndex(
+      (entry, index) => index > printCall && entry.startsWith("computed:")
+    );
+    const firstPrintGeometry = harness.eventOrder.findIndex(
+      (entry, index) => index > printCall && entry.startsWith("geometry:")
+    );
+    const snapshot = harness.eventOrder.indexOf("print-snapshot");
+    assert.ok(stylesheetReady >= 0 && stylesheetReady < firstFont);
+    assert.ok(stylesheetReady < hiddenLayout && hiddenLayout < firstFont);
+    assert.ok(firstFont < printCall);
+    assert.ok(printCall < firstPrintComputed && firstPrintComputed < snapshot);
+    assert.ok(printCall < firstPrintGeometry && firstPrintGeometry < snapshot);
+    assert.equal(harness.listenerCount("beforeprint"), 0);
+
+    service.dispose();
+  });
+
+  it("removes the beforeprint primer and mounted artifacts when cold-start preparation fails", async () => {
+    const harness = createPrintHarness({
+      fontsReady: Promise.reject(new Error("font set failed"))
+    });
+    const service = new EditorialPdfService();
+
+    await assert.rejects(
+      service.print({
+        markdown: "# Failed first export",
+        fileName: "failed-first-export.md",
+        window: harness.view,
+        document: harness.document,
+        chromiumMajor: 150
+      }),
+      /Editorial PDF/u
+    );
+
+    assert.equal(harness.printCalls(), 0);
+    assert.equal(harness.listenerCount("beforeprint"), 0);
+    assert.equal(harness.listenerCount("afterprint"), 0);
+    assert.equal(
+      harness.document.querySelector(".hanmark-editorial-pdf-root"),
+      null
+    );
+    assert.equal(
+      harness.document.querySelector(".hanmark-editorial-pdf-style"),
+      null
+    );
+    assert.equal(
+      harness.body.classList.contains("hanmark-editorial-pdf-active"),
+      false
+    );
+  });
+
+  it("keeps beforeprint priming best-effort so a transient style failure cannot empty the first export", async () => {
+    const harness = createPrintHarness({ throwOnComputedStyle: true });
+    const service = new EditorialPdfService();
+
+    await service.print({
+      markdown: "# 첫 PDF\n\n한글 fallback 레이아웃을 유지합니다.",
+      fileName: "첫-pdf.md",
+      window: harness.view,
+      document: harness.document,
+      chromiumMajor: 150
+    });
+
+    assert.equal(harness.printCalls(), 1);
+    assert.ok(
+      harness.eventOrder.indexOf("print-call") <
+        harness.eventOrder.indexOf("print-snapshot")
+    );
+    assert.notEqual(
+      harness.document.querySelector(".hanmark-editorial-pdf-root"),
+      null
+    );
+    assert.equal(harness.listenerCount("beforeprint"), 0);
+
+    service.dispose();
+  });
+
+  it("primes hidden and print-media layout on both exports without leaking beforeprint listeners", async () => {
+    const harness = createPrintHarness();
+    const service = new EditorialPdfService();
+
+    for (const fileName of ["first.md", "second.md"]) {
+      await service.print({
+        markdown: `# ${fileName}\n\nRepeated export body.`,
+        fileName,
+        window: harness.view,
+        document: harness.document,
+        chromiumMajor: 150
+      });
+      assert.equal(harness.listenerCount("beforeprint"), 0);
+    }
+
+    assert.equal(harness.printCalls(), 2);
+    assert.equal(
+      harness.eventOrder.filter((entry) => entry === "print-call").length,
+      2
+    );
+    assert.equal(
+      harness.eventOrder.filter((entry) => entry === "print-snapshot").length,
+      2
+    );
+    assert.equal(
+      harness.eventOrder.filter((entry) => entry.startsWith("computed:")).length,
+      12
+    );
+    assert.equal(harness.fontLoadQueries.length, 8);
+
+    service.dispose();
+    assert.equal(harness.listenerCount("beforeprint"), 0);
+    assert.equal(harness.listenerCount("afterprint"), 0);
   });
 
   it("accepts an 8 MB raster data URI without a recursive regular-expression overflow", async () => {
@@ -2096,7 +2418,7 @@ describe("Achmage Editorial PDF helpers", () => {
     const fontsReady = new Promise<void>((resolve) => {
       releaseFonts = resolve;
     });
-    const harness = createPrintHarness(fontsReady);
+    const harness = createPrintHarness({ fontsReady });
     const service = new EditorialPdfService();
     const first = service.print({
       markdown: "# First export\n\nThe first export must remain mounted.",
@@ -2257,7 +2579,7 @@ describe("Achmage Editorial PDF helpers", () => {
     );
     assert.match(
       source,
-      /await runEditorialPdfStageAsync\([\s\S]*?"페이지 조판",[\s\S]*?\(\) => waitForEditorialPdfLayout\(root, view\)[\s\S]*?\);/u
+      /await runEditorialPdfStageAsync\([\s\S]*?"페이지 조판",[\s\S]*?\(\) => waitForEditorialPdfLayout\([\s\S]*?root,[\s\S]*?view,[\s\S]*?DEFAULT_ASSET_TIMEOUT_MS[\s\S]*?\)[\s\S]*?\);/u
     );
     assert.match(source, /MAX_EDITORIAL_PDF_RENDER_DEPTH = 128/u);
     assert.match(
