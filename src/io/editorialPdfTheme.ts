@@ -16,6 +16,22 @@ export const EDITORIAL_PDF_THEME_LIMITS = Object.freeze({
 
 export type EditorialPdfTitleMode = "file-title" | "custom" | "blank";
 export type EditorialPdfOverrideToken = "onKey" | "keyInk" | "accentLine";
+export type EditorialPdfOnKeyStrategy =
+  | "builtin"
+  | "manual-exact"
+  | "automatic-exact"
+  | "automatic-adjusted"
+  | "automatic-wcag-fallback";
+
+export interface EditorialPdfOnKeyResolution {
+  seed: string;
+  surface: string;
+  foreground: string;
+  ratio: number;
+  aaa: boolean;
+  strategy: EditorialPdfOnKeyStrategy;
+  adjustmentDeltaEOK: number;
+}
 
 export interface EditorialPdfThemeV1 {
   schemaVersion: 1;
@@ -79,6 +95,7 @@ export interface ResolvedEditorialPdfPalette {
   paper: string;
   bodyInk: string;
   keySurface: string;
+  keyTextSurface: string;
   onKey: string;
   keyInk: string;
   keyMutedInk: string;
@@ -104,6 +121,7 @@ export interface EditorialPdfContrastDiagnostic {
 export interface ResolvedEditorialPdfTheme {
   theme: EditorialPdfThemeV1;
   palette: ResolvedEditorialPdfPalette;
+  onKeyResolution: EditorialPdfOnKeyResolution;
   diagnostics: EditorialPdfContrastDiagnostic[];
   warnings: string[];
 }
@@ -149,6 +167,9 @@ const PAPER = "#FFFFFF";
 const BODY_INK = "#182433";
 const NEAR_BLACK = "#182433";
 const BLACK = "#000000";
+const MINIMUM_TEXT_CONTRAST = 4.5;
+const MINIMUM_ADJUSTMENT_ENTRY_CONTRAST = 3;
+const MAXIMUM_TEXT_SURFACE_DELTA_E_OK = 0.02;
 const EMPTY_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 const DEFAULT_CUSTOM_THEME_NAME = "사용자 PDF 테마";
 const LEGACY_BUILTIN_FOOTER_LEFT = "ACHMAGE / HANMARK PDF EDITION";
@@ -189,6 +210,7 @@ const BUILTIN_PALETTE_VALUE: ResolvedEditorialPdfPalette = {
   paper: PAPER,
   bodyInk: BODY_INK,
   keySurface: "#002E6E",
+  keyTextSurface: "#002E6E",
   onKey: "#FFFFFF",
   keyInk: "#002E6E",
   keyMutedInk: "#31537D",
@@ -845,21 +867,122 @@ function automaticOnKey(keySurface: string): string {
   if (aaa) return aaa;
   const aaCandidates = candidates
     .map((candidate) => ({ candidate, ratio: contrastRatio(candidate, keySurface) }))
-    .filter(({ ratio }) => ratio >= 4.5)
+    .filter(({ ratio }) => ratio >= MINIMUM_TEXT_CONTRAST)
     .sort((left, right) => right.ratio - left.ratio);
   if (aaCandidates[0]) return aaCandidates[0].candidate;
   throw new Error("PDF 키 컬러의 안전한 글자색을 계산하지 못했습니다.");
 }
 
+function oklabCoordinates(value: string): [number, number, number] {
+  const color = rgbToOklch(parseHex(value));
+  const radians = color.hue * Math.PI / 180;
+  return [
+    color.lightness,
+    color.chroma * Math.cos(radians),
+    color.chroma * Math.sin(radians)
+  ];
+}
+
+function deltaEOK(left: string, right: string): number {
+  const leftLab = oklabCoordinates(left);
+  const rightLab = oklabCoordinates(right);
+  return Math.hypot(
+    leftLab[0] - rightLab[0],
+    leftLab[1] - rightLab[1],
+    leftLab[2] - rightLab[2]
+  );
+}
+
+function whiteTextSurfaceAdjustment(
+  seed: string
+): { surface: string; adjustmentDeltaEOK: number } | null {
+  const source = rgbToOklch(parseHex(seed));
+  let safeLightness = 0;
+  let unsafeLightness = source.lightness;
+
+  for (let index = 0; index < 36; index += 1) {
+    const lightness = (safeLightness + unsafeLightness) / 2;
+    const candidate = oklchToHex({ ...source, lightness });
+    if (contrastRatio(PAPER, candidate) >= MINIMUM_TEXT_CONTRAST) {
+      safeLightness = lightness;
+    } else {
+      unsafeLightness = lightness;
+    }
+  }
+
+  let surface = oklchToHex({ ...source, lightness: safeLightness });
+  for (
+    let index = 0;
+    index < 100 && contrastRatio(PAPER, surface) < MINIMUM_TEXT_CONTRAST;
+    index += 1
+  ) {
+    safeLightness = Math.max(0, safeLightness - 0.0005);
+    surface = oklchToHex({ ...source, lightness: safeLightness });
+  }
+
+  if (contrastRatio(PAPER, surface) < MINIMUM_TEXT_CONTRAST) return null;
+  const adjustmentDeltaEOK = deltaEOK(seed, surface);
+  return adjustmentDeltaEOK <= MAXIMUM_TEXT_SURFACE_DELTA_E_OK
+    ? { surface, adjustmentDeltaEOK }
+    : null;
+}
+
 /** Fast production selector used by the full 24-bit release verification. */
 export function resolveEditorialPdfOnKey(
   keyValue: unknown
-): { color: string; ratio: number; aaa: boolean } {
+): EditorialPdfOnKeyResolution {
   const key = canonicalEditorialPdfHex(keyValue);
   if (!key) throw new Error("PDF 키 컬러는 #RRGGBB여야 합니다.");
-  const color = automaticOnKey(key);
-  const ratio = contrastRatio(color, key);
-  return { color, ratio, aaa: ratio >= 7 };
+  const exactForeground = automaticOnKey(key);
+  const exactRatio = contrastRatio(exactForeground, key);
+  const exactEdgeSignal = Math.abs(
+    relativeLuminance(exactForeground) - relativeLuminance(key)
+  );
+  const whiteRatio = contrastRatio(PAPER, key);
+  const whiteEdgeSignal = Math.abs(relativeLuminance(PAPER) - relativeLuminance(key));
+  const perceptualWhiteCandidate =
+    whiteRatio >= MINIMUM_ADJUSTMENT_ENTRY_CONTRAST
+    && whiteEdgeSignal > exactEdgeSignal;
+
+  if (perceptualWhiteCandidate && whiteRatio >= MINIMUM_TEXT_CONTRAST) {
+    return {
+      seed: key,
+      surface: key,
+      foreground: PAPER,
+      ratio: whiteRatio,
+      aaa: whiteRatio >= 7,
+      strategy: "automatic-exact",
+      adjustmentDeltaEOK: 0
+    };
+  }
+
+  if (perceptualWhiteCandidate) {
+    const adjusted = whiteTextSurfaceAdjustment(key);
+    if (adjusted) {
+      const ratio = contrastRatio(PAPER, adjusted.surface);
+      return {
+        seed: key,
+        surface: adjusted.surface,
+        foreground: PAPER,
+        ratio,
+        aaa: ratio >= 7,
+        strategy: "automatic-adjusted",
+        adjustmentDeltaEOK: adjusted.adjustmentDeltaEOK
+      };
+    }
+  }
+
+  return {
+    seed: key,
+    surface: key,
+    foreground: exactForeground,
+    ratio: exactRatio,
+    aaa: exactRatio >= 7,
+    strategy: perceptualWhiteCandidate
+      ? "automatic-wcag-fallback"
+      : "automatic-exact",
+    adjustmentDeltaEOK: 0
+  };
 }
 
 function diagnostic(
@@ -911,13 +1034,44 @@ export function editorialPdfContrastStatus(
   const failing = resolved.diagnostics.filter(
     (value) => value.enforced && !value.passes
   );
-  if (failing.length) {
-    return `대비 경고 ${failing.length}개 · ${failing.map(editorialPdfContrastDiagnosticText).join(" / ")}`;
+  const resolution = resolved.onKeyResolution;
+  const ratio = `${formatEditorialPdfContrastRatio(resolution.ratio)}:1`;
+  const foreground = resolution.foreground === PAPER
+    ? "흰 글자"
+    : resolution.foreground === BLACK
+      ? "검정 글자"
+      : resolution.foreground === NEAR_BLACK
+        ? "어두운 글자"
+        : `${resolution.foreground} 글자`;
+  let status: string;
+  switch (resolution.strategy) {
+    case "builtin":
+      status = `HanMark 2.5.5 기본 출력 보존 · ${ratio}`;
+      break;
+    case "manual-exact":
+      status =
+        `직접 지정 · 원 키 컬러 사용 · ${ratio} · `
+        + (resolution.ratio >= MINIMUM_TEXT_CONTRAST
+          ? "일반 글자 기준 통과"
+          : resolution.ratio >= 3
+            ? "큰 글자 기준만 통과"
+            : "글자 대비 기준 미달");
+      break;
+    case "automatic-adjusted":
+      status =
+        `자동 가독성 보정 · ${foreground} · ${resolution.seed} → `
+        + `${resolution.surface} · ${ratio}`;
+      break;
+    case "automatic-wcag-fallback":
+      status =
+        `WCAG 일반 글자 기준 우선 · ${foreground} · `
+        + `키 컬러 그대로 · ${ratio}`;
+      break;
+    case "automatic-exact":
+      status = `자동 추천 · ${foreground} · 키 컬러 그대로 · ${ratio}`;
+      break;
   }
-  const onKey = resolved.diagnostics.find((value) => value.token === "onKey");
-  return onKey
-    ? editorialPdfContrastDiagnosticText(onKey)
-    : "설정된 대비 기준 통과";
+  return failing.length ? `${status} · 대비 경고 ${failing.length}개` : status;
 }
 
 function warningForDiagnostic(value: EditorialPdfContrastDiagnostic): string {
@@ -954,7 +1108,7 @@ function assertAutomaticPaletteInvariants(
 ): void {
   const checks = [
     theme.colors.overrides.onKey === null
-      ? contrastRatio(palette.onKey, palette.keySurface) >= 4.5
+      ? contrastRatio(palette.onKey, palette.keyTextSurface) >= MINIMUM_TEXT_CONTRAST
       : true,
     theme.colors.overrides.keyInk === null
       ? contrastRatio(palette.keyInk, palette.paper) >= 7
@@ -962,7 +1116,7 @@ function assertAutomaticPaletteInvariants(
     theme.colors.overrides.accentLine === null
       ? contrastRatio(palette.accentLine, palette.paper) >= 3
       : true,
-    contrastRatio(palette.accentOnKey, palette.keySurface) >= 4.5,
+    contrastRatio(palette.accentOnKey, palette.keyTextSurface) >= MINIMUM_TEXT_CONTRAST,
     contrastRatio(palette.keyMutedInk, palette.paper) >= 4.5,
     contrastRatio(palette.bodyInk, palette.softTint) >= 7,
     contrastRatio(palette.border, palette.paper) >= 3,
@@ -984,24 +1138,54 @@ export function resolveEditorialPdfTheme(
   const theme = builtIn
     ? cloneTheme(BUILTIN_EDITORIAL_PDF_THEME)
     : normalizeEditorialPdfTheme(value);
+  const keySurface = theme.colors.key;
+  const onKeyResolution: EditorialPdfOnKeyResolution = builtIn
+    ? {
+        seed: BUILTIN_EDITORIAL_PDF_PALETTE.keySurface,
+        surface: BUILTIN_EDITORIAL_PDF_PALETTE.keyTextSurface,
+        foreground: BUILTIN_EDITORIAL_PDF_PALETTE.onKey,
+        ratio: contrastRatio(
+          BUILTIN_EDITORIAL_PDF_PALETTE.onKey,
+          BUILTIN_EDITORIAL_PDF_PALETTE.keyTextSurface
+        ),
+        aaa: true,
+        strategy: "builtin",
+        adjustmentDeltaEOK: 0
+      }
+    : theme.colors.overrides.onKey === null
+      ? resolveEditorialPdfOnKey(keySurface)
+      : (() => {
+          const foreground = theme.colors.overrides.onKey;
+          const ratio = contrastRatio(foreground, keySurface);
+          return {
+            seed: keySurface,
+            surface: keySurface,
+            foreground,
+            ratio,
+            aaa: ratio >= 7,
+            strategy: "manual-exact" as const,
+            adjustmentDeltaEOK: 0
+          };
+        })();
   const palette: ResolvedEditorialPdfPalette = builtIn
     ? { ...BUILTIN_EDITORIAL_PDF_PALETTE }
     : (() => {
-        const keySurface = theme.colors.key;
         const automaticKeyInk = darkenSeedForPaperContrast(keySurface, 7);
         const automaticAccentLine = darkenSeedForPaperContrast(keySurface, 3);
-        const onKey = theme.colors.overrides.onKey ?? automaticOnKey(keySurface);
+        const keyTextSurface = onKeyResolution.surface;
+        const onKey = onKeyResolution.foreground;
         const keyInk = theme.colors.overrides.keyInk ?? automaticKeyInk;
         const accentLine = theme.colors.overrides.accentLine ?? automaticAccentLine;
         return {
           paper: PAPER,
           bodyInk: BODY_INK,
           keySurface,
+          keyTextSurface,
           onKey,
           keyInk,
           keyMutedInk: darkenSeedForPaperContrast(keySurface, 4.5),
           accentLine,
-          accentOnKey: automaticOnKey(keySurface),
+          accentOnKey: automaticOnKey(keyTextSurface),
           softTint: lightTint(keySurface),
           border: "#87919C",
           alternate: "#FAFAFA"
@@ -1013,7 +1197,7 @@ export function resolveEditorialPdfTheme(
     diagnostic(
       "onKey",
       palette.onKey,
-      palette.keySurface,
+      palette.keyTextSurface,
       4.5,
       theme.colors.overrides.onKey !== null
     ),
@@ -1036,7 +1220,7 @@ export function resolveEditorialPdfTheme(
   const warnings = diagnostics
     .filter((item) => item.enforced && !item.passes)
     .map(warningForDiagnostic);
-  return { theme, palette, diagnostics, warnings };
+  return { theme, palette, onKeyResolution, diagnostics, warnings };
 }
 
 export function resolveEditorialPdfThemeSnapshot(

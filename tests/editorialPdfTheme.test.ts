@@ -70,6 +70,7 @@ describe("Editorial PDF theme normalization", () => {
       paper: "#FFFFFF",
       bodyInk: "#182433",
       keySurface: "#002E6E",
+      keyTextSurface: "#002E6E",
       onKey: "#FFFFFF",
       keyInk: "#002E6E",
       keyMutedInk: "#31537D",
@@ -92,6 +93,15 @@ describe("Editorial PDF theme normalization", () => {
       "ACHMAGE / HANMARK PDF EDITION"
     );
     assert.deepEqual(resolved.palette, BUILTIN_EDITORIAL_PDF_PALETTE);
+    assert.deepEqual(resolved.onKeyResolution, {
+      seed: "#002E6E",
+      surface: "#002E6E",
+      foreground: "#FFFFFF",
+      ratio: contrastRatio("#FFFFFF", "#002E6E"),
+      aaa: true,
+      strategy: "builtin",
+      adjustmentDeltaEOK: 0
+    });
     assert.deepEqual(resolved.warnings, []);
   });
 
@@ -296,11 +306,28 @@ describe("Editorial PDF color resolution", () => {
       });
       const resolved = resolveEditorialPdfTheme(theme);
       assert.equal(resolved.palette.keySurface, key);
-      assert.ok(contrastRatio(resolved.palette.onKey, key) >= 4.5, key);
+      assert.equal(resolved.onKeyResolution.seed, key);
+      assert.equal(resolved.onKeyResolution.surface, resolved.palette.keyTextSurface);
+      assert.equal(resolved.onKeyResolution.foreground, resolved.palette.onKey);
+      assert.ok(
+        contrastRatio(resolved.palette.onKey, resolved.palette.keyTextSurface) >= 4.5,
+        key
+      );
       assert.ok(contrastRatio(resolved.palette.keyInk, "#FFFFFF") >= 7, key);
       assert.ok(contrastRatio(resolved.palette.keyMutedInk, "#FFFFFF") >= 4.5, key);
       assert.ok(contrastRatio(resolved.palette.accentLine, "#FFFFFF") >= 3, key);
-      assert.ok(contrastRatio(resolved.palette.accentOnKey, key) >= 4.5, key);
+      assert.ok(
+        contrastRatio(
+          resolved.palette.accentOnKey,
+          resolved.palette.keyTextSurface
+        ) >= 4.5,
+        key
+      );
+      if (resolved.onKeyResolution.strategy === "automatic-adjusted") {
+        assert.ok(resolved.onKeyResolution.adjustmentDeltaEOK <= 0.02, key);
+      } else {
+        assert.equal(resolved.onKeyResolution.adjustmentDeltaEOK, 0, key);
+      }
       assert.ok(contrastRatio(resolved.palette.bodyInk, resolved.palette.softTint) >= 7, key);
       assert.ok(contrastRatio(resolved.palette.border, "#FFFFFF") >= 3, key);
       assert.deepEqual(resolved.warnings, []);
@@ -312,17 +339,29 @@ describe("Editorial PDF color resolution", () => {
 
   test("the fast on-key selector uses production logic for the exhaustive gate", () => {
     assert.deepEqual(resolveEditorialPdfOnKey("#002E6E"), {
-      color: "#FFFFFF",
+      seed: "#002E6E",
+      surface: "#002E6E",
+      foreground: "#FFFFFF",
       ratio: contrastRatio("#FFFFFF", "#002E6E"),
-      aaa: true
+      aaa: true,
+      strategy: "automatic-exact",
+      adjustmentDeltaEOK: 0
     });
     const gray = resolveEditorialPdfOnKey("#808080");
-    assert.equal(gray.color, "#000000");
+    assert.equal(gray.surface, "#808080");
+    assert.equal(gray.foreground, "#000000");
     assert.ok(gray.ratio >= 4.5);
     assert.equal(gray.aaa, false);
+    assert.equal(gray.strategy, "automatic-wcag-fallback");
+
+    const red = resolveEditorialPdfOnKey("#FF0000");
+    assert.equal(red.surface, "#FF0000");
+    assert.equal(red.foreground, "#000000");
+    assert.equal(red.strategy, "automatic-wcag-fallback");
+    assert.equal(red.adjustmentDeltaEOK, 0);
   });
 
-  test("explains the exact magenta boundary without overriding user perception", () => {
+  test("adjusts the magenta text surface while preserving manual exact choices", () => {
     const key = "#D709D1";
     assert.ok(
       Math.abs(contrastRatio("#000000", key) - 4.8491793166814405) < 1e-12
@@ -334,9 +373,13 @@ describe("Editorial PDF color resolution", () => {
       Math.abs(contrastRatio("#182433", key) - 3.6215152723032853) < 1e-12
     );
     assert.deepEqual(resolveEditorialPdfOnKey(key), {
-      color: "#000000",
-      ratio: contrastRatio("#000000", key),
-      aaa: false
+      seed: key,
+      surface: "#D300CE",
+      foreground: "#FFFFFF",
+      ratio: contrastRatio("#FFFFFF", "#D300CE"),
+      aaa: false,
+      strategy: "automatic-adjusted",
+      adjustmentDeltaEOK: 0.009777235830615334
     });
 
     const automatic = resolveEditorialPdfTheme({
@@ -349,14 +392,14 @@ describe("Editorial PDF color resolution", () => {
       ({ token }) => token === "onKey"
     );
     assert.ok(automaticOnKey);
-    assert.equal(
-      editorialPdfContrastGuidance(automaticOnKey),
-      "일반 글자 최소 기준 통과 · 높은 대비는 아님"
-    );
-    assert.equal(formatEditorialPdfContrastRatio(automaticOnKey.ratio), "4.849");
+    assert.equal(automatic.palette.keySurface, key);
+    assert.equal(automatic.palette.keyTextSurface, "#D300CE");
+    assert.equal(automatic.palette.onKey, "#FFFFFF");
+    assert.equal(automaticOnKey.background, "#D300CE");
+    assert.equal(formatEditorialPdfContrastRatio(automaticOnKey.ratio), "4.505");
     assert.equal(
       editorialPdfContrastStatus(automatic),
-      "키 배경 위 글자 4.849:1 · 일반 글자 최소 기준 통과 · 높은 대비는 아님 · 자동"
+      "자동 가독성 보정 · 흰 글자 · #D709D1 → #D300CE · 4.505:1"
     );
 
     const manual = resolveEditorialPdfTheme({
@@ -367,6 +410,9 @@ describe("Editorial PDF color resolution", () => {
     });
     const manualOnKey = manual.diagnostics.find(({ token }) => token === "onKey");
     assert.ok(manualOnKey);
+    assert.equal(manual.palette.keySurface, key);
+    assert.equal(manual.palette.keyTextSurface, key);
+    assert.equal(manual.onKeyResolution.strategy, "manual-exact");
     assert.equal(manualOnKey.passes, false);
     assert.equal(
       editorialPdfContrastGuidance(manualOnKey),
@@ -377,6 +423,20 @@ describe("Editorial PDF color resolution", () => {
     assert.match(manual.warnings[0] ?? "", /일반 글자 4\.5:1 미달/u);
     assert.match(editorialPdfContrastStatus(manual), /대비 경고 1개/u);
     assert.match(editorialPdfContrastStatus(manual), /4\.330:1/u);
+
+    const manualBlack = resolveEditorialPdfTheme({
+      colors: {
+        key,
+        overrides: { onKey: "#000000", keyInk: null, accentLine: null }
+      }
+    });
+    assert.equal(manualBlack.palette.keyTextSurface, key);
+    assert.equal(manualBlack.onKeyResolution.ratio, contrastRatio("#000000", key));
+    assert.deepEqual(manualBlack.warnings, []);
+    assert.equal(
+      editorialPdfContrastStatus(manualBlack),
+      "직접 지정 · 원 키 컬러 사용 · 4.849:1 · 일반 글자 기준 통과"
+    );
   });
 
   test("never rounds a failing boundary ratio into a passing display value", () => {
@@ -424,6 +484,20 @@ describe("Editorial PDF color resolution", () => {
       ]
     );
   });
+
+  test("resolves identical inputs deterministically without mutating the seed", () => {
+    const input = {
+      colors: {
+        key: "#D709D1",
+        overrides: { onKey: null, keyInk: null, accentLine: null }
+      }
+    };
+    const first = resolveEditorialPdfTheme(input);
+    const second = resolveEditorialPdfTheme(input);
+    assert.deepEqual(second, first);
+    assert.equal(input.colors.key, "#D709D1");
+    assert.equal(first.theme.colors.key, "#D709D1");
+  });
 });
 
 describe("Editorial PDF theme JSON exchange", () => {
@@ -438,6 +512,7 @@ describe("Editorial PDF theme JSON exchange", () => {
     });
     const json = stringifyEditorialPdfThemeExchange("공유 테마", sourceTheme);
     assert.doesNotMatch(json, /createdAt|updatedAt|activeId|custom:/u);
+    assert.doesNotMatch(json, /keyTextSurface|onKeyResolution|adjustmentDeltaEOK/u);
     const imported = parseEditorialPdfThemeExchange(json);
     assert.equal(imported.name, "공유 테마");
     assert.deepEqual(imported.theme, sourceTheme);
