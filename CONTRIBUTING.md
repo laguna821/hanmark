@@ -2,6 +2,10 @@
 
 HanMark keeps each published line as a historical branch. Do not rewrite, force-push, delete, merge into, or rebase `main`, any published version branch (`1.2.0`, `2.4.2` through `2.5.5`), or any published tag history. Start maintenance work from the latest published commit on a branch named exactly for the next version.
 
+## Research gate
+
+Before planning or implementing a change, read the [Research Register](docs/research/RESEARCH_REGISTER.md) and every applicable R document. Cite the consulted R IDs in the implementation plan and change description. If a materially new question, assumption, source, compatibility constraint, or risk appears, create the next R document from [R-TEMPLATE](docs/research/R-TEMPLATE.md) and update the Register in the same change. Do not mark work complete while an applicable REQUIRED research gate is unmet.
+
 ## Development checklist
 
 1. Install with `npm ci --omit=optional`. OCR/ML and native Kordoc extras are deliberately outside the plugin runtime.
@@ -22,6 +26,10 @@ Release tags are published by GitHub Actions. The tag must match `manifest.json`
 # HanMark 기여 안내
 
 HanMark는 공개 버전별 브랜치를 개발 기록으로 보존합니다. `main`, 모든 공개 버전 브랜치(`1.2.0`, `2.4.2`부터 `2.5.5`까지)와 기존 태그를 리베이스·강제 푸시·삭제·덮어쓰기하지 않습니다. 다음 버전 번호와 정확히 같은 새 브랜치에서 작업합니다.
+
+## 조사 참조 게이트
+
+변경을 계획하거나 구현하기 전에 [Research Register](docs/research/RESEARCH_REGISTER.md)와 적용되는 모든 R 문서를 읽습니다. 구현 계획과 변경 설명에 참조한 R 번호를 적습니다. 실질적으로 새로운 질문, 가정, 출처, 호환성 제약, 위험이 생기면 [R-TEMPLATE](docs/research/R-TEMPLATE.md)로 다음 번호의 R 문서를 만들고 같은 변경에서 Register를 갱신합니다. 적용되는 REQUIRED 조사 게이트를 충족하지 않은 작업은 완료로 표시하지 않습니다.
 
 ## 개발 확인 항목
 
