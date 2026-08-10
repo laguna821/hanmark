@@ -8,6 +8,7 @@
     "dev": "npm run gen-assets && node esbuild.config.mjs",
     "build": "npm run gen-assets && tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
     "test": "node scripts/run-tests.mjs",
+    "test:pdf-palette-exhaustive": "node --import tsx scripts/check-pdf-palette-exhaustive.ts",
     "lint": "eslint src package.json manifest.json --max-warnings 0",
     "check-bundle": "node scripts/check-bundle.mjs",
     "check-community": "node scripts/check-community.mjs",

@@ -9,13 +9,13 @@ import {
   normalizeImportedImageFolder
 } from "../src/legacy-port/settings";
 
-test("settings migrate to version 8 with safe HTML and imported-image defaults", () => {
+test("settings migrate to version 9 with safe export defaults", () => {
   const settings = normalizeHanmarkSettings({
     settingsVersion: 5,
     unrelatedFutureSetting: "preserved"
   });
 
-  assert.equal(settings.settingsVersion, 8);
+  assert.equal(settings.settingsVersion, 9);
   assert.equal(settings.htmlExportTheme, "achmage-editorial");
   assert.equal(settings.importedImageDestination, "vault");
   assert.equal(settings.importedImageFolder, "");

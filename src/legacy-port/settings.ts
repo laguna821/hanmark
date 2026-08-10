@@ -1,4 +1,9 @@
 import type { HanmarkTemplateLibrary } from "../io/templateLibrary";
+import {
+  emptyEditorialPdfThemeLibrary,
+  normalizeEditorialPdfThemeLibrary,
+  type EditorialPdfThemeLibraryV1
+} from "../io/editorialPdfTheme";
 
 export type DocxPreviewMode = "fast-docx" | "word-pdf";
 export type HtmlExportTheme = "achmage-editorial" | "classic";
@@ -97,7 +102,7 @@ export interface CustomFontEntry {
  * small prevents the retired Python and one-slot HWPX settings from returning.
  */
 export interface HanmarkSettings extends Record<string, unknown> {
-  settingsVersion: 8;
+  settingsVersion: 9;
   pandocPath: string;
   toolbarPosition: ToolbarPosition;
   showToolbarOnStartup: boolean;
@@ -121,10 +126,12 @@ export interface HanmarkSettings extends Record<string, unknown> {
   toolbarSkin: ToolbarSkin;
   /** Kordoc HWPX templates remain owned by src/io/templateLibrary.ts. */
   hanmarkTemplateLibrary?: HanmarkTemplateLibrary;
+  /** Named Editorial PDF themes are Vault-local and contain no resolved colors. */
+  editorialPdfThemeLibrary: EditorialPdfThemeLibraryV1;
 }
 
 export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze({
-  settingsVersion: 8,
+  settingsVersion: 9,
   pandocPath: "pandoc",
   toolbarPosition: "top",
   showToolbarOnStartup: true,
@@ -142,7 +149,8 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   customFontDirs: [],
   customFonts: [],
   toolbarSkinMode: "auto",
-  toolbarSkin: cloneToolbarSkin(TOOLBAR_SKIN_DEFAULTS)
+  toolbarSkin: cloneToolbarSkin(TOOLBAR_SKIN_DEFAULTS),
+  editorialPdfThemeLibrary: emptyEditorialPdfThemeLibrary()
 });
 
 export type HanmarkRuntimePlatform = "windows" | "macos" | "linux";
@@ -322,7 +330,7 @@ export function normalizeHanmarkSettings(
 
   return {
     ...preserved,
-    settingsVersion: 8,
+    settingsVersion: 9,
     pandocPath: nonEmptyString(data.pandocPath, DEFAULT_HANMARK_SETTINGS.pandocPath),
     toolbarPosition: "top",
     showToolbarOnStartup:
@@ -355,6 +363,9 @@ export function normalizeHanmarkSettings(
     customFontDirs: stringArray(data.customFontDirs),
     customFonts,
     toolbarSkinMode: normalizeToolbarSkinMode(data.toolbarSkinMode),
-    toolbarSkin: normalizeToolbarSkin(data.toolbarSkin)
+    toolbarSkin: normalizeToolbarSkin(data.toolbarSkin),
+    editorialPdfThemeLibrary: normalizeEditorialPdfThemeLibrary(
+      data.editorialPdfThemeLibrary
+    )
   };
 }
