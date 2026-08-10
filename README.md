@@ -15,8 +15,8 @@ HanMark 2.5.6 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 ### What changed in 2.5.6
 
 - **Custom PDF theme library:** keep the immutable Achmage HanMark design or create, duplicate, rename, edit, select, and delete any number of named PDF themes per Vault.
-- **One-color safe palette:** choose one six-digit key color and HanMark derives readable brand surfaces, text, rules, tints, code, callout, and table colors using WCAG contrast calculations.
-- **Simple control with an escape hatch:** three advanced foreground/rule colors can be overridden. Low contrast remains allowed with a visible ratio warning instead of silently replacing a required brand color.
+- **One-color safe palette:** the six-digit key color saved in the theme, picker, and JSON remains exact. In automatic mode only, HanMark may use a slightly darker surface behind text—limited by the product to an OKLab distance (`ΔEOK`) of `0.02`—and adopts it only when the final color pair reaches the WCAG `4.5:1` minimum. If it cannot, the exact key surface and a safe foreground are used instead.
+- **Simple control with an escape hatch:** three advanced foreground/rule colors can be overridden. Manually choosing the text on the key background switches off that surface correction and returns to the exact key color. Low contrast remains allowed with a visible ratio warning instead of silently replacing a required brand color.
 - **Fully editable page furniture:** cover, tag, header, footer, dynamic-title, and page-number fields can be customized or intentionally left blank without collapsing their layout slots.
 - **Portable theme JSON:** export one selected theme and import it as a new non-overwriting user theme through the existing explicit file picker.
 - **Compatibility preserved:** the built-in theme reproduces the 2.5.5 PDF output exactly. Markdown, print lifecycle, Kordoc HWPX, optional Pandoc DOCX, HTML, imports, and existing command IDs remain unchanged.
@@ -136,8 +136,8 @@ HanMark 2.5.6의 HWPX 생성·가져오기·레거시 원본 수정·검증·이
 ### 2.5.6 핵심 변화
 
 - **사용자 PDF 테마 라이브러리:** 수정 불가능한 Achmage HanMark 기본 디자인을 유지하거나 Vault마다 이름 있는 PDF 테마를 제한 없이 생성·복제·이름 변경·편집·선택·삭제할 수 있습니다.
-- **키 컬러 하나로 안전한 팔레트:** 6자리 키 컬러를 고르면 HanMark가 WCAG 대비 계산으로 브랜드 면·글자·실선·연한 배경·코드·콜아웃·표 색을 읽기 쉽게 파생합니다.
-- **쉬운 기본값과 수동 선택권:** 고급 영역의 글자·실선 3색은 직접 덮어쓸 수 있습니다. 낮은 대비를 강제로 바꾸지 않고 실제 비율과 경고를 표시합니다.
+- **키 컬러 하나로 안전한 팔레트:** 테마·선택창·JSON에 저장되는 6자리 키 컬러는 입력값 그대로 유지됩니다. 자동 모드에서만 글자가 놓이는 면을 제품 상한인 OKLab 색차(`ΔEOK`) `0.02` 이하로 조금 어둡게 만들 수 있으며, 최종 색 조합이 WCAG `4.5:1` 이상일 때만 적용합니다. 조건을 만족하지 못하면 원래 키 면과 안전한 글자색으로 돌아갑니다.
+- **쉬운 기본값과 수동 선택권:** 고급 영역의 글자·실선 3색은 직접 덮어쓸 수 있습니다. 키 배경 위 글자를 직접 지정하면 면 자동 보정이 꺼지고 입력한 키 컬러 면으로 돌아갑니다. 낮은 대비를 강제로 바꾸지 않고 실제 비율과 경고를 표시합니다.
 - **표지와 페이지 문구 전체 편집:** 표지·태그·머리말·꼬리말·동적 제목·쪽 번호를 바꾸거나 빈칸으로 둘 수 있으며 빈칸도 기존 자리 구조를 유지합니다.
 - **테마 JSON 공유:** 선택한 테마 하나를 내보내고 기존 파일을 덮어쓰지 않는 새 사용자 테마로 가져올 수 있습니다.
 - **호환성 유지:** 내장 기본 테마는 2.5.5 PDF 출력을 정확히 재현합니다. Markdown, 인쇄 수명주기, Kordoc HWPX, 선택형 Pandoc DOCX, HTML, 가져오기와 기존 명령 ID는 그대로입니다.
