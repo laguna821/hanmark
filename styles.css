@@ -2501,13 +2501,47 @@
 
 .hanmark-pdf-theme-preview-cover-top {
   display: flex;
-  justify-content: space-between;
-  min-height: 42%;
+  flex: 0 0 52%;
+  flex-direction: column;
+  align-items: center;
+  min-height: 52%;
   padding: 8%;
+  --bold-color: var(--hanmark-pdf-preview-on-key);
   background: var(--hanmark-pdf-preview-key);
   color: var(--hanmark-pdf-preview-on-key);
   font-size: 0.66em;
   font-weight: 700;
+  text-align: center;
+}
+
+.hanmark-pdf-theme-preview-cover-kicker,
+.hanmark-pdf-theme-preview-cover-edition,
+.hanmark-pdf-theme-preview-cover-title,
+.hanmark-pdf-theme-preview-cover-subtitle {
+  color: inherit;
+}
+
+.hanmark-pdf-theme-preview-cover-kicker,
+.hanmark-pdf-theme-preview-cover-edition,
+.hanmark-pdf-theme-preview-cover-subtitle {
+  min-height: 1em;
+}
+
+.hanmark-pdf-theme-preview-cover-edition {
+  margin-top: 7%;
+  letter-spacing: 0.12em;
+}
+
+.hanmark-pdf-theme-preview-cover-title {
+  margin: auto 0 0;
+  font-size: 1.35em;
+  line-height: 1.25;
+}
+
+.hanmark-pdf-theme-preview-cover-subtitle {
+  margin: 7% 0 auto;
+  font-size: 0.82em;
+  font-weight: 500;
 }
 
 .hanmark-pdf-theme-preview-cover-body {
@@ -2518,16 +2552,27 @@
   justify-content: center;
   gap: 7px;
   padding: 8%;
+  --bold-color: var(--hanmark-pdf-preview-key-ink);
   color: var(--hanmark-pdf-preview-key-ink);
   text-align: center;
 }
 
-.hanmark-pdf-theme-preview-cover-body > strong {
-  min-height: 1.5em;
-  font-size: 1.25em;
+.hanmark-pdf-theme-preview-cover-brand,
+.hanmark-pdf-theme-preview-cover-system {
+  color: inherit;
 }
 
-.hanmark-pdf-theme-preview-cover-body > span {
+.hanmark-pdf-theme-preview-cover-brand {
+  min-height: 1.5em;
+  font-size: 1.05em;
+}
+
+.hanmark-pdf-theme-preview-cover-system {
+  min-height: 1em;
+  font-size: 0.78em;
+}
+
+.hanmark-pdf-theme-preview-cover-detail {
   min-height: 1em;
   color: var(--hanmark-pdf-preview-muted-ink);
   font-size: 0.7em;
@@ -2547,13 +2592,6 @@
   border-radius: 999px;
   background: var(--hanmark-pdf-preview-key);
   color: var(--hanmark-pdf-preview-on-key);
-  font-size: 0.58em;
-}
-
-.hanmark-pdf-theme-preview-brand {
-  min-height: 1em;
-  padding: 0 8% 6%;
-  color: var(--hanmark-pdf-preview-key-ink);
   font-size: 0.58em;
 }
 
@@ -2580,12 +2618,19 @@
   color: var(--hanmark-pdf-preview-key-ink);
 }
 
-.hanmark-pdf-theme-preview-body code {
-  display: block;
+.hanmark-pdf-theme-preview-body pre {
   margin-top: 12px;
   padding: 8px;
-  background: var(--hanmark-pdf-preview-tint);
-  color: var(--hanmark-pdf-preview-body);
+  overflow: hidden;
+  background: var(--hanmark-pdf-preview-key);
+  color: var(--hanmark-pdf-preview-on-key);
+  white-space: pre-wrap;
+}
+
+.hanmark-pdf-theme-preview-body pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
 }
 
 .hanmark-pdf-theme-preview-footer {

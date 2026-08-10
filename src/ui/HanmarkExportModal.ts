@@ -6,6 +6,7 @@ import {
   type HwpxExportVariant
 } from "../io/exportTypes";
 import {
+  editorialPdfContrastStatus,
   resolveEditorialPdfThemeSnapshot,
   type EditorialPdfThemeSnapshot
 } from "../io/editorialPdfTheme";
@@ -607,9 +608,7 @@ export class HanmarkExportModal extends Modal {
     status.createSpan({
       text: active.builtIn
         ? "HanMark 2.5.5 기본 출력 보존"
-        : resolved.warnings.length
-          ? `대비 경고 ${resolved.warnings.length}개 · 직접 지정 색상을 확인하세요.`
-          : "WCAG 대비 공식 기반 자동 가독성 검사 통과"
+        : editorialPdfContrastStatus(resolved)
     });
     const actions = theme.createDiv({
       cls: "hanmark-export-secondary-actions"

@@ -885,6 +885,22 @@ describe("Achmage Editorial PDF helpers", () => {
     assert.doesNotMatch(css, /var\(|url\(|!important/u);
   });
 
+  it("keeps a green custom theme free from the legacy navy in production CSS", () => {
+    const snapshot = customEditorialPdfThemeSnapshot((theme) => {
+      theme.colors.key = "#02653D";
+      theme.colors.overrides.onKey = null;
+      theme.colors.overrides.keyInk = "#02653D";
+      theme.colors.overrides.accentLine = null;
+    });
+    const css = createEditorialPdfStyles(
+      "Green theme regression",
+      editorialPdfRenderTheme(snapshot)
+    );
+    assert.match(css, /background: #02653D;/u);
+    assert.match(css, /color: #02653D;/u);
+    assert.doesNotMatch(css, /#002E6E/iu);
+  });
+
   it("preserves blank cover and page slots without reviving fallback glyphs", () => {
     const snapshot = customEditorialPdfThemeSnapshot((theme) => {
       theme.cover.kicker = "";

@@ -36,6 +36,14 @@ test("PDF theme builder keeps a three-step novice flow and three overrides", asy
   assert.match(source, /token: "accentLine"/u);
   assert.match(source, /자동 추천 적용/u);
   assert.match(source, /낮은 대비도 저장되지만 경고가 계속 표시됩니다/u);
+  assert.doesNotMatch(source, /프로젝트 회의 기록/u);
+  assert.match(source, /getActiveFile\(\)\?\.basename\.trim\(\)/u);
+  assert.match(source, /previewFileTitle/u);
+  assert.match(source, /hanmark-pdf-theme-preview-cover-title/u);
+  assert.match(source, /editorialPdfContrastGuidance/u);
+  assert.match(source, /formatEditorialPdfContrastRatio/u);
+  assert.match(source, /3:1은 큰 글자에만 적용되는 기준입니다/u);
+  assert.match(source, /const codeBlock = body\.createEl\("pre"\)/u);
   assert.match(source, /await this\.options\.save\(/u);
   assert.match(
     source,
@@ -69,7 +77,8 @@ test("export modal persists theme selection with rollback and reports warnings",
   assert.match(source, /id: "hanmark-export-pdf-theme-select"/u);
   assert.match(source, /await this\.actions\.selectPdfTheme/u);
   assert.match(source, /select\.value = previousId/u);
-  assert.match(source, /대비 경고 \$\{resolved\.warnings\.length\}개/u);
+  assert.match(source, /editorialPdfContrastStatus\(resolved\)/u);
+  assert.doesNotMatch(source, /자동 가독성 검사 통과/u);
   assert.match(source, /openPdfThemeManager\?\.\("create"\)/u);
   assert.match(source, /openPdfThemeManager\?\.\("manage"\)/u);
   assert.match(main, /const previous = this\.settings\.editorialPdfThemeLibrary/u);
@@ -109,6 +118,22 @@ test("settings and CSS expose keyboard-visible PDF theme management", async () =
   );
   assert.match(css, /@media \(max-width: 1440px\), \(max-height: 900px\)/u);
   assert.match(css, /\.hanmark-pdf-theme-builder button:focus-visible/u);
+  assert.match(
+    css,
+    /\.hanmark-pdf-theme-preview-cover-top \{[\s\S]*?flex: 0 0 52%;[\s\S]*?--bold-color: var\(--hanmark-pdf-preview-on-key\);/u
+  );
+  assert.match(
+    css,
+    /\.hanmark-pdf-theme-preview-cover-body \{[\s\S]*?--bold-color: var\(--hanmark-pdf-preview-key-ink\);/u
+  );
+  assert.match(
+    css,
+    /\.hanmark-pdf-theme-preview-cover-brand,[\s\S]*?\.hanmark-pdf-theme-preview-cover-system \{\s*color: inherit;/u
+  );
+  assert.match(
+    css,
+    /\.hanmark-pdf-theme-preview-body pre \{[\s\S]*?background: var\(--hanmark-pdf-preview-key\);[\s\S]*?color: var\(--hanmark-pdf-preview-on-key\);/u
+  );
   assert.match(css, /\.hanmark-pdf-theme-row:focus-within/u);
   assert.doesNotMatch(css, /:has\(/u);
   assert.match(css, /\.hanmark-pdf-theme-diagnostics\.has-warning/u);

@@ -13,8 +13,11 @@ import {
   createEditorialPdfTheme,
   deleteEditorialPdfTheme,
   duplicateEditorialPdfTheme,
+  editorialPdfContrastGuidance,
+  editorialPdfContrastStatus,
   editorialPdfGraphemeCount,
   emptyEditorialPdfThemeLibrary,
+  formatEditorialPdfContrastRatio,
   listEditorialPdfThemeSnapshots,
   normalizeEditorialPdfTheme,
   normalizeEditorialPdfThemeLibrary,
@@ -317,6 +320,83 @@ describe("Editorial PDF color resolution", () => {
     assert.equal(gray.color, "#000000");
     assert.ok(gray.ratio >= 4.5);
     assert.equal(gray.aaa, false);
+  });
+
+  test("explains the exact magenta boundary without overriding user perception", () => {
+    const key = "#D709D1";
+    assert.ok(
+      Math.abs(contrastRatio("#000000", key) - 4.8491793166814405) < 1e-12
+    );
+    assert.ok(
+      Math.abs(contrastRatio("#FFFFFF", key) - 4.3306297063007868) < 1e-12
+    );
+    assert.ok(
+      Math.abs(contrastRatio("#182433", key) - 3.6215152723032853) < 1e-12
+    );
+    assert.deepEqual(resolveEditorialPdfOnKey(key), {
+      color: "#000000",
+      ratio: contrastRatio("#000000", key),
+      aaa: false
+    });
+
+    const automatic = resolveEditorialPdfTheme({
+      colors: {
+        key,
+        overrides: { onKey: null, keyInk: null, accentLine: null }
+      }
+    });
+    const automaticOnKey = automatic.diagnostics.find(
+      ({ token }) => token === "onKey"
+    );
+    assert.ok(automaticOnKey);
+    assert.equal(
+      editorialPdfContrastGuidance(automaticOnKey),
+      "일반 글자 최소 기준 통과 · 높은 대비는 아님"
+    );
+    assert.equal(formatEditorialPdfContrastRatio(automaticOnKey.ratio), "4.849");
+    assert.equal(
+      editorialPdfContrastStatus(automatic),
+      "키 배경 위 글자 4.849:1 · 일반 글자 최소 기준 통과 · 높은 대비는 아님 · 자동"
+    );
+
+    const manual = resolveEditorialPdfTheme({
+      colors: {
+        key,
+        overrides: { onKey: "#FFFFFF", keyInk: null, accentLine: null }
+      }
+    });
+    const manualOnKey = manual.diagnostics.find(({ token }) => token === "onKey");
+    assert.ok(manualOnKey);
+    assert.equal(manualOnKey.passes, false);
+    assert.equal(
+      editorialPdfContrastGuidance(manualOnKey),
+      "큰 글자 3:1만 통과 · 일반 글자 4.5:1 미달"
+    );
+    assert.equal(manual.warnings.length, 1);
+    assert.match(manual.warnings[0] ?? "", /4\.330:1/u);
+    assert.match(manual.warnings[0] ?? "", /일반 글자 4\.5:1 미달/u);
+    assert.match(editorialPdfContrastStatus(manual), /대비 경고 1개/u);
+    assert.match(editorialPdfContrastStatus(manual), /4\.330:1/u);
+  });
+
+  test("never rounds a failing boundary ratio into a passing display value", () => {
+    const resolved = resolveEditorialPdfTheme({
+      colors: {
+        key: "#006FFB",
+        overrides: { onKey: "#FFFFFF", keyInk: null, accentLine: null }
+      }
+    });
+    const onKey = resolved.diagnostics.find(({ token }) => token === "onKey");
+    assert.ok(onKey);
+    assert.ok(onKey.ratio < 4.5 && onKey.ratio > 4.499);
+    assert.equal(formatEditorialPdfContrastRatio(onKey.ratio), "4.499");
+    assert.doesNotMatch(resolved.warnings[0] ?? "", /4\.500:1/u);
+    assert.match(resolved.warnings[0] ?? "", /4\.499:1/u);
+    assert.equal(formatEditorialPdfContrastRatio(2.999999), "2.999");
+    assert.equal(formatEditorialPdfContrastRatio(4.499999), "4.499");
+    assert.equal(formatEditorialPdfContrastRatio(4.5), "4.500");
+    assert.equal(formatEditorialPdfContrastRatio(6.999999), "6.999");
+    assert.equal(formatEditorialPdfContrastRatio(7), "7.000");
   });
 
   test("keeps valid low-contrast manual overrides and reports exact warnings", () => {

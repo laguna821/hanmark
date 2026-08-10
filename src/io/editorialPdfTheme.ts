@@ -883,13 +883,69 @@ function diagnostic(
   };
 }
 
+const CONTRAST_LABELS: Readonly<Record<EditorialPdfOverrideToken, string>> = {
+  onKey: "키 배경 위 글자",
+  keyInk: "흰 종이 위 브랜드 글자",
+  accentLine: "상·하단 포인트 선"
+};
+
+export function formatEditorialPdfContrastRatio(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("PDF 대비 비율은 0 이상의 유한한 숫자여야 합니다.");
+  }
+  // A rounded 4.4999 must never be presented as the passing value 4.500.
+  // Three decimals are enough for the UI while flooring preserves the side of
+  // every 3:1, 4.5:1, and 7:1 decision boundary.
+  return (Math.floor(value * 1_000) / 1_000).toFixed(3);
+}
+
+export function editorialPdfContrastDiagnosticText(
+  value: Readonly<EditorialPdfContrastDiagnostic>
+): string {
+  return `${CONTRAST_LABELS[value.token]} ${formatEditorialPdfContrastRatio(value.ratio)}:1 · ${editorialPdfContrastGuidance(value)} · ${value.manual ? "직접 지정" : "자동"}`;
+}
+
+export function editorialPdfContrastStatus(
+  resolved: Readonly<ResolvedEditorialPdfTheme>
+): string {
+  const failing = resolved.diagnostics.filter(
+    (value) => value.enforced && !value.passes
+  );
+  if (failing.length) {
+    return `대비 경고 ${failing.length}개 · ${failing.map(editorialPdfContrastDiagnosticText).join(" / ")}`;
+  }
+  const onKey = resolved.diagnostics.find((value) => value.token === "onKey");
+  return onKey
+    ? editorialPdfContrastDiagnosticText(onKey)
+    : "설정된 대비 기준 통과";
+}
+
 function warningForDiagnostic(value: EditorialPdfContrastDiagnostic): string {
-  const labels: Record<EditorialPdfOverrideToken, string> = {
-    onKey: "키 배경 위 글자",
-    keyInk: "흰 종이 위 브랜드 글자",
-    accentLine: "상·하단 포인트 선"
-  };
-  return `${labels[value.token]} 대비 경고: ${value.ratio.toFixed(2)}:1 (목표 ${value.minimum}:1)`;
+  return `${CONTRAST_LABELS[value.token]} 대비 경고: ${formatEditorialPdfContrastRatio(value.ratio)}:1 (${editorialPdfContrastGuidance(value)})`;
+}
+
+export function editorialPdfContrastGuidance(
+  value: Readonly<EditorialPdfContrastDiagnostic>
+): string {
+  if (value.token === "accentLine") {
+    return value.ratio >= 3
+      ? "선·그래픽 최소 기준 통과"
+      : "선·그래픽 3:1 기준 미달";
+  }
+  if (value.ratio >= 7) return "높은 대비 · 7:1 이상";
+  if (value.ratio >= 4.5) {
+    return value.minimum > 4.5
+      ? `일반 글자 4.5:1은 통과 · HanMark 목표 ${value.minimum}:1 미달`
+      : "일반 글자 최소 기준 통과 · 높은 대비는 아님";
+  }
+  if (value.ratio >= 3) {
+    return value.minimum > 4.5
+      ? `큰 글자 3:1만 통과 · 일반 글자 4.5:1 및 HanMark 목표 ${value.minimum}:1 미달`
+      : "큰 글자 3:1만 통과 · 일반 글자 4.5:1 미달";
+  }
+  return value.minimum > 4.5
+    ? `낮은 대비 · 일반 글자 4.5:1 및 HanMark 목표 ${value.minimum}:1 미달`
+    : `낮은 대비 · 목표 ${value.minimum}:1 미달`;
 }
 
 function assertAutomaticPaletteInvariants(
