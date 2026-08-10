@@ -61,6 +61,8 @@ export interface HanmarkSettingTabActions {
   wordTemplateStore: WordTemplateStore;
   openHwpxTemplateManager(): void | Promise<void>;
   openWordTemplateManager(): void | Promise<void>;
+  openEditorialPdfThemeManager(): void | Promise<void>;
+  activeEditorialPdfThemeSummary(): string;
   refreshPreviews(): void | Promise<void>;
   refreshToolbar(): void | Promise<void>;
 }
@@ -117,6 +119,7 @@ export class HanmarkSettingTab extends PluginSettingTab {
     this.renderHwpxSettings(containerEl);
     this.renderImportedImageSettings(containerEl);
     this.renderHtmlExportSettings(containerEl);
+    this.renderEditorialPdfSettings(containerEl);
     this.renderToolbarSettings(containerEl);
     this.renderAdvancedDocxSettings(containerEl, version);
   }
@@ -248,6 +251,28 @@ export class HanmarkSettingTab extends PluginSettingTab {
             const theme: HtmlExportTheme =
               value === "classic" ? "classic" : "achmage-editorial";
             void this.changeHtmlExportTheme(theme);
+          });
+      });
+  }
+
+  private renderEditorialPdfSettings(container: HTMLElement): void {
+    new Setting(container).setName("PDF 내보내기").setHeading();
+
+    new Setting(container)
+      .setName("Editorial PDF 테마")
+      .setDesc(
+        `${this.actions.activeEditorialPdfThemeSummary()} · ` +
+        "키 컬러와 표지·머리말·꼬리말을 쉬운 단계로 바꾸고, " +
+        "WCAG 대비 공식에 따른 가독성 진단을 확인할 수 있습니다."
+      )
+      .addButton((button) => {
+        button
+          .setButtonText("PDF 테마 관리")
+          .setCta()
+          .onClick(() => {
+            void this.runAction(() =>
+              this.actions.openEditorialPdfThemeManager()
+            );
           });
       });
   }

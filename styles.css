@@ -2172,3 +2172,486 @@
     max-height: calc(100vh - 8px);
   }
 }
+
+/* Editorial PDF theme builder */
+.hanmark-export-pdf-theme {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.hanmark-export-pdf-theme-status,
+.hanmark-pdf-theme-manager-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 9px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-export-pdf-theme-status > span:last-child,
+.hanmark-pdf-theme-manager-status > span:last-child {
+  grid-column: 2;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-export-pdf-theme-status.has-warning,
+.hanmark-pdf-theme-manager-status.has-warning {
+  border-color: var(--color-orange);
+}
+
+.hanmark-export-pdf-theme-swatch,
+.hanmark-pdf-theme-swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--background-modifier-border-hover);
+  border-radius: 50%;
+  background: var(
+    --hanmark-pdf-theme-swatch-color,
+    var(--hanmark-pdf-preview-key, #002e6e)
+  );
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, white 60%, transparent);
+}
+
+.hanmark-export-pdf-theme-status .hanmark-export-pdf-theme-swatch,
+.hanmark-pdf-theme-manager-status .hanmark-pdf-theme-swatch {
+  grid-row: 1 / 3;
+}
+
+.hanmark-pdf-theme-manager,
+.hanmark-pdf-theme-builder {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.hanmark-pdf-theme-manager > p,
+.hanmark-pdf-theme-builder-intro > p,
+.hanmark-pdf-theme-builder-panel > p {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.hanmark-pdf-theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 16px 0;
+}
+
+.hanmark-pdf-theme-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 9px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  cursor: pointer;
+}
+
+.hanmark-pdf-theme-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.hanmark-pdf-theme-row:has(input:focus-visible) {
+  outline: 3px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.hanmark-pdf-theme-row.is-selected {
+  border-color: var(--interactive-accent);
+  background: color-mix(
+    in srgb,
+    var(--interactive-accent) 10%,
+    var(--background-secondary)
+  );
+}
+
+.hanmark-pdf-theme-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hanmark-pdf-theme-row-copy small {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hanmark-pdf-theme-actions,
+.hanmark-pdf-theme-library-actions,
+.hanmark-pdf-theme-builder-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.hanmark-pdf-theme-library-actions {
+  padding-top: 14px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.hanmark-pdf-theme-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+.hanmark-pdf-theme-steps button {
+  min-height: 42px;
+  white-space: normal;
+}
+
+.hanmark-pdf-theme-steps button[aria-current="step"] {
+  border-color: var(--interactive-accent);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.hanmark-pdf-theme-builder-panel {
+  min-height: 0;
+  padding: 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-primary-alt);
+}
+
+.hanmark-pdf-theme-builder-panel h3 {
+  margin-top: 0;
+}
+
+.hanmark-pdf-theme-field-label {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-pdf-theme-color-field {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 56px minmax(150px, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.hanmark-pdf-theme-color-field input[type="color"],
+.hanmark-pdf-theme-override-controls input[type="color"] {
+  width: 50px;
+  min-width: 50px;
+  height: 36px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.hanmark-pdf-theme-color-field small {
+  grid-column: 2 / -1;
+  color: var(--text-muted);
+}
+
+.hanmark-pdf-theme-text-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.hanmark-pdf-theme-text-columns h4 {
+  margin: 4px 0 10px;
+}
+
+.hanmark-pdf-theme-text-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.hanmark-pdf-theme-text-field input,
+.hanmark-pdf-theme-text-field select,
+.hanmark-pdf-theme-color-field input[type="text"] {
+  width: 100%;
+}
+
+.hanmark-pdf-theme-text-field small {
+  color: var(--text-muted);
+}
+
+.hanmark-pdf-theme-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+  cursor: pointer;
+}
+
+.hanmark-pdf-theme-diagnostics {
+  margin: 12px 0;
+  padding: 11px 13px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-pdf-theme-diagnostics.is-safe {
+  border-color: var(--color-green);
+}
+
+.hanmark-pdf-theme-diagnostics.has-warning {
+  border-color: var(--color-orange);
+}
+
+.hanmark-pdf-theme-diagnostics ul {
+  margin: 7px 0 0;
+  padding-left: 20px;
+  color: var(--text-muted);
+}
+
+.hanmark-pdf-theme-diagnostics p {
+  margin: 8px 0 0;
+  color: var(--text-normal);
+}
+
+.hanmark-pdf-theme-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 14px 0;
+}
+
+.hanmark-pdf-theme-preview-cover,
+.hanmark-pdf-theme-preview-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  aspect-ratio: 210 / 297;
+  border: 1px solid var(--hanmark-pdf-preview-border);
+  border-radius: 6px;
+  background: white;
+  color: var(--hanmark-pdf-preview-body);
+  box-shadow: var(--shadow-s);
+}
+
+.hanmark-pdf-theme-preview-cover-top {
+  display: flex;
+  justify-content: space-between;
+  min-height: 42%;
+  padding: 8%;
+  background: var(--hanmark-pdf-preview-key);
+  color: var(--hanmark-pdf-preview-on-key);
+  font-size: 0.66em;
+  font-weight: 700;
+}
+
+.hanmark-pdf-theme-preview-cover-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8%;
+  color: var(--hanmark-pdf-preview-key-ink);
+  text-align: center;
+}
+
+.hanmark-pdf-theme-preview-cover-body > strong {
+  min-height: 1.5em;
+  font-size: 1.25em;
+}
+
+.hanmark-pdf-theme-preview-cover-body > span {
+  min-height: 1em;
+  color: var(--hanmark-pdf-preview-muted-ink);
+  font-size: 0.7em;
+}
+
+.hanmark-pdf-theme-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  min-height: 24px;
+  margin-top: 12px;
+}
+
+.hanmark-pdf-theme-preview-tags span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--hanmark-pdf-preview-key);
+  color: var(--hanmark-pdf-preview-on-key);
+  font-size: 0.58em;
+}
+
+.hanmark-pdf-theme-preview-brand {
+  min-height: 1em;
+  padding: 0 8% 6%;
+  color: var(--hanmark-pdf-preview-key-ink);
+  font-size: 0.58em;
+}
+
+.hanmark-pdf-theme-preview-header,
+.hanmark-pdf-theme-preview-footer {
+  display: flex;
+  justify-content: space-between;
+  min-height: 1.2em;
+  margin: 7% 8% 0;
+  padding-bottom: 5px;
+  border-bottom: 2px solid var(--hanmark-pdf-preview-accent);
+  color: var(--hanmark-pdf-preview-key-ink);
+  font-size: 0.58em;
+  font-weight: 700;
+}
+
+.hanmark-pdf-theme-preview-body {
+  flex: 1;
+  padding: 8%;
+  font-size: 0.7em;
+}
+
+.hanmark-pdf-theme-preview-body h3 {
+  color: var(--hanmark-pdf-preview-key-ink);
+}
+
+.hanmark-pdf-theme-preview-body code {
+  display: block;
+  margin-top: 12px;
+  padding: 8px;
+  background: var(--hanmark-pdf-preview-tint);
+  color: var(--hanmark-pdf-preview-body);
+}
+
+.hanmark-pdf-theme-preview-footer {
+  margin-top: 0;
+  margin-bottom: 7%;
+  padding-top: 5px;
+  padding-bottom: 0;
+  border-top: 2px solid var(--hanmark-pdf-preview-accent);
+  border-bottom: 0;
+}
+
+.hanmark-pdf-theme-advanced {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.hanmark-pdf-theme-advanced > summary {
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-pdf-theme-advanced > p {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.hanmark-pdf-theme-override {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 3px 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.hanmark-pdf-theme-override > small {
+  color: var(--text-muted);
+}
+
+.hanmark-pdf-theme-override > button,
+.hanmark-pdf-theme-override-controls {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+
+.hanmark-pdf-theme-override-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.hanmark-pdf-theme-override-controls input[type="text"] {
+  width: 104px;
+}
+
+.hanmark-pdf-theme-override-ratio {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-pdf-theme-override-ratio.has-warning,
+input[aria-invalid="true"] + .hanmark-pdf-theme-override-ratio {
+  color: var(--color-orange);
+}
+
+.hanmark-pdf-theme-builder-footer {
+  position: sticky;
+  bottom: -16px;
+  z-index: 2;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.hanmark-pdf-theme-builder button:focus-visible,
+.hanmark-pdf-theme-manager button:focus-visible,
+.hanmark-pdf-theme-builder input:focus-visible,
+.hanmark-pdf-theme-manager input:focus-visible,
+.hanmark-pdf-theme-builder select:focus-visible,
+.hanmark-export-pdf-theme button:focus-visible,
+.hanmark-export-pdf-theme select:focus-visible {
+  outline: 3px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .hanmark-pdf-theme-text-columns,
+  .hanmark-pdf-theme-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .hanmark-pdf-theme-color-field {
+    grid-template-columns: 50px minmax(0, 1fr);
+  }
+
+  .hanmark-pdf-theme-color-field > label,
+  .hanmark-pdf-theme-color-field small {
+    grid-column: 1 / -1;
+  }
+
+  .hanmark-pdf-theme-row {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .hanmark-pdf-theme-row .hanmark-template-active {
+    grid-column: 3;
+  }
+
+  .hanmark-pdf-theme-override {
+    grid-template-columns: 1fr;
+  }
+
+  .hanmark-pdf-theme-override > button,
+  .hanmark-pdf-theme-override-controls {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

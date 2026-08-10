@@ -5,6 +5,10 @@ import {
   type HanmarkExportOutcome,
   type HwpxExportVariant
 } from "../io/exportTypes";
+import {
+  resolveEditorialPdfThemeSnapshot,
+  type EditorialPdfThemeSnapshot
+} from "../io/editorialPdfTheme";
 import type { HtmlExportTheme } from "../legacy-port/settings";
 import { errorMessage } from "../utils/errors";
 
@@ -38,6 +42,10 @@ export interface HanmarkExportActions {
   activeHtmlTheme?: () => HtmlExportTheme;
   setHtmlTheme?: (theme: HtmlExportTheme) => Promise<void>;
   exportPdf?: () => Promise<HanmarkExportActionResult>;
+  pdfThemeChoices?: () => EditorialPdfThemeSnapshot[];
+  activePdfTheme?: () => EditorialPdfThemeSnapshot;
+  selectPdfTheme?: (id: string) => Promise<void>;
+  openPdfThemeManager?: (mode: "manage" | "create") => void;
   revealOutput?: (
     result: HanmarkExportOutcome
   ) => Promise<void>;
@@ -532,6 +540,98 @@ export class HanmarkExportModal extends Modal {
       cls: "hanmark-export-native-note",
       text: "원문은 변경하지 않으며 이미지와 Pretendard 글꼴을 준비한 뒤 운영체제의 PDF 저장 인쇄 창을 엽니다."
     });
+
+    const active = this.actions.activePdfTheme?.();
+    const choices = this.actions.pdfThemeChoices?.() ?? [];
+    if (!active || !choices.length || !this.actions.selectPdfTheme) return;
+
+    const resolved = resolveEditorialPdfThemeSnapshot(active);
+    const theme = root.createDiv({ cls: "hanmark-export-pdf-theme" });
+    const row = theme.createDiv({ cls: "hanmark-export-option-row" });
+    const statusId = "hanmark-export-pdf-theme-status";
+    row.createEl("label", {
+      text: "PDF 테마",
+      cls: "hanmark-export-field-label",
+      attr: {
+        for: "hanmark-export-pdf-theme-select",
+        "aria-describedby": statusId
+      }
+    });
+    const select = row.createEl("select", {
+      attr: {
+        id: "hanmark-export-pdf-theme-select",
+        "aria-describedby": statusId
+      }
+    });
+    for (const snapshot of choices) {
+      select.createEl("option", {
+        value: snapshot.id,
+        text: snapshot.name
+      });
+    }
+    select.value = active.id;
+    select.disabled = this.busy;
+    select.onchange = async () => {
+      const previousId = active.id;
+      select.disabled = true;
+      try {
+        await this.actions.selectPdfTheme?.(select.value);
+        this.render();
+      } catch (error) {
+        select.value = previousId;
+        select.disabled = this.busy;
+        new Notice(
+          `PDF 테마 선택을 저장하지 못했습니다: ${errorMessage(error)}`
+        );
+      }
+    };
+
+    const status = theme.createDiv({
+      cls:
+        `hanmark-export-pdf-theme-status${resolved.warnings.length ? " has-warning" : ""}`,
+      attr: {
+        id: statusId,
+        role: "status",
+        "aria-live": "polite"
+      }
+    });
+    status.style.setProperty(
+      "--hanmark-pdf-theme-swatch-color",
+      resolved.palette.keySurface
+    );
+    status.createSpan({
+      cls: "hanmark-export-pdf-theme-swatch",
+      attr: { "aria-hidden": "true" }
+    });
+    status.createEl("strong", { text: active.name });
+    status.createSpan({
+      text: active.builtIn
+        ? "HanMark 2.5.5 기본 출력 보존"
+        : resolved.warnings.length
+          ? `대비 경고 ${resolved.warnings.length}개 · 직접 지정 색상을 확인하세요.`
+          : "WCAG 대비 공식 기반 자동 가독성 검사 통과"
+    });
+    const actions = theme.createDiv({
+      cls: "hanmark-export-secondary-actions"
+    });
+    const create = actions.createEl("button", {
+      text: "새 테마",
+      attr: { type: "button" }
+    });
+    create.disabled = this.busy;
+    create.onclick = () => {
+      this.close();
+      this.actions.openPdfThemeManager?.("create");
+    };
+    const manage = actions.createEl("button", {
+      text: "편집·관리",
+      attr: { type: "button" }
+    });
+    manage.disabled = this.busy;
+    manage.onclick = () => {
+      this.close();
+      this.actions.openPdfThemeManager?.("manage");
+    };
   }
 
   private renderResult(

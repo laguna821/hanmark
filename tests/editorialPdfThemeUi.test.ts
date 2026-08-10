@@ -1,0 +1,93 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+test("PDF theme manager exposes immutable built-in and complete custom CRUD", async () => {
+  const source = await readFile(
+    "src/ui/EditorialPdfThemeManagerModal.ts",
+    "utf8"
+  );
+
+  assert.match(source, /BUILTIN_EDITORIAL_PDF_THEME_ID/u);
+  assert.match(source, /selected\.builtIn \? "복제 후 편집" : "편집"/u);
+  assert.match(source, /createEditorialPdfTheme\(/u);
+  assert.match(source, /updateEditorialPdfTheme\(/u);
+  assert.match(source, /duplicateEditorialPdfTheme\(/u);
+  assert.match(source, /renameEditorialPdfTheme\(/u);
+  assert.match(source, /deleteEditorialPdfTheme\(/u);
+  assert.match(source, /setActiveEditorialPdfTheme\(/u);
+  assert.match(source, /await this\.options\.replaceLibrary\(library\)/u);
+  assert.doesNotMatch(source, /\.innerHTML|\.outerHTML|srcdoc/u);
+});
+
+test("PDF theme builder keeps a three-step novice flow and three overrides", async () => {
+  const source = await readFile(
+    "src/ui/EditorialPdfThemeManagerModal.ts",
+    "utf8"
+  );
+
+  assert.match(source, /"1\. 키 컬러"/u);
+  assert.match(source, /"2\. 문구"/u);
+  assert.match(source, /"3\. 미리보기"/u);
+  assert.match(source, /type: "color"/u);
+  assert.match(source, /canonicalEditorialPdfHex\(this\.keyInput\)/u);
+  assert.match(source, /token: "onKey"/u);
+  assert.match(source, /token: "keyInk"/u);
+  assert.match(source, /token: "accentLine"/u);
+  assert.match(source, /자동 추천 적용/u);
+  assert.match(source, /낮은 대비도 저장되지만 경고가 계속 표시됩니다/u);
+  assert.match(source, /await this\.options\.save\(/u);
+  assert.match(
+    source,
+    /onClose\(\): void \{\s*this\.modalEl\.removeClass\("hanmark-resizable-workspace-modal"\);\s*this\.contentEl\.empty\(\);\s*\}/u
+  );
+});
+
+test("PDF theme JSON uses the audited file gateway and strict 256KiB cap", async () => {
+  const source = await readFile(
+    "src/ui/EditorialPdfThemeManagerModal.ts",
+    "utf8"
+  );
+
+  assert.match(source, /fileGateway\.pickFiles\(\{/u);
+  assert.match(source, /extensions: \["json"\]/u);
+  assert.match(source, /maxFiles: 1/u);
+  assert.match(
+    source,
+    /maxFileBytes: EDITORIAL_PDF_THEME_MAX_JSON_BYTES/u
+  );
+  assert.match(source, /parseEditorialPdfThemeExchange\(file\.bytes\)/u);
+  assert.match(source, /fileGateway\.saveFile\(/u);
+  assert.match(source, /stringifyEditorialPdfThemeExchange\(/u);
+  assert.doesNotMatch(source, /node:fs|from "fs"|clipboard/u);
+});
+
+test("export modal persists theme selection with rollback and reports warnings", async () => {
+  const source = await readFile("src/ui/HanmarkExportModal.ts", "utf8");
+  const main = await readFile("src/main.ts", "utf8");
+
+  assert.match(source, /id: "hanmark-export-pdf-theme-select"/u);
+  assert.match(source, /await this\.actions\.selectPdfTheme/u);
+  assert.match(source, /select\.value = previousId/u);
+  assert.match(source, /대비 경고 \$\{resolved\.warnings\.length\}개/u);
+  assert.match(source, /openPdfThemeManager\?\.\("create"\)/u);
+  assert.match(source, /openPdfThemeManager\?\.\("manage"\)/u);
+  assert.match(main, /const previous = this\.settings\.editorialPdfThemeLibrary/u);
+  assert.match(
+    main,
+    /this\.settings\.editorialPdfThemeLibrary = previous;\s*throw error;/u
+  );
+  assert.match(main, /theme: activeEditorialPdfThemeSnapshot\(/u);
+});
+
+test("settings and CSS expose keyboard-visible PDF theme management", async () => {
+  const settings = await readFile("src/ui/HanmarkSettingTab.ts", "utf8");
+  const css = await readFile("styles.css", "utf8");
+
+  assert.match(settings, /PDF 테마 관리/u);
+  assert.match(settings, /openEditorialPdfThemeManager/u);
+  assert.match(css, /\.hanmark-pdf-theme-builder button:focus-visible/u);
+  assert.match(css, /\.hanmark-pdf-theme-row:has\(input:focus-visible\)/u);
+  assert.match(css, /\.hanmark-pdf-theme-diagnostics\.has-warning/u);
+  assert.doesNotMatch(css, /\.hanmark-pdf-theme[^\n{]*\{[^}]*!important/gu);
+});

@@ -40,6 +40,13 @@ import {
 } from "./io/htmlExportService";
 import type { ImageFailure } from "./io/imageAssets";
 import { EditorialPdfService } from "./io/editorialPdf";
+import {
+  activeEditorialPdfThemeSnapshot,
+  listEditorialPdfThemeSnapshots,
+  normalizeEditorialPdfThemeLibrary,
+  setActiveEditorialPdfTheme,
+  type EditorialPdfThemeLibraryV1
+} from "./io/editorialPdfTheme";
 import { importDocument } from "./io/kordocImport";
 import {
   createCleanLegacyImportCopy,
@@ -72,6 +79,10 @@ import {
   DOCX_PREVIEW_VIEW_TYPE
 } from "./ui/DocxPreviewView";
 import { DocumentStyleModal } from "./ui/DocumentStyleModal";
+import {
+  EditorialPdfThemeManagerModal,
+  activeEditorialPdfThemeSummary as describeActiveEditorialPdfTheme
+} from "./ui/EditorialPdfThemeManagerModal";
 import { HanmarkExportModal } from "./ui/HanmarkExportModal";
 import {
   HanmarkSettingTab
@@ -316,6 +327,12 @@ export default class HanmarkPlugin extends Plugin {
         wordTemplateStore: this.wordTemplateStore,
         openHwpxTemplateManager: () => this.openTemplateManager(),
         openWordTemplateManager: () => this.openWordTemplateManager(),
+        openEditorialPdfThemeManager: () =>
+          this.openEditorialPdfThemeManager("manage"),
+        activeEditorialPdfThemeSummary: () =>
+          describeActiveEditorialPdfTheme(
+            this.settings.editorialPdfThemeLibrary
+          ),
         refreshPreviews: () => this.refreshPreviews(),
         refreshToolbar: () =>
           this.toolbar?.setVisible(this.settings.showToolbarOnStartup)
@@ -593,12 +610,57 @@ export default class HanmarkPlugin extends Plugin {
             throw error;
           }
         },
+        pdfThemeChoices: () =>
+          listEditorialPdfThemeSnapshots(
+            this.settings.editorialPdfThemeLibrary
+          ),
+        activePdfTheme: () =>
+          activeEditorialPdfThemeSnapshot(
+            this.settings.editorialPdfThemeLibrary
+          ),
+        selectPdfTheme: async (id) => {
+          await this.replaceEditorialPdfThemeLibrary(
+            setActiveEditorialPdfTheme(
+              this.settings.editorialPdfThemeLibrary,
+              id
+            )
+          );
+        },
+        openPdfThemeManager: (mode) =>
+          this.openEditorialPdfThemeManager(mode),
         exportPdf: async () => this.exportEditorialPdf(),
         revealOutput: (outcome) => this.revealExportOutput(outcome),
         applySkin: (root) => applyToolbarSkin(root, this.settings)
       },
       initialFormat
     ).open();
+  }
+
+  private openEditorialPdfThemeManager(
+    mode: "manage" | "create" = "manage"
+  ): void {
+    new EditorialPdfThemeManagerModal(this.app, {
+      fileGateway: this.gateway,
+      getLibrary: () => this.settings.editorialPdfThemeLibrary,
+      replaceLibrary: (library) =>
+        this.replaceEditorialPdfThemeLibrary(library),
+      onChanged: () => this.settingTab?.refresh(),
+      startInCreate: mode === "create"
+    }).open();
+  }
+
+  private async replaceEditorialPdfThemeLibrary(
+    library: EditorialPdfThemeLibraryV1
+  ): Promise<void> {
+    const previous = this.settings.editorialPdfThemeLibrary;
+    this.settings.editorialPdfThemeLibrary =
+      normalizeEditorialPdfThemeLibrary(library);
+    try {
+      await this.saveSettings();
+    } catch (error) {
+      this.settings.editorialPdfThemeLibrary = previous;
+      throw error;
+    }
   }
 
   private async runOtherExport(
@@ -747,7 +809,10 @@ export default class HanmarkPlugin extends Plugin {
       progress.setMessage("Editorial PDF 인쇄 화면을 여는 중…");
       return await this.editorialPdf.print({
         markdown: prepared.markdown,
-        fileName: view.file.basename
+        fileName: view.file.basename,
+        theme: activeEditorialPdfThemeSnapshot(
+          this.settings.editorialPdfThemeLibrary
+        )
       });
     } catch (error) {
       new Notice(`PDF 내보내기 실패: ${errorMessage(error)}`, 8_000);
