@@ -1,6 +1,6 @@
 {
   "name": "hanmark",
-  "version": "2.5.5",
+  "version": "2.5.6",
   "description": "No-setup Markdown export to HWPX, self-contained HTML, and Editorial PDF.",
   "main": "main.js",
   "scripts": {
@@ -36,8 +36,9 @@
     "adm-zip": "0.6.0",
     "body-parser": "2.3.0",
     "esbuild": "0.28.1",
-    "fast-uri": "3.1.4",
-    "hono": "4.12.31",
+    "fast-uri": "3.1.5",
+    "hono": "4.12.34",
+    "ip-address": "10.3.1",
     "protobufjs": "8.7.1",
     "sharp": "0.35.3"
   },

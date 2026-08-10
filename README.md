@@ -2,7 +2,7 @@
 
 **A desktop Obsidian plugin that connects durable Markdown notes with editable Korean HWP/HWPX documents.**
 
-HanMark 2.5.5 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files, self-contained HTML, and Editorial PDF requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
+HanMark 2.5.6 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files, self-contained HTML, and Editorial PDF requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
 
 > Keep the source of knowledge in portable Markdown. Produce HWPX, DOCX, HTML, or PDF when an institution requires it.
 
@@ -12,12 +12,14 @@ HanMark 2.5.5 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 
 ## English
 
-### What changed in 2.5.5
+### What changed in 2.5.6
 
-- **Reliable first PDF after launch:** the first Editorial PDF export now waits for the attached print stylesheet, embedded Pretendard weights, images, and stable print layout before the native print dialog opens.
-- **PDF button in the top toolbar:** PDF is now as easy to find as HWPX, DOCX, and HTML. The button opens the unified export center with PDF already selected.
-- **No design change:** the full-bleed cover, branded headers and footers, page numbers, fixed light Editorial palette, and large-document safeguards remain unchanged.
-- **Compatibility preserved:** Markdown and the other export paths are not rewritten. Kordoc 4.2.5 HWPX generation, templates, optional Pandoc DOCX, HTML, document import, CMDS Eagle integration, and existing command IDs remain available.
+- **Custom PDF theme library:** keep the immutable Achmage HanMark design or create, duplicate, rename, edit, select, and delete any number of named PDF themes per Vault.
+- **One-color safe palette:** choose one six-digit key color and HanMark derives readable brand surfaces, text, rules, tints, code, callout, and table colors using WCAG contrast calculations.
+- **Simple control with an escape hatch:** three advanced foreground/rule colors can be overridden. Low contrast remains allowed with a visible ratio warning instead of silently replacing a required brand color.
+- **Fully editable page furniture:** cover, tag, header, footer, dynamic-title, and page-number fields can be customized or intentionally left blank without collapsing their layout slots.
+- **Portable theme JSON:** export one selected theme and import it as a new non-overwriting user theme through the existing explicit file picker.
+- **Compatibility preserved:** the built-in theme reproduces the 2.5.5 PDF output exactly. Markdown, print lifecycle, Kordoc HWPX, optional Pandoc DOCX, HTML, imports, and existing command IDs remain unchanged.
 
 ### Core 2.x workflow
 
@@ -87,7 +89,7 @@ For compatible notes imported by an earlier HanMark release, the command-palette
 - HTML intentionally excludes SVG, WebP, video, iframe, script, event-handler, raw user CSS, external font, and CDN resources. Ordinary links are limited to `http:`, `https:`, and `mailto:`.
 - The generated HTML Content Security Policy is `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`.
 - Editorial PDF uses the desktop Chromium print engine. It is not rendered through a HanMark HWPX template, and final pagination can vary with the selected printer/PDF settings.
-- HanMark 2.5.5 requires Obsidian 1.8.9 or newer and is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
+- HanMark 2.5.6 requires Obsidian 1.8.9 or newer and is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
 - Optional OCR/ML components such as Sharp, ONNX, and PDFium are not loaded by the plugin startup bundle.
 
 ### Privacy and capabilities
@@ -129,14 +131,16 @@ in [`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md).
 
 **Obsidian Markdown과 편집 가능한 한글 HWP/HWPX를 잇는 데스크톱 플러그인입니다.**
 
-HanMark 2.5.5의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX·독립형 HTML·Editorial PDF를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
+HanMark 2.5.6의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX·독립형 HTML·Editorial PDF를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
 
-### 2.5.5 핵심 변화
+### 2.5.6 핵심 변화
 
-- **첫 PDF 내보내기 안정화:** Obsidian을 새로 실행한 뒤 처음 PDF를 내보낼 때도 연결된 인쇄 스타일시트, 내장 Pretendard 굵기, 이미지와 인쇄 조판이 안정될 때까지 기다린 뒤 네이티브 인쇄 창을 엽니다.
-- **상단 툴바 PDF 버튼:** HWPX·DOCX·HTML과 마찬가지로 PDF를 바로 찾을 수 있습니다. 버튼을 누르면 PDF가 선택된 통합 내보내기 센터가 열립니다.
-- **디자인 불변:** 전면 표지, 브랜드 머리말·꼬리말, 쪽 번호, 고정 라이트 Editorial 팔레트와 대형 문서 보호 기능은 그대로 유지합니다.
-- **호환성 유지:** Markdown과 다른 내보내기 경로는 다시 쓰지 않습니다. Kordoc 4.2.5 HWPX 생성, 템플릿, 선택형 Pandoc DOCX, HTML, 문서 가져오기, CMDS Eagle 연동과 기존 명령 ID를 계속 사용할 수 있습니다.
+- **사용자 PDF 테마 라이브러리:** 수정 불가능한 Achmage HanMark 기본 디자인을 유지하거나 Vault마다 이름 있는 PDF 테마를 제한 없이 생성·복제·이름 변경·편집·선택·삭제할 수 있습니다.
+- **키 컬러 하나로 안전한 팔레트:** 6자리 키 컬러를 고르면 HanMark가 WCAG 대비 계산으로 브랜드 면·글자·실선·연한 배경·코드·콜아웃·표 색을 읽기 쉽게 파생합니다.
+- **쉬운 기본값과 수동 선택권:** 고급 영역의 글자·실선 3색은 직접 덮어쓸 수 있습니다. 낮은 대비를 강제로 바꾸지 않고 실제 비율과 경고를 표시합니다.
+- **표지와 페이지 문구 전체 편집:** 표지·태그·머리말·꼬리말·동적 제목·쪽 번호를 바꾸거나 빈칸으로 둘 수 있으며 빈칸도 기존 자리 구조를 유지합니다.
+- **테마 JSON 공유:** 선택한 테마 하나를 내보내고 기존 파일을 덮어쓰지 않는 새 사용자 테마로 가져올 수 있습니다.
+- **호환성 유지:** 내장 기본 테마는 2.5.5 PDF 출력을 정확히 재현합니다. Markdown, 인쇄 수명주기, Kordoc HWPX, 선택형 Pandoc DOCX, HTML, 가져오기와 기존 명령 ID는 그대로입니다.
 
 ### 2.x 핵심 기능
 
@@ -206,7 +210,7 @@ HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 가져옵니다.
 - HTML은 SVG·WebP·동영상·iframe·스크립트·이벤트 핸들러·사용자 원시 CSS·외부 글꼴·CDN 자원을 의도적으로 제외합니다. 일반 링크는 `http:`, `https:`, `mailto:`만 허용합니다.
 - 생성된 HTML의 Content Security Policy는 `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`입니다.
 - Editorial PDF는 데스크톱 Chromium 인쇄 엔진을 사용합니다. HanMark HWPX 템플릿으로 렌더링하지 않으며 최종 쪽 나눔은 선택한 프린터·PDF 설정에 따라 달라질 수 있습니다.
-- HanMark 2.5.5는 Obsidian 1.8.9 이상이 필요한 데스크톱 전용 플러그인입니다. 모바일 Obsidian은 지원하지 않지만 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
+- HanMark 2.5.6은 Obsidian 1.8.9 이상이 필요한 데스크톱 전용 플러그인입니다. 모바일 Obsidian은 지원하지 않지만 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
 - Sharp, ONNX, PDFium 같은 선택적 OCR·ML 구성요소는 플러그인 시작 번들에서 불러오지 않습니다.
 
 ### 개인정보와 접근 권한

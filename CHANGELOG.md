@@ -2,6 +2,14 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.5.6
+
+- Added an immutable Achmage HanMark PDF theme plus an unlimited Vault-level library of named custom themes with create, duplicate, rename, edit, select, and delete workflows.
+- Added a novice-first three-step builder that derives semantic print colors from one key color using WCAG contrast calculations while preserving the selected key surface exactly.
+- Added three advanced manual color overrides with live contrast ratios and non-blocking warnings, editable or blank cover/page furniture, and persistent active-theme selection.
+- Added strict single-theme JSON import/export through the existing user-initiated file gateway without new network, clipboard, filesystem, process, or runtime dependency capabilities.
+- Preserved the exact 2.5.5 built-in PDF output, print lifecycle, Markdown source, HWPX, DOCX, HTML, import, and existing command behavior.
+
 ## 2.5.5
 
 - Made the first Editorial PDF export after a fresh Obsidian launch deterministic by waiting for the attached print stylesheet, embedded Pretendard weights, images, and stable print layout before opening the native print dialog.
@@ -139,6 +147,14 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 한국어 개발 기록
 
 GitHub Release로 공개된 버전만 정식 릴리스로 표시합니다. 아래 2.x 이력은 공개 2.4.2에 통합된 내부 개발 흐름을 보존하기 위한 기록입니다.
+
+### 2.5.6
+
+- 수정 불가능한 Achmage HanMark PDF 기본 테마와 생성·복제·이름 변경·편집·선택·삭제가 가능한 Vault 단위 다중 사용자 테마 라이브러리를 추가했습니다.
+- 키 컬러 하나에서 WCAG 대비 계산으로 의미 기반 인쇄 색을 파생하고 선택한 키 컬러 면은 그대로 보존하는 초보자용 3단계 빌더를 추가했습니다.
+- 실제 대비와 비차단 경고를 제공하는 고급 수동 색상 3개, 비울 수 있는 표지·페이지 문구, 활성 테마 기억을 추가했습니다.
+- 기존 사용자 명시 파일 게이트웨이를 이용한 엄격한 단일 테마 JSON 가져오기·내보내기를 추가하며 네트워크·클립보드·파일시스템·프로세스·런타임 의존 권한을 늘리지 않았습니다.
+- 2.5.5 내장 PDF 출력, 인쇄 수명주기, Markdown 원문, HWPX·DOCX·HTML·가져오기와 기존 명령 동작을 그대로 보존했습니다.
 
 ### 2.5.5
 
