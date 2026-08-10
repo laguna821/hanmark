@@ -30,6 +30,7 @@ import {
   EDITORIAL_PDF_TABLE_ROW_SPLIT_THRESHOLD_ROWS,
   EDITORIAL_PDF_TABLE_SPLIT_THRESHOLD_ROWS,
   EditorialPdfService,
+  type EditorialPdfRenderTheme,
   balanceEditorialPdfCoverTitle,
   buildEditorialPdfRoot,
   createEditorialPdfStageError,
@@ -49,6 +50,13 @@ import {
   waitForEditorialPdfAssets,
   waitForEditorialPdfLayout
 } from "../src/io/editorialPdf";
+import {
+  BUILTIN_EDITORIAL_PDF_THEME,
+  builtInEditorialPdfThemeSnapshot,
+  resolveEditorialPdfThemeSnapshot,
+  type EditorialPdfThemeSnapshot,
+  type EditorialPdfThemeV1
+} from "../src/io/editorialPdfTheme";
 
 interface TestDomNode {
   readonly nodeType: "element" | "text";
@@ -423,6 +431,58 @@ function multilineInlines(prefix: string, lines: number): EditorialInline[] {
   return inlines;
 }
 
+function cloneBuiltinEditorialPdfTheme(): EditorialPdfThemeV1 {
+  return {
+    schemaVersion: 1,
+    colors: {
+      key: BUILTIN_EDITORIAL_PDF_THEME.colors.key,
+      overrides: { ...BUILTIN_EDITORIAL_PDF_THEME.colors.overrides }
+    },
+    cover: {
+      ...BUILTIN_EDITORIAL_PDF_THEME.cover,
+      tags: [...BUILTIN_EDITORIAL_PDF_THEME.cover.tags]
+    },
+    page: { ...BUILTIN_EDITORIAL_PDF_THEME.page }
+  };
+}
+
+function customEditorialPdfThemeSnapshot(
+  mutate: (theme: EditorialPdfThemeV1) => void
+): EditorialPdfThemeSnapshot {
+  const theme = cloneBuiltinEditorialPdfTheme();
+  mutate(theme);
+  return {
+    id: "custom:renderer-test",
+    name: "Renderer test",
+    builtIn: false,
+    theme
+  };
+}
+
+function editorialPdfRenderTheme(
+  snapshot: EditorialPdfThemeSnapshot
+): EditorialPdfRenderTheme {
+  return {
+    builtIn: snapshot.builtIn,
+    resolved: resolveEditorialPdfThemeSnapshot(snapshot)
+  };
+}
+
+function testDomSignature(node: TestDomNode): unknown {
+  if (node.nodeType === "text") {
+    return { nodeType: "text", textContent: node.textContent };
+  }
+  const element = node as TestElement;
+  return {
+    nodeType: "element",
+    tagName: element.tagName,
+    className: element.className,
+    textContent: element.children.length === 0 ? element.textContent : undefined,
+    style: { ...element.style },
+    children: element.children.map(testDomSignature)
+  };
+}
+
 describe("Achmage Editorial PDF helpers", () => {
   it("uses Obsidian's print-root class so the host stylesheet cannot hide the document", async () => {
     assert.equal(EDITORIAL_PDF_OBSIDIAN_PRINT_CLASS, "print");
@@ -724,6 +784,168 @@ describe("Achmage Editorial PDF helpers", () => {
       /\.hanmark-editorial-pdf-body hr \{[\s\S]*?border-color: #00B5AD;/u
     );
     assert.doesNotMatch(css, /!important/u);
+  });
+
+  it("keeps the omitted and explicit built-in theme output exactly identical", () => {
+    const fileTitle = "2.5.5 exact default";
+    const snapshot = builtInEditorialPdfThemeSnapshot();
+    const renderTheme = editorialPdfRenderTheme(snapshot);
+    assert.equal(
+      createEditorialPdfStyles(fileTitle, renderTheme),
+      createEditorialPdfStyles(fileTitle)
+    );
+
+    const editorial = {
+      title: fileTitle,
+      masthead: [],
+      blocks: [{
+        type: "paragraph" as const,
+        inlines: [{ type: "text" as const, value: "Default body" }]
+      }]
+    };
+    const implicitRoot = buildEditorialPdfRoot(
+      createTestDocument(),
+      editorial,
+      fileTitle
+    ) as unknown as TestElement;
+    const explicitRoot = buildEditorialPdfRoot(
+      createTestDocument(),
+      editorial,
+      fileTitle,
+      renderTheme
+    ) as unknown as TestElement;
+    assert.deepEqual(
+      testDomSignature(explicitRoot),
+      testDomSignature(implicitRoot)
+    );
+  });
+
+  it("uses only resolved semantic colors and safely escapes custom page text", () => {
+    const snapshot = customEditorialPdfThemeSnapshot((theme) => {
+      theme.colors.key = "#FFD400";
+      theme.colors.overrides.onKey = "#182433";
+      theme.colors.overrides.keyInk = "#002E6E";
+      theme.colors.overrides.accentLine = "#FFFFFF";
+      theme.page.headerLeft = 'LEFT"; } @page injected {';
+      theme.page.headerRightMode = "custom";
+      theme.page.headerRightText = "CUSTOM HEADER";
+      theme.page.footerLeft = "CUSTOM FOOTER";
+      theme.page.showPageNumber = false;
+    });
+    const renderTheme = editorialPdfRenderTheme(snapshot);
+    const { palette, warnings } = renderTheme.resolved;
+    const css = createEditorialPdfStyles("Private file title", renderTheme);
+    const cssPalette = new Set(
+      Array.from(
+        css.matchAll(/#[0-9a-f]{6}\b/giu),
+        (match) => match[0].toUpperCase()
+      )
+    );
+    const expectedPalette = new Set(
+      Object.values(palette).map((color) => color.toUpperCase())
+    );
+    const escapedHeaderLeft = escapeEditorialPdfCssString(
+      renderTheme.resolved.theme.page.headerLeft
+    );
+
+    assert.deepEqual(cssPalette, expectedPalette);
+    assert.ok(css.includes(`content: "${escapedHeaderLeft}";`));
+    assert.match(escapedHeaderLeft, /LEFT\\"/u);
+    assert.doesNotMatch(escapedHeaderLeft, /[\n\r\u2028\u2029]/u);
+    assert.match(
+      css,
+      /@top-right \{[\s\S]*?content: "CUSTOM HEADER";/u
+    );
+    assert.match(
+      css,
+      /@bottom-left \{[\s\S]*?content: "CUSTOM FOOTER";/u
+    );
+    assert.match(css, /@bottom-right \{[\s\S]*?content: "";/u);
+    assert.match(
+      css,
+      new RegExp(
+        `hanmark-editorial-pdf-cover-upper \\{[\\s\\S]*?` +
+          `color: ${palette.onKey};[\\s\\S]*?` +
+          `background: ${palette.keySurface};`,
+        "u"
+      )
+    );
+    assert.match(
+      css,
+      new RegExp(
+        `hanmark-editorial-pdf-body pre,[\\s\\S]*?` +
+          `color: ${palette.onKey};[\\s\\S]*?` +
+          `background: ${palette.keySurface};`,
+        "u"
+      )
+    );
+    assert.match(css, /min-height: 5\.4mm;/u);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? "", /대비 경고/u);
+    assert.doesNotMatch(css, /var\(|url\(|!important/u);
+  });
+
+  it("preserves blank cover and page slots without reviving fallback glyphs", () => {
+    const snapshot = customEditorialPdfThemeSnapshot((theme) => {
+      theme.cover.kicker = "";
+      theme.cover.edition = "";
+      theme.cover.titleMode = "blank";
+      theme.cover.titleText = "SHOULD NOT APPEAR";
+      theme.cover.subtitle = "";
+      theme.cover.brand = "<script>literal only</script>";
+      theme.cover.system = "";
+      theme.cover.detail = "";
+      theme.cover.tags = [];
+      theme.page.headerLeft = "";
+      theme.page.headerRightMode = "blank";
+      theme.page.headerRightText = "SHOULD NOT APPEAR";
+      theme.page.footerLeft = "";
+      theme.page.showPageNumber = false;
+    });
+    const renderTheme = editorialPdfRenderTheme(snapshot);
+    const root = buildEditorialPdfRoot(
+      createTestDocument(),
+      { title: "Source", masthead: [], blocks: [] },
+      "Private source title",
+      renderTheme
+    ) as unknown as TestElement;
+    const css = createEditorialPdfStyles("Private source title", renderTheme);
+    const byClass = (className: string): TestElement => {
+      const element = testElements(
+        root,
+        (candidate) => hasTestClass(candidate, className)
+      )[0];
+      assert.ok(element, `missing .${className}`);
+      return element;
+    };
+
+    for (const className of [
+      "hanmark-editorial-pdf-cover-kicker",
+      "hanmark-editorial-pdf-cover-edition",
+      "hanmark-editorial-pdf-cover-title",
+      "hanmark-editorial-pdf-cover-subtitle",
+      "hanmark-editorial-pdf-cover-system",
+      "hanmark-editorial-pdf-cover-detail"
+    ]) {
+      assert.equal(byClass(className).textContent, "");
+    }
+    assert.equal(
+      byClass("hanmark-editorial-pdf-cover-brand").textContent,
+      "<script>literal only</script>"
+    );
+    assert.equal(
+      byClass("hanmark-editorial-pdf-cover-tags").children.length,
+      0
+    );
+    assert.equal(
+      testElements(root, (element) => element.tagName === "SCRIPT").length,
+      0
+    );
+    assert.doesNotMatch(root.textContent, /Untitled|SHOULD NOT APPEAR/u);
+    assert.match(css, /@top-left \{[\s\S]*?content: "";/u);
+    assert.match(css, /@top-right \{[\s\S]*?content: "";/u);
+    assert.match(css, /@bottom-left \{[\s\S]*?content: "";/u);
+    assert.match(css, /@bottom-right \{[\s\S]*?content: "";/u);
   });
 
   it("normalizes source-authored inline colors in PDF DOM without losing text", () => {
@@ -2057,6 +2279,11 @@ describe("Achmage Editorial PDF helpers", () => {
 
   it("builds the fixed HanMark Editorial cover hierarchy with safe DOM APIs", async () => {
     const source = await readFile("src/io/editorialPdf.ts", "utf8");
+    const root = buildEditorialPdfRoot(
+      createTestDocument(),
+      { title: "Default", masthead: [], blocks: [] },
+      "Default"
+    ) as unknown as TestElement;
     const labels = [
       "HANMARK PDF PRINT",
       "EDITORIAL EDITION",
@@ -2071,7 +2298,7 @@ describe("Achmage Editorial PDF helpers", () => {
     ];
 
     for (const label of labels) {
-      assert.ok(source.includes(label), `cover must contain ${label}`);
+      assert.ok(root.textContent.includes(label), `cover must contain ${label}`);
     }
     for (const className of [
       "hanmark-editorial-pdf-cover-upper",
@@ -2087,9 +2314,13 @@ describe("Achmage Editorial PDF helpers", () => {
       "hanmark-editorial-pdf-cover-tags",
       "hanmark-editorial-pdf-cover-tag"
     ]) {
-      assert.ok(source.includes(className), `cover must create .${className}`);
+      assert.equal(
+        testElements(root, (element) => hasTestClass(element, className)).length,
+        className === "hanmark-editorial-pdf-cover-tag" ? 4 : 1,
+        `cover must create .${className}`
+      );
     }
-    assert.match(source, /balanceEditorialPdfCoverTitle\(fileTitle\)/u);
+    assert.match(root.textContent, /Default/u);
     assert.doesNotMatch(
       source,
       /\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|executeJavaScript/u
@@ -2279,6 +2510,47 @@ describe("Achmage Editorial PDF helpers", () => {
     assert.ok(printCall < firstPrintGeometry && firstPrintGeometry < snapshot);
     assert.equal(harness.listenerCount("beforeprint"), 0);
 
+    service.dispose();
+  });
+
+  it("captures one immutable custom-theme snapshot at print entry", async () => {
+    let releaseFonts: (() => void) | undefined;
+    const fontsReady = new Promise<void>((resolve) => {
+      releaseFonts = resolve;
+    });
+    const harness = createPrintHarness({ fontsReady });
+    const snapshot = customEditorialPdfThemeSnapshot((theme) => {
+      theme.colors.key = "#FFD400";
+      theme.cover.kicker = "ORIGINAL SNAPSHOT";
+    });
+    const service = new EditorialPdfService();
+    const printing = service.print({
+      markdown: "# Snapshot\n\nThe captured theme must not drift.",
+      fileName: "snapshot.md",
+      theme: snapshot,
+      window: harness.view,
+      document: harness.document,
+      chromiumMajor: 150
+    });
+
+    snapshot.theme.colors.key = "#FF0000";
+    snapshot.theme.cover.kicker = "MUTATED AFTER ENTRY";
+    const mountedRoot = harness.document.querySelector(
+      ".hanmark-editorial-pdf-root"
+    ) as unknown as TestElement | null;
+    const mountedStyle = harness.document.querySelector(
+      ".hanmark-editorial-pdf-style"
+    ) as unknown as TestElement | null;
+    assert.ok(mountedRoot);
+    assert.ok(mountedStyle);
+    assert.match(mountedRoot.textContent, /ORIGINAL SNAPSHOT/u);
+    assert.doesNotMatch(mountedRoot.textContent, /MUTATED AFTER ENTRY/u);
+    assert.match(mountedStyle.textContent, /background: #FFD400;/u);
+    assert.doesNotMatch(mountedStyle.textContent, /#FF0000/u);
+
+    releaseFonts?.();
+    await printing;
+    assert.equal(harness.printCalls(), 1);
     service.dispose();
   });
 
