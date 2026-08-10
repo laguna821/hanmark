@@ -370,6 +370,30 @@ describe("Editorial PDF theme JSON exchange", () => {
     assert.equal("id" in importedAgain, false);
   });
 
+  test("preserves the exact legacy footer when the builtin becomes a custom theme", () => {
+    const copied = normalizeEditorialPdfTheme(BUILTIN_EDITORIAL_PDF_THEME);
+    assert.equal(
+      copied.page.footerLeft,
+      "ACHMAGE / HANMARK PDF EDITION"
+    );
+    const imported = parseEditorialPdfThemeExchange(
+      stringifyEditorialPdfThemeExchange("기본 복사본", BUILTIN_EDITORIAL_PDF_THEME)
+    );
+    assert.equal(
+      imported.theme.page.footerLeft,
+      "ACHMAGE / HANMARK PDF EDITION"
+    );
+
+    const ordinaryLongFooter = normalizeEditorialPdfTheme({
+      ...copied,
+      page: {
+        ...copied.page,
+        footerLeft: "123456789012345678901"
+      }
+    });
+    assert.equal(ordinaryLongFooter.page.footerLeft, "12345678901234567890");
+  });
+
   test("removes blank imported tags before enforcing the eight-tag limit", () => {
     const exchange = JSON.parse(stringifyEditorialPdfThemeExchange(
       "Tag limit",

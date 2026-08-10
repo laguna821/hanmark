@@ -151,6 +151,7 @@ const NEAR_BLACK = "#182433";
 const BLACK = "#000000";
 const EMPTY_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 const DEFAULT_CUSTOM_THEME_NAME = "사용자 PDF 테마";
+const LEGACY_BUILTIN_FOOTER_LEFT = "ACHMAGE / HANMARK PDF EDITION";
 const CUSTOM_THEME_ID = /^custom:[0-9A-Za-z][0-9A-Za-z._-]{0,127}$/u;
 const HEX = /^#[0-9A-F]{6}$/u;
 
@@ -179,7 +180,7 @@ const DEFAULT_THEME_VALUE: EditorialPdfThemeV1 = {
     headerLeft: "HANMARK PDF PRINT",
     headerRightMode: "file-title",
     headerRightText: "",
-    footerLeft: "ACHMAGE / HANMARK PDF EDITION",
+    footerLeft: LEGACY_BUILTIN_FOOTER_LEFT,
     showPageNumber: true
   }
 };
@@ -284,6 +285,15 @@ export function normalizeEditorialPdfText(
   const source = typeof value === "string" ? value : fallback;
   const cleaned = replaceUnsafeTextCharacters(source);
   return graphemes(cleaned).slice(0, maximumGraphemes).join("");
+}
+
+function normalizeEditorialPdfFooter(value: unknown, fallback: string): string {
+  const source = typeof value === "string" ? value : fallback;
+  const cleaned = replaceUnsafeTextCharacters(source);
+  if (cleaned === LEGACY_BUILTIN_FOOTER_LEFT) return cleaned;
+  return graphemes(cleaned)
+    .slice(0, EDITORIAL_PDF_THEME_LIMITS.pageText)
+    .join("");
 }
 
 function normalizeThemeName(value: unknown, fallback = DEFAULT_CUSTOM_THEME_NAME): string {
@@ -408,9 +418,8 @@ export function normalizeEditorialPdfTheme(value: unknown): EditorialPdfThemeV1 
         EDITORIAL_PDF_THEME_LIMITS.pageText,
         fallback.page.headerRightText
       ),
-      footerLeft: normalizeEditorialPdfText(
+      footerLeft: normalizeEditorialPdfFooter(
         page.footerLeft,
-        EDITORIAL_PDF_THEME_LIMITS.pageText,
         fallback.page.footerLeft
       ),
       showPageNumber: typeof page.showPageNumber === "boolean"
@@ -997,6 +1006,18 @@ function assertJsonString(
   return cleaned;
 }
 
+function assertJsonFooter(value: unknown): string {
+  if (typeof value === "string") {
+    const cleaned = replaceUnsafeTextCharacters(value);
+    if (cleaned === LEGACY_BUILTIN_FOOTER_LEFT) return cleaned;
+  }
+  return assertJsonString(
+    value,
+    "왼쪽 꼬리말",
+    EDITORIAL_PDF_THEME_LIMITS.pageText
+  );
+}
+
 function assertJsonTitleMode(value: unknown, label: string): EditorialPdfTitleMode {
   if (value === "file-title" || value === "custom" || value === "blank") return value;
   throw new Error(`${label}이(가) 올바른 제목 모드가 아닙니다.`);
@@ -1067,7 +1088,7 @@ function strictExchangeTheme(value: unknown): EditorialPdfThemeV1 {
       headerLeft: assertJsonString(page.headerLeft, "왼쪽 머리말", EDITORIAL_PDF_THEME_LIMITS.pageText),
       headerRightMode: assertJsonTitleMode(page.headerRightMode, "오른쪽 머리말 모드"),
       headerRightText: assertJsonString(page.headerRightText, "오른쪽 머리말", EDITORIAL_PDF_THEME_LIMITS.pageText),
-      footerLeft: assertJsonString(page.footerLeft, "왼쪽 꼬리말", EDITORIAL_PDF_THEME_LIMITS.pageText),
+      footerLeft: assertJsonFooter(page.footerLeft),
       showPageNumber: page.showPageNumber
     }
   };
