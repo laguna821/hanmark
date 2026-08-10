@@ -350,11 +350,13 @@ export class EditorialPdfThemeBuilderModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("hanmark-resizable-workspace-modal");
+    this.modalEl.addClass("hanmark-pdf-theme-workspace-modal");
     this.render();
   }
 
   onClose(): void {
     this.modalEl.removeClass("hanmark-resizable-workspace-modal");
+    this.modalEl.removeClass("hanmark-pdf-theme-workspace-modal");
     this.contentEl.empty();
   }
 
@@ -844,6 +846,7 @@ export class EditorialPdfThemeManagerModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("hanmark-resizable-workspace-modal");
+    this.modalEl.addClass("hanmark-pdf-theme-workspace-modal");
     this.render();
     if (this.options.startInCreate) {
       this.options.startInCreate = false;
@@ -853,6 +856,7 @@ export class EditorialPdfThemeManagerModal extends Modal {
 
   onClose(): void {
     this.modalEl.removeClass("hanmark-resizable-workspace-modal");
+    this.modalEl.removeClass("hanmark-pdf-theme-workspace-modal");
     this.contentEl.empty();
   }
 

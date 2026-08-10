@@ -39,7 +39,7 @@ test("PDF theme builder keeps a three-step novice flow and three overrides", asy
   assert.match(source, /await this\.options\.save\(/u);
   assert.match(
     source,
-    /onClose\(\): void \{\s*this\.modalEl\.removeClass\("hanmark-resizable-workspace-modal"\);\s*this\.contentEl\.empty\(\);\s*\}/u
+    /onClose\(\): void \{\s*this\.modalEl\.removeClass\("hanmark-resizable-workspace-modal"\);\s*this\.modalEl\.removeClass\("hanmark-pdf-theme-workspace-modal"\);\s*this\.contentEl\.empty\(\);\s*\}/u
   );
 });
 
@@ -81,11 +81,33 @@ test("export modal persists theme selection with rollback and reports warnings",
 });
 
 test("settings and CSS expose keyboard-visible PDF theme management", async () => {
+  const manager = await readFile(
+    "src/ui/EditorialPdfThemeManagerModal.ts",
+    "utf8"
+  );
   const settings = await readFile("src/ui/HanmarkSettingTab.ts", "utf8");
   const css = await readFile("styles.css", "utf8");
 
+  assert.match(manager, /hanmark-pdf-theme-workspace-modal/u);
   assert.match(settings, /PDF 테마 관리/u);
   assert.match(settings, /openEditorialPdfThemeManager/u);
+  assert.match(
+    css,
+    /\.hanmark-resizable-workspace-modal\.hanmark-pdf-theme-workspace-modal[\s\S]*?width: 96vw;[\s\S]*?height: 94vh;/u
+  );
+  assert.match(
+    css,
+    /\.modal\.hanmark-resizable-workspace-modal\.hanmark-pdf-theme-workspace-modal[\s\S]*?> \.modal-content[\s\S]*?flex: 1 1 auto;[\s\S]*?min-height: 0;[\s\S]*?overflow: auto;/u
+  );
+  assert.match(
+    css,
+    /> \.modal-content\.hanmark-pdf-theme-builder[\s\S]*?display: flex;[\s\S]*?overflow: hidden;/u
+  );
+  assert.match(
+    css,
+    /\.hanmark-pdf-theme-builder-panel \{[\s\S]*?flex: 1 1 auto;[\s\S]*?overflow: auto;/u
+  );
+  assert.match(css, /@media \(max-width: 1440px\), \(max-height: 900px\)/u);
   assert.match(css, /\.hanmark-pdf-theme-builder button:focus-visible/u);
   assert.match(css, /\.hanmark-pdf-theme-row:has\(input:focus-visible\)/u);
   assert.match(css, /\.hanmark-pdf-theme-diagnostics\.has-warning/u);

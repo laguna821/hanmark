@@ -2128,6 +2128,37 @@
   overflow: hidden;
 }
 
+/* PDF 테마 작업창은 노트북에서도 처음부터 거의 전체 화면으로 열고,
+   제목줄을 제외한 실제 내용만 스크롤되도록 한다. */
+.modal-container
+  .modal.hanmark-resizable-workspace-modal.hanmark-pdf-theme-workspace-modal {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 96vw;
+  height: 94vh;
+}
+
+.modal-container
+  .modal.hanmark-resizable-workspace-modal.hanmark-pdf-theme-workspace-modal
+  > .modal-title {
+  flex: 0 0 auto;
+}
+
+.modal-container
+  .modal.hanmark-resizable-workspace-modal.hanmark-pdf-theme-workspace-modal
+  > .modal-content {
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .modal-container .modal.hanmark-resizable-workspace-modal::after {
   content: "";
   position: absolute;
@@ -2170,6 +2201,14 @@
     min-height: 0;
     max-width: calc(100vw - 8px);
     max-height: calc(100vh - 8px);
+  }
+}
+
+@media (max-width: 1440px), (max-height: 900px) {
+  .modal-container
+    .modal.hanmark-resizable-workspace-modal.hanmark-pdf-theme-workspace-modal {
+    width: calc(100vw - 8px);
+    height: calc(100vh - 8px);
   }
 }
 
@@ -2228,6 +2267,18 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+}
+
+.modal-container
+  .modal.hanmark-pdf-theme-workspace-modal
+  > .modal-content.hanmark-pdf-theme-builder {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hanmark-pdf-theme-builder-intro {
+  flex: 0 0 auto;
 }
 
 .hanmark-pdf-theme-manager > p,
@@ -2323,7 +2374,10 @@
 }
 
 .hanmark-pdf-theme-builder-panel {
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 14px;
@@ -2603,8 +2657,8 @@ input[aria-invalid="true"] + .hanmark-pdf-theme-override-ratio {
 }
 
 .hanmark-pdf-theme-builder-footer {
-  position: sticky;
-  bottom: -16px;
+  position: static;
+  flex: 0 0 auto;
   z-index: 2;
   padding: 12px 0 2px;
   border-top: 1px solid var(--background-modifier-border);
@@ -2622,7 +2676,7 @@ input[aria-invalid="true"] + .hanmark-pdf-theme-override-ratio {
   outline-offset: 2px;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .hanmark-pdf-theme-text-columns,
   .hanmark-pdf-theme-preview {
     grid-template-columns: 1fr;
