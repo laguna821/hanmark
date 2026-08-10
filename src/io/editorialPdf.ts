@@ -853,7 +853,7 @@ export function createEditorialPdfStyles(
   const fallbackHeaderSurface =
     !renderTheme || renderTheme.builtIn
       ? palette.keyMutedInk
-      : palette.keySurface;
+      : palette.keyTextSurface;
   const customTagRowMinimum =
     !renderTheme || renderTheme.builtIn
       ? ""
@@ -1057,7 +1057,7 @@ export function createEditorialPdfStyles(
     align-items: center;
     padding: 24mm 27mm 18mm;
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
     text-align: center;
   }
 
@@ -1162,7 +1162,7 @@ export function createEditorialPdfStyles(
     padding: 1.3mm 3mm 1.1mm;
     border-radius: 999pt;
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
     font-size: 7pt;
     font-weight: 700;
     line-height: 1;
@@ -1247,7 +1247,7 @@ export function createEditorialPdfStyles(
     border: 0;
     border-radius: 0;
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
     break-inside: avoid-page;
     page-break-inside: avoid;
   }
@@ -1279,7 +1279,7 @@ export function createEditorialPdfStyles(
     border: 0;
     border-radius: 0;
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
     font-size: 8.5pt;
     line-height: 1.45;
     white-space: pre-wrap;
@@ -1358,7 +1358,7 @@ export function createEditorialPdfStyles(
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body th {
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
     font-weight: 700;
   }
 
@@ -1406,7 +1406,7 @@ export function createEditorialPdfStyles(
     margin: 0 0 0.35em;
     padding: 0.4em 0.65em;
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
     font-size: 8pt;
     font-weight: 700;
     line-height: 1.3;
@@ -1487,7 +1487,7 @@ export function createEditorialPdfStyles(
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-upper {
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-upper * {
@@ -1515,7 +1515,7 @@ export function createEditorialPdfStyles(
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-cover-tag {
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body p,
@@ -1548,7 +1548,7 @@ export function createEditorialPdfStyles(
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_LABEL_CLASS},
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_CONTAINER_FALLBACK_LABEL_CLASS} {
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_HEADER_ROW_CLASS} .${EDITORIAL_PDF_TABLE_FALLBACK_LABEL_CLASS} {
@@ -1583,7 +1583,7 @@ export function createEditorialPdfStyles(
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body pre,
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body pre code {
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
     border-color: transparent;
     text-shadow: none;
   }
@@ -1600,7 +1600,7 @@ export function createEditorialPdfStyles(
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body th {
     border-color: ${palette.border};
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body td {
@@ -1616,7 +1616,7 @@ export function createEditorialPdfStyles(
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body blockquote,
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-callout {
     color: ${palette.onKey};
-    background: ${palette.keySurface};
+    background: ${palette.keyTextSurface};
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} > section.${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body blockquote *,

@@ -866,7 +866,7 @@ describe("Achmage Editorial PDF helpers", () => {
       new RegExp(
         `hanmark-editorial-pdf-cover-upper \\{[\\s\\S]*?` +
           `color: ${palette.onKey};[\\s\\S]*?` +
-          `background: ${palette.keySurface};`,
+          `background: ${palette.keyTextSurface};`,
         "u"
       )
     );
@@ -875,7 +875,7 @@ describe("Achmage Editorial PDF helpers", () => {
       new RegExp(
         `hanmark-editorial-pdf-body pre,[\\s\\S]*?` +
           `color: ${palette.onKey};[\\s\\S]*?` +
-          `background: ${palette.keySurface};`,
+          `background: ${palette.keyTextSurface};`,
         "u"
       )
     );
@@ -899,6 +899,39 @@ describe("Achmage Editorial PDF helpers", () => {
     assert.match(css, /background: #02653D;/u);
     assert.match(css, /color: #02653D;/u);
     assert.doesNotMatch(css, /#002E6E/iu);
+  });
+
+  it("renders every on-key text role on the resolved magenta text surface", () => {
+    const snapshot = customEditorialPdfThemeSnapshot((theme) => {
+      theme.colors.key = "#D709D1";
+      theme.colors.overrides.onKey = null;
+      theme.colors.overrides.keyInk = null;
+      theme.colors.overrides.accentLine = null;
+    });
+    const renderTheme = editorialPdfRenderTheme(snapshot);
+    const { palette, onKeyResolution } = renderTheme.resolved;
+    const css = createEditorialPdfStyles("Magenta surface regression", renderTheme);
+
+    assert.equal(palette.keySurface, "#D709D1");
+    assert.equal(palette.keyTextSurface, "#D300CE");
+    assert.equal(palette.onKey, "#FFFFFF");
+    assert.equal(onKeyResolution.strategy, "automatic-adjusted");
+    for (const selector of [
+      "hanmark-editorial-pdf-cover-upper",
+      "hanmark-editorial-pdf-cover-tag",
+      "hanmark-editorial-pdf-body pre",
+      "hanmark-editorial-pdf-body th",
+      "hanmark-editorial-pdf-body blockquote",
+      EDITORIAL_PDF_TABLE_FALLBACK_LABEL_CLASS,
+      EDITORIAL_PDF_CONTAINER_FALLBACK_LABEL_CLASS
+    ]) {
+      assert.match(
+        css,
+        new RegExp(`${selector}[\\s\\S]*?background: #D300CE;`, "u"),
+        selector
+      );
+    }
+    assert.doesNotMatch(css, /background: #D709D1;/u);
   });
 
   it("preserves blank cover and page slots without reviving fallback glyphs", () => {
