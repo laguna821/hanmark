@@ -35,7 +35,20 @@ test("PDF theme builder keeps a three-step novice flow and three overrides", asy
   assert.match(source, /token: "keyInk"/u);
   assert.match(source, /token: "accentLine"/u);
   assert.match(source, /자동 추천 적용/u);
-  assert.match(source, /낮은 대비도 저장되지만 경고가 계속 표시됩니다/u);
+  assert.match(source, /낮은 대비도 저장되며 실제 수치와 경고가 계속 표시됩니다/u);
+  assert.match(source, /왜 이 색인가요\?/u);
+  assert.match(source, /renderColorChoiceExplanation/u);
+  assert.match(source, /editorialPdfContrastStatus\(resolved\)/u);
+  assert.match(source, /palette\.keyTextSurface/u);
+  assert.match(source, /--hanmark-pdf-preview-key-text-surface/u);
+  assert.match(
+    source,
+    /직접 지정하면 글자용 면 자동 보정이 꺼지고 원 키 컬러 위에 적용됩니다/u
+  );
+  assert.match(source, /PDF 전체의 WCAG 준수를 뜻하지 않습니다/u);
+  assert.match(source, /화면 안티앨리어싱/u);
+  assert.doesNotMatch(source, /자동 추천이 대부분 가장 안전합니다/u);
+  assert.doesNotMatch(source, /선택한 색 자체는 바꾸지 않습니다/u);
   assert.doesNotMatch(source, /프로젝트 회의 기록/u);
   assert.match(source, /getActiveFile\(\)\?\.basename\.trim\(\)/u);
   assert.match(source, /previewFileTitle/u);
@@ -43,6 +56,8 @@ test("PDF theme builder keeps a three-step novice flow and three overrides", asy
   assert.match(source, /editorialPdfContrastGuidance/u);
   assert.match(source, /formatEditorialPdfContrastRatio/u);
   assert.match(source, /3:1은 큰 글자에만 적용되는 기준입니다/u);
+  assert.match(source, /role: "status"/u);
+  assert.match(source, /"aria-live": "polite"/u);
   assert.match(source, /const codeBlock = body\.createEl\("pre"\)/u);
   assert.match(source, /await this\.options\.save\(/u);
   assert.match(
@@ -78,6 +93,11 @@ test("export modal persists theme selection with rollback and reports warnings",
   assert.match(source, /await this\.actions\.selectPdfTheme/u);
   assert.match(source, /select\.value = previousId/u);
   assert.match(source, /editorialPdfContrastStatus\(resolved\)/u);
+  assert.match(
+    source,
+    /--hanmark-pdf-theme-swatch-color"[\s\S]*?resolved\.palette\.keySurface/u
+  );
+  assert.doesNotMatch(source, /resolved\.palette\.keyTextSurface/u);
   assert.doesNotMatch(source, /자동 가독성 검사 통과/u);
   assert.match(source, /openPdfThemeManager\?\.\("create"\)/u);
   assert.match(source, /openPdfThemeManager\?\.\("manage"\)/u);
@@ -132,7 +152,20 @@ test("settings and CSS expose keyboard-visible PDF theme management", async () =
   );
   assert.match(
     css,
-    /\.hanmark-pdf-theme-preview-body pre \{[\s\S]*?background: var\(--hanmark-pdf-preview-key\);[\s\S]*?color: var\(--hanmark-pdf-preview-on-key\);/u
+    /\.hanmark-pdf-theme-preview-body pre \{[\s\S]*?background: var\(--hanmark-pdf-preview-key-text-surface\);[\s\S]*?color: var\(--hanmark-pdf-preview-on-key\);/u
+  );
+  assert.match(
+    css,
+    /\.hanmark-pdf-theme-preview-cover-top \{[\s\S]*?background: var\(--hanmark-pdf-preview-key-text-surface\);/u
+  );
+  assert.match(
+    css,
+    /\.hanmark-pdf-theme-preview-tags span \{[\s\S]*?background: var\(--hanmark-pdf-preview-key-text-surface\);/u
+  );
+  assert.match(css, /\.hanmark-pdf-theme-contrast-explanation > summary/u);
+  assert.match(
+    css,
+    /--hanmark-pdf-theme-swatch-color,[\s\S]*?--hanmark-pdf-preview-key/u
   );
   assert.match(css, /\.hanmark-pdf-theme-row:focus-within/u);
   assert.doesNotMatch(css, /:has\(/u);

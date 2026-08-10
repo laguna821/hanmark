@@ -60,7 +60,8 @@ const OVERRIDE_LABELS: ReadonlyArray<{
   {
     token: "onKey",
     label: "키 배경 위 글자",
-    description: "표지 상단과 태그처럼 키 컬러 면 위에 놓이는 글자"
+    description:
+      "직접 지정하면 글자용 면 자동 보정이 꺼지고 원 키 컬러 위에 적용됩니다."
   },
   {
     token: "keyInk",
@@ -106,6 +107,10 @@ function applyPalette(
 ): void {
   const { palette } = resolved;
   element.style.setProperty("--hanmark-pdf-preview-key", palette.keySurface);
+  element.style.setProperty(
+    "--hanmark-pdf-preview-key-text-surface",
+    palette.keyTextSurface
+  );
   element.style.setProperty("--hanmark-pdf-preview-on-key", palette.onKey);
   element.style.setProperty("--hanmark-pdf-preview-key-ink", palette.keyInk);
   element.style.setProperty(
@@ -123,23 +128,70 @@ function diagnosticLabel(item: EditorialPdfContrastDiagnostic): string {
     ?? item.token;
 }
 
+function renderColorChoiceExplanation(
+  root: HTMLElement,
+  resolved: ResolvedEditorialPdfTheme
+): void {
+  const details = root.createEl("details", {
+    cls: "hanmark-pdf-theme-contrast-explanation"
+  });
+  details.createEl("summary", { text: "왜 이 색인가요?" });
+  const { onKeyResolution: resolution } = resolved;
+  let explanation: string;
+  switch (resolution.strategy) {
+    case "builtin":
+      explanation =
+        "내장 테마는 HanMark 2.5.5의 키 컬러와 글자색을 그대로 유지합니다.";
+      break;
+    case "manual-exact":
+      explanation =
+        "키 배경 위 글자를 직접 지정해 글자용 면 자동 보정이 꺼졌습니다. "
+        + "입력한 키 컬러를 그대로 사용하며, 표시된 대비는 실제 인쇄 조합의 수치입니다.";
+      break;
+    case "automatic-adjusted":
+      explanation =
+        `저장된 키 컬러 ${resolution.seed}는 바꾸지 않고, 작은 글자도 4.5:1 이상이 되도록 `
+        + `글자가 놓이는 면만 ${resolution.surface}로 미세 조정했습니다. `
+        + "밝은 글자의 경계가 더 또렷할 수 있는 대비 극성과 국소 명도는 자동 후보를 고르는 보조 신호로만 사용합니다.";
+      break;
+    case "automatic-wcag-fallback":
+      explanation =
+        "밝은 글자의 경계가 더 또렷할 수 있지만, 허용된 미세 면 보정 범위 안에서 "
+        + "일반 글자 4.5:1을 만들 수 없어 원 키 컬러와 기준을 통과하는 글자색을 사용합니다.";
+      break;
+    case "automatic-exact":
+      explanation =
+        "원 키 컬러를 그대로 사용해도 일반 글자 4.5:1 이상이므로 별도의 글자용 면 보정 없이 글자색만 자동 적용했습니다.";
+      break;
+  }
+  details.createEl("p", { text: explanation });
+  details.createEl("p", {
+    text: "대비 수치는 WCAG 대비 공식에 따른 색 조합 판정이며, PDF 전체의 WCAG 준수를 뜻하지 않습니다."
+  });
+  details.createEl("p", {
+    text: "글꼴 굵기와 화면 안티앨리어싱 때문에 실제 획은 선언 색의 계산값보다 흐리게 보일 수 있으므로 미리보기와 저장 PDF도 함께 확인하세요."
+  });
+}
+
 function renderDiagnostics(
   root: HTMLElement,
   resolved: ResolvedEditorialPdfTheme
 ): void {
   root.empty();
-  root.setAttribute("aria-live", "polite");
-  root.setAttribute("aria-atomic", "true");
   const failing = resolved.diagnostics.filter(
     (item) => item.enforced && !item.passes
   );
   root.addClass(failing.length ? "has-warning" : "is-safe");
   root.removeClass(failing.length ? "is-safe" : "has-warning");
-  root.createEl("strong", {
-    text: failing.length
-      ? `대비 경고 ${failing.length}개`
-      : "설정된 대비 기준 통과"
+  const liveStatus = root.createDiv({
+    cls: "hanmark-pdf-theme-diagnostic-status",
+    attr: {
+      role: "status",
+      "aria-live": "polite",
+      "aria-atomic": "true"
+    }
   });
+  liveStatus.createEl("strong", { text: editorialPdfContrastStatus(resolved) });
   const list = root.createEl("ul");
   for (const item of resolved.diagnostics) {
     list.createEl("li", {
@@ -167,9 +219,10 @@ function renderDiagnostics(
   }
   if (failing.length) {
     root.createEl("p", {
-      text: "직접 지정한 색은 그대로 저장하고 인쇄할 수 있습니다. 잘 보이지 않을 수 있으므로 자동 추천 적용을 권장합니다."
+      text: "직접 지정한 색은 그대로 저장·인쇄됩니다. 키 배경 위 글자를 직접 지정했다면 글자용 면 보정도 꺼집니다. 표시된 실제 비율을 확인하거나 자동 추천 적용으로 되돌리세요."
     });
   }
+  renderColorChoiceExplanation(root, resolved);
 }
 
 function renderPreview(
@@ -460,7 +513,7 @@ export class EditorialPdfThemeBuilderModal extends Modal {
   private renderColorStep(root: HTMLElement): void {
     root.createEl("h3", { text: "1단계 · 키 컬러 고르기" });
     root.createEl("p", {
-      text: "브랜드 색 하나만 고르면 표지 글자, 본문 제목, 선과 옅은 배경을 읽기 쉽게 자동 계산합니다."
+      text: "브랜드 색 하나를 저장하면 글자와 선, 옅은 배경을 자동 계산합니다. 필요한 경우 저장한 색은 유지하고 글자가 놓이는 면만 미세 조정합니다."
     });
     this.renderNameField(root);
 
@@ -501,12 +554,20 @@ export class EditorialPdfThemeBuilderModal extends Modal {
       help.setText(
         invalid
           ? "키 컬러는 #RRGGBB 형식이어야 합니다."
-          : `${canonical} · 선택한 색 자체는 바꾸지 않습니다.`
+          : `${canonical} · 이 키 컬러는 그대로 저장되며, 글자용 면은 필요할 때만 미세 조정됩니다.`
       );
       if (!canonical) {
         diagnostic.empty();
         diagnostic.addClass("has-warning");
-        diagnostic.createEl("strong", { text: "올바른 HEX를 입력하세요." });
+        diagnostic.removeClass("is-safe");
+        const status = diagnostic.createDiv({
+          attr: {
+            role: "status",
+            "aria-live": "polite",
+            "aria-atomic": "true"
+          }
+        });
+        status.createEl("strong", { text: "올바른 HEX를 입력하세요." });
         return;
       }
       this.draft.colors.key = canonical;
@@ -701,7 +762,7 @@ export class EditorialPdfThemeBuilderModal extends Modal {
     });
     advanced.createEl("summary", { text: "고급 색상 3개 직접 지정" });
     advanced.createEl("p", {
-      text: "자동 추천이 대부분 가장 안전합니다. 브랜드 규정상 꼭 필요할 때만 색을 직접 지정하세요. 낮은 대비도 저장되지만 경고가 계속 표시됩니다."
+      text: "자동 설정은 일반 글자 4.5:1을 우선합니다. 브랜드 규정상 직접 지정해야 할 때만 변경하세요. 낮은 대비도 저장되며 실제 수치와 경고가 계속 표시됩니다."
     });
     for (const item of OVERRIDE_LABELS) {
       this.renderOverrideField(advanced, item.token, item.label, item.description);
