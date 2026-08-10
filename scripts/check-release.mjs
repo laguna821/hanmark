@@ -1,11 +1,12 @@
 import { access, readFile } from "node:fs/promises";
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
-const [manifest, pkg, lock, versions, releaseWorkflow] = await Promise.all([
+const [manifest, pkg, lock, versions, ciWorkflow, releaseWorkflow] = await Promise.all([
   readJson("manifest.json"),
   readJson("package.json"),
   readJson("package-lock.json"),
   readJson("versions.json"),
+  readFile(".github/workflows/ci.yml", "utf8"),
   readFile(".github/workflows/release.yml", "utf8")
 ]);
 
@@ -50,6 +51,9 @@ for (const [name, safeVersion] of Object.entries(requiredOverrides)) {
   }
 }
 
+if (!ciWorkflow.includes(`branches: ["${version}"]`)) {
+  throw new Error(`CI workflow is not pinned to branch ${version}`);
+}
 if (!releaseWorkflow.includes(`tags: ["${version}"]`)) {
   throw new Error(`Release workflow is not pinned to tag ${version}`);
 }
