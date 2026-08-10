@@ -1025,7 +1025,17 @@ function strictExchangeTheme(value: unknown): EditorialPdfThemeV1 {
   };
   const cover = value.cover;
   const tags = cover.tags;
-  if (!Array.isArray(tags) || tags.length > EDITORIAL_PDF_THEME_LIMITS.tagCount) {
+  if (!Array.isArray(tags)) {
+    throw new Error("표지 태그가 배열이 아닙니다.");
+  }
+  const normalizedTags = tags
+    .map((tag, index) => assertJsonString(
+      tag,
+      `표지 태그 ${index + 1}`,
+      EDITORIAL_PDF_THEME_LIMITS.tag
+    ).trim())
+    .filter(Boolean);
+  if (normalizedTags.length > EDITORIAL_PDF_THEME_LIMITS.tagCount) {
     throw new Error(`표지 태그는 ${EDITORIAL_PDF_THEME_LIMITS.tagCount}개 이하여야 합니다.`);
   }
   const page = value.page;
@@ -1051,13 +1061,7 @@ function strictExchangeTheme(value: unknown): EditorialPdfThemeV1 {
       brand: assertJsonString(cover.brand, "표지 브랜드", EDITORIAL_PDF_THEME_LIMITS.coverText),
       system: assertJsonString(cover.system, "표지 시스템", EDITORIAL_PDF_THEME_LIMITS.coverText),
       detail: assertJsonString(cover.detail, "표지 설명", EDITORIAL_PDF_THEME_LIMITS.coverText),
-      tags: tags
-        .map((tag, index) => assertJsonString(
-          tag,
-          `표지 태그 ${index + 1}`,
-          EDITORIAL_PDF_THEME_LIMITS.tag
-        ).trim())
-        .filter(Boolean)
+      tags: normalizedTags
     },
     page: {
       headerLeft: assertJsonString(page.headerLeft, "왼쪽 머리말", EDITORIAL_PDF_THEME_LIMITS.pageText),

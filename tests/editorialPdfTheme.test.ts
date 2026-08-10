@@ -370,6 +370,34 @@ describe("Editorial PDF theme JSON exchange", () => {
     assert.equal("id" in importedAgain, false);
   });
 
+  test("removes blank imported tags before enforcing the eight-tag limit", () => {
+    const exchange = JSON.parse(stringifyEditorialPdfThemeExchange(
+      "Tag limit",
+      BUILTIN_EDITORIAL_PDF_THEME
+    )) as { theme: { cover: { tags: unknown[] } } };
+    exchange.theme.cover.tags = [
+      "",
+      "  ",
+      "#ONE",
+      "#TWO",
+      "#THREE",
+      "#FOUR",
+      "#FIVE",
+      "#SIX",
+      "#SEVEN",
+      "#EIGHT"
+    ];
+    assert.deepEqual(
+      parseEditorialPdfThemeExchange(JSON.stringify(exchange)).theme.cover.tags,
+      ["#ONE", "#TWO", "#THREE", "#FOUR", "#FIVE", "#SIX", "#SEVEN", "#EIGHT"]
+    );
+    exchange.theme.cover.tags.push("#NINE");
+    assert.throws(
+      () => parseEditorialPdfThemeExchange(JSON.stringify(exchange)),
+      /8/u
+    );
+  });
+
   test("rejects oversized, malformed, and invalid-schema exchanges", () => {
     assert.throws(
       () => parseEditorialPdfThemeExchange("x".repeat(256 * 1024 + 1)),
