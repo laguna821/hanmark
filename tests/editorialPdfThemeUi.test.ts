@@ -109,7 +109,8 @@ test("settings and CSS expose keyboard-visible PDF theme management", async () =
   );
   assert.match(css, /@media \(max-width: 1440px\), \(max-height: 900px\)/u);
   assert.match(css, /\.hanmark-pdf-theme-builder button:focus-visible/u);
-  assert.match(css, /\.hanmark-pdf-theme-row:has\(input:focus-visible\)/u);
+  assert.match(css, /\.hanmark-pdf-theme-row:focus-within/u);
+  assert.doesNotMatch(css, /:has\(/u);
   assert.match(css, /\.hanmark-pdf-theme-diagnostics\.has-warning/u);
   assert.doesNotMatch(css, /\.hanmark-pdf-theme[^\n{]*\{[^}]*!important/gu);
 });

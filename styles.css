@@ -2312,7 +2312,7 @@
   background: var(--background-modifier-hover);
 }
 
-.hanmark-pdf-theme-row:has(input:focus-visible) {
+.hanmark-pdf-theme-row:focus-within {
   outline: 3px solid var(--interactive-accent);
   outline-offset: 2px;
 }
