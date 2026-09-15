@@ -29,3 +29,17 @@ Kordoc 4.2.5와 Markdown-it 14.3.0을 유지한다. xmldom은 같은 0.8 계열�
 2026-09-15: 새 감사 결과와 호환 계열 내 갱신 범위 기록.
 
 검증 결과: 직접 xmldom 0.8.15, Kordoc 내부 xmldom 0.9.12(기존 0.9 계열 유지). 배포 의존성 감사 0건.
+
+
+## 2.6.1 Community preview 후속 점검
+
+2026-09-15의 첫 preview가 잠금 파일의 선택 의존성 sharp 0.35.3과 adm-zip 0.6.0에 추가 advisory를 보고했다. 배포 경로 감사 0건과 별개로 스캐너는 설치에서 제외된 선택 의존성도 읽는다. 같은 호환 계열의 sharp 0.35.4와 adm-zip 0.6.1을 override하고 check-release 기준도 일치시켰다. 이 모듈의 네이티브 실행 경로는 계속 번들에서 제거한다.
+
+개발 의존성 감사에서 나온 brace-expansion과 js-yaml도 각 부모가 허용하는 버전 범위 안에서 잠금 파일을 갱신했다. Kordoc 4.2.5, Markdown-it 14.3.0과 직접 개발 도구 버전은 유지한다.
+
+- https://github.com/advisories/GHSA-rgj7-g3m4-5g8c
+- https://github.com/advisories/GHSA-vwc7-r8mq-g2x9
+- https://github.com/advisories/GHSA-rgw5-rvv9-x895
+- https://github.com/advisories/GHSA-2883-xcg3-v3hh
+
+배포 감사와 개발 의존성 포함 npm audit 모두 0건으로 확인했다. 최종 잠금 파일의 Community preview는 같은 최종 커밋으로 다시 실행한다.

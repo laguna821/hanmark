@@ -38,12 +38,12 @@ if (lock.packages?.["node_modules/@fontsource/pretendard"]?.version !== "5.3.0")
 }
 
 const requiredOverrides = {
-  "adm-zip": "0.6.0",
+  "adm-zip": "0.6.1",
   "fast-uri": "3.1.7",
   hono: "4.13.7",
   "ip-address": "10.3.1",
   protobufjs: "8.7.1",
-  sharp: "0.35.3"
+  sharp: "0.35.4"
 };
 for (const [name, safeVersion] of Object.entries(requiredOverrides)) {
   if (pkg.overrides?.[name] !== safeVersion) {

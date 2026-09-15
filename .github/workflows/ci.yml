@@ -27,6 +27,7 @@ jobs:
           cache: npm
       - run: npm ci --omit=optional
       - run: npm audit --omit=dev --omit=optional
+      - run: npm audit --include=dev --include=optional
       - run: npm run check
       - run: npx playwright install --with-deps chromium
       - run: npm run test:pdf-render

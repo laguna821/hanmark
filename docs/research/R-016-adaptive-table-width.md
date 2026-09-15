@@ -74,3 +74,10 @@
 - https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/table-layout
 - https://developer.mozilla.org/en-US/docs/Web/API/Range/getClientRects
 - https://docs.obsidian.md/community-directory/manage-entry
+
+
+## 원격 검증 중 확인한 차이
+
+첫 후보 8a23325에서 macOS CI 전체 검사가 통과했다. Ubuntu는 표 셀의 PDF 위치 검사를 통과했지만 본문 marker 비교에서 실패했다. PDF 추출이 정렬된 단어 안에 삽입하는 공백을 제거하고 비공백 문자·순서의 완전 일치 검사를 유지한 23f5409에서 Ubuntu 전체 CI가 통과했다. 문서 내용이나 renderer를 바꾸어 검사를 우회하지 않았다.
+
+첫 Community preview의 선택 의존성 경고는 R-015의 후속 패치로 대응한다. 이 변경 후 최종 CI와 preview를 같은 SHA로 다시 실행한다.
