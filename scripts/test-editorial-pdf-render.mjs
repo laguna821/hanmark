@@ -268,8 +268,13 @@ try {
           const content = await (await pdf.getPage(i)).getTextContent();
           text += content.items.map(item => item.str || "").join("");
         }
-        assert.deepEqual(text.match(/P\d+(?:BEGIN|END)/gu), Array.from({ length: 42 }, (_, i) => [`P${i}BEGIN`, `P${i}END`]).flat());
-        assert.deepEqual(text.match(/CODE\d+/gu), Array.from({ length: 100 }, (_, i) => `CODE${i}`));
+        // PDF extraction may insert spaces inside justified words on Linux.
+        // Keep every non-whitespace character and all marker ordering checks.
+        const compact = text.replace(/\s/gu, "");
+        const markers = compact.match(/P\d+(?:BEGIN|END)/gu);
+        if (markers?.length !== 84) console.log("PDF marker diagnostics", text.match(/P.{0,18}(?:BEGIN|END)/gu));
+        assert.deepEqual(markers, Array.from({ length: 42 }, (_, i) => [`P${i}BEGIN`, `P${i}END`]).flat());
+        assert.deepEqual(compact.match(/CODE\d+/gu), Array.from({ length: 100 }, (_, i) => `CODE${i}`));
       }
     } finally { await pdf.destroy(); }
     if (failures.length) console.log("Geometry failures", failures);
