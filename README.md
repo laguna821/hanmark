@@ -2,7 +2,7 @@
 
 **A desktop Obsidian plugin that connects durable Markdown notes with editable Korean HWP/HWPX documents.**
 
-HanMark 2.6.0 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files, self-contained HTML, and Editorial PDF requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
+HanMark 2.6.1 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, legacy source patching, validation, image embedding, document styles, and fast SVG preview. Creating HWPX files, self-contained HTML, and Editorial PDF requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup.
 
 > Keep the source of knowledge in portable Markdown. Produce HWPX, DOCX, HTML, or PDF when an institution requires it.
 
@@ -12,12 +12,13 @@ HanMark 2.6.0 uses exactly pinned **Kordoc 4.2.5** for HWPX generation, import, 
 
 ## English
 
-### New in 2.6.0 (development build)
+### New in 2.6.1
 
 - **Direct PDF save:** generate the PDF, then choose **파일로 저장**. Native printing remains a separate action.
 - **Journal layout:** two-column A uses full-width figures; B uses column-width figures. Both place nearby figures to reduce empty space.
+- **Independent table width:** choose automatic, one column, or full body width. Automatic sizing uses actual wrapping and overflow at both widths; compact numeric tables stay narrow while dense tables expand. Long tables keep fixed column widths and repeat their headers.
 - **Independent section breaks:** optionally start each top-level heading group on a fresh page. The default remains single-column with this option off.
-- See [2.6.0 notes and validation limits](release-notes/2.6.0.md). Real macOS Obsidian validation is still required before release.
+- See [2.6.1 notes and validation limits](release-notes/2.6.1.md). macOS hardware testing was waived by the maintainer; macOS CI remains enabled.
 
 ### What changed in 2.5.6
 
@@ -96,7 +97,7 @@ For compatible notes imported by an earlier HanMark release, the command-palette
 - HTML intentionally excludes SVG, WebP, video, iframe, script, event-handler, raw user CSS, external font, and CDN resources. Ordinary links are limited to `http:`, `https:`, and `mailto:`.
 - The generated HTML Content Security Policy is `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`.
 - Editorial PDF uses the desktop Chromium print engine. It is not rendered through a HanMark HWPX template, and final pagination can vary with the selected printer/PDF settings.
-- HanMark 2.6.0 requires Obsidian 1.8.9 or newer and is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
+- HanMark 2.6.1 requires Obsidian 1.8.9 or newer and is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
 - Optional OCR/ML components such as Sharp, ONNX, and PDFium are not loaded by the plugin startup bundle.
 
 ### Privacy and capabilities
@@ -138,7 +139,16 @@ in [`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md).
 
 **Obsidian Markdown과 편집 가능한 한글 HWP/HWPX를 잇는 데스크톱 플러그인입니다.**
 
-HanMark 2.6.0의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX·독립형 HTML·Editorial PDF를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
+HanMark 2.6.1의 HWPX 생성·가져오기·레거시 원본 수정·검증·이미지 포함·문서 스타일·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.2.5**입니다. HWPX·독립형 HTML·Editorial PDF를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다.
+
+### 2.6.1 핵심 변화
+
+- **PDF 직접 저장:** PDF를 만든 뒤 **파일로 저장**을 누릅니다. 가상 PDF 프린터를 고를 필요가 없으며, **프린터로 인쇄**도 별도로 제공합니다.
+- **2단 A/B:** A는 그림을 본문 전체 폭으로, B는 한 단 폭으로 배치합니다. 기본 단 사이 간격은 10mm이며 그림 주변의 빈 공간을 본문으로 채웁니다.
+- **표 폭 자동 / 한 단 / 본문 전체 폭:** 그림 모드와 별도로 선택합니다. 자동 모드는 실제 줄바꿈과 넘침을 측정해 작은 집계표는 한 단에, 복잡한 설명표는 전체 폭에 배치합니다.
+- **긴 표 이어 출력:** 열 너비와 행 순서를 유지하고 머리행을 반복합니다. 한 페이지에 담지 못하는 긴 셀은 세로 항목형으로 이어 출력합니다. 표 앞 제목과 목록·인용·콜아웃 문맥도 보존합니다.
+- **절별 새 페이지:** 최상위 제목 묶음에서 새 페이지를 시작할 수 있습니다. 기본은 기존 1단 출력이며, 2단 설정과 표 폭 기본값은 플러그인 설정에서 지정할 수 있습니다.
+- 설정은 v11로 이관됩니다. 기존 테마 JSON과 Markdown 형식은 유지합니다. macOS 실기 검증은 사용자 결정으로 생략했고 macOS CI는 유지합니다. [검증 범위와 제한](release-notes/2.6.1.md)을 참고하십시오.
 
 ### 2.5.6 핵심 변화
 
@@ -217,7 +227,7 @@ HWP, HWPX, PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 가져옵니다.
 - HTML은 SVG·WebP·동영상·iframe·스크립트·이벤트 핸들러·사용자 원시 CSS·외부 글꼴·CDN 자원을 의도적으로 제외합니다. 일반 링크는 `http:`, `https:`, `mailto:`만 허용합니다.
 - 생성된 HTML의 Content Security Policy는 `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`입니다.
 - Editorial PDF는 데스크톱 Chromium 인쇄 엔진을 사용합니다. HanMark HWPX 템플릿으로 렌더링하지 않으며 최종 쪽 나눔은 선택한 프린터·PDF 설정에 따라 달라질 수 있습니다.
-- HanMark 2.6.0은 Obsidian 1.8.9 이상이 필요한 데스크톱 전용 플러그인입니다. 모바일 Obsidian은 지원하지 않지만 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
+- HanMark 2.6.1은 Obsidian 1.8.9 이상이 필요한 데스크톱 전용 플러그인입니다. 모바일 Obsidian은 지원하지 않지만 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
 - Sharp, ONNX, PDFium 같은 선택적 OCR·ML 구성요소는 플러그인 시작 번들에서 불러오지 않습니다.
 
 ### 개인정보와 접근 권한

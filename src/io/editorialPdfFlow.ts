@@ -1,5 +1,6 @@
 import { normalizeEditorialPdfLayout, type EditorialPdfLayout } from "./editorialPdfLayout";
 import { createPdfElement, createPdfMeasurementStyle, PdfMeasurer } from "./editorialPdfMeasure";
+import { preparePdfTable } from "./editorialPdfTables";
 
 const PX_PER_MM = 96 / 25.4;
 const PAGE_WIDTH = 170 * PX_PER_MM;
@@ -10,12 +11,14 @@ const ROOT = ".hanmark-editorial-pdf-root";
 const BODY = ".hanmark-editorial-pdf-body";
 
 interface FlowUnit {
-  kind: "text" | "figure" | "boundary";
+  kind: "text" | "figure" | "boundary" | "table";
+  full?: boolean;
   node: HTMLElement;
   heading?: boolean;
 }
 interface Cursor { index: number; remainder?: HTMLElement; offset: number }
-interface Slot { index: number; column: number; edge: "top" | "bottom"; node: HTMLElement; height: number }
+interface TableContinuation { index: number; node: HTMLElement }
+interface Slot { full: boolean; index: number; column: number; edge: "top" | "bottom"; node: HTMLElement; height: number }
 interface Filled {
   cursor: Cursor;
   columns: HTMLElement[][];
@@ -69,7 +72,7 @@ export function collectEditorialPdfFlow(body: HTMLElement): FlowUnit[] {
       return;
     }
     if (node.matches("blockquote, aside, .hanmark-editorial-pdf-container-fallback, .hanmark-editorial-pdf-container-fallback-body") &&
-        Array.from(node.querySelectorAll("p")).some(p => !p.textContent?.trim() && p.querySelector("img"))) {
+        (node.querySelector("table") || Array.from(node.querySelectorAll("p")).some(p => !p.textContent?.trim() && p.querySelector("img")))) {
       for (const child of Array.from(node.children) as HTMLElement[]) visit(child, [...wrappers, node]);
       return;
     }
@@ -88,7 +91,7 @@ export function collectEditorialPdfFlow(body: HTMLElement): FlowUnit[] {
       }
       outer.appendChild(result); result = outer;
     }
-    units.push({ kind: "text", node: result, heading: Boolean(headingLevel(node)) });
+    units.push({ kind: node.tagName === "TABLE" ? "table" : "text", node: result, heading: Boolean(headingLevel(node)) });
   };
   let previousHeading = false;
   for (const node of top) {
@@ -105,6 +108,14 @@ export function collectEditorialPdfFlow(body: HTMLElement): FlowUnit[] {
       units.splice(i, 2, { kind: "text", heading: true, node: group });
     }
   }
+  for (let i = units.length - 2; i >= 0; i--) {
+    if (units[i].heading && units[i + 1].kind === "table") {
+      const group = createPdfElement(document, "div");
+      units[i].node.classList.add("hanmark-pdf-table-lead");
+      group.append(units[i].node, units[i + 1].node);
+      units.splice(i, 2, { kind: "table", node: group });
+    }
+  }
   units.forEach((unit, index) => unit.node.setAttribute("data-pdf-source-id", String(index)));
   return units;
 }
@@ -117,6 +128,7 @@ ${scope} .hanmark-pdf-page { position:relative; display:block; width:170mm; heig
 ${scope} .hanmark-pdf-page:last-child { break-after:auto; }
 ${scope} .hanmark-pdf-column { position:absolute; display:flow-root; margin:0; padding:0; }
 ${scope} .hanmark-pdf-unit { display:flow-root; margin:0; padding:0; }
+${scope} .hanmark-pdf-wide-table { position:absolute; display:flow-root; margin:0; padding:0; }
 ${scope} .hanmark-pdf-figure { position:absolute; display:flow-root; margin:0; padding:0; border:0; }
 ${scope} .hanmark-pdf-figure img { display:block; width:100%; height:auto; max-height:none; margin:0; padding:0; }
 ${scope} img.hanmark-pdf-inline-icon { display:inline; width:auto; height:1.2em; margin:0; vertical-align:middle; }
@@ -126,6 +138,13 @@ ${scope} [data-pdf-list-fragment] { margin-top:0; margin-bottom:0; }
 ${scope} [data-pdf-list-first] { margin-top:0.35em; }
 ${scope} [data-pdf-list-last] { margin-bottom:0.8em; }
 ${scope} table { table-layout:fixed; max-width:100%; }
+${scope} table.hanmark-pdf-table-probe { table-layout:auto; }
+/* Explicit leading avoids font-dependent row drift in older PDF print engines. */
+${scope} table { line-height:18px; }
+${scope} td, ${scope} th { padding:6px 8px; }
+${scope} table[data-pdf-table-width="full"], ${scope} [data-pdf-table-width="full"] table,
+${scope} .hanmark-editorial-pdf-table-fallback[data-pdf-table-width="full"],
+${scope} [data-pdf-table-width="full"] .hanmark-editorial-pdf-table-fallback { margin-top:0; margin-bottom:0; }
 ${scope} pre, ${scope} td, ${scope} th { overflow-wrap:anywhere; }
 @media print { ${ROOT} ${BODY} [data-pdf-section-start] { break-before:page; } }
 `;
@@ -151,21 +170,22 @@ class PageComposer {
     node.style.height = `${height}px`;
     const image = node.querySelector("img");
     if (image) { image.style.width = `${width}px`; image.style.height = `${height}px`; }
-    return { index, column, edge, node, height: height + 2 * FIGURE_GAP };
+    return { full: this.layout.mode === "two-column-a", index, column, edge, node, height: height + 2 * FIGURE_GAP };
   }
 
   reserved(slots: Slot[], column: number, edge?: "top" | "bottom"): number {
-    return slots.filter(s => (this.layout.mode === "two-column-a" || s.column === column) && (!edge || s.edge === edge))
+    return slots.filter(s => (s.full || s.column === column) && (!edge || s.edge === edge))
       .reduce((sum, s) => sum + s.height, 0);
   }
 
-  fill(start: Cursor, slots: Slot[], skipped: Set<number>, deferred = false): Filled {
+  fill(start: Cursor, slots: Slot[], skipped: Set<number>, deferred = false, stopAfter?: number): Filled {
     const cursor = { ...start };
     const columns: HTMLElement[][] = [[], []];
     const used = [0, 0];
     for (let column = 0; column < 2; column++) {
       const limit = PAGE_HEIGHT - this.reserved(slots, column);
       while (cursor.index < this.units.length) {
+        if (stopAfter !== undefined && cursor.index > stopAfter) return { cursor, columns, used };
         const unit = this.units[cursor.index];
         if (unit.kind === "boundary") {
           const occupied = used[0] + used[1] > 0;
@@ -176,7 +196,7 @@ class PageComposer {
           }
           cursor.index++; continue;
         }
-        if (unit.kind === "figure") {
+        if (unit.kind === "figure" || (unit.kind === "table" && unit.full)) {
           if (!skipped.has(cursor.index)) return { cursor, columns, used, encounter: cursor.index };
           const anchor = createPdfElement(unit.node.ownerDocument, "span");
           anchor.dataset.pdfAnchor = String(cursor.index);
@@ -212,20 +232,91 @@ class PageComposer {
   }
 
   occupied(filled: Filled, slots: Slot[]): number {
-    return filled.used[0] + filled.used[1] + slots.reduce((sum, s) => sum + s.height * (this.layout.mode === "two-column-a" ? 2 : 1), 0);
+    return filled.used[0] + filled.used[1] + slots.reduce((sum, s) => sum + s.height * (s.full ? 2 : 1), 0);
   }
 
-  rank(slot: Slot): number { return slot.column * 2 + (slot.edge === "top" ? 0 : 1); }
+  rank(slot: Slot): number { return slot.full ? (slot.edge === "top" ? 0 : 3) : slot.column * 2 + (slot.edge === "top" ? 0 : 1); }
 
-  compose(start: Cursor, emitted: Set<number>, pending?: number): { filled: Filled; slots: Slot[]; pending?: number; skipped: Set<number> } {
+  private tableSlot(index: number, part: HTMLElement, edge: "top" | "bottom"): Slot {
+    const node = createPdfElement(part.ownerDocument, "div");
+    node.className = "hanmark-pdf-wide-table";
+    node.dataset.pdfSourceId = String(index);
+    node.style.width = `${PAGE_WIDTH}px`;
+    const height = this.measure.height(part, PAGE_WIDTH);
+    node.style.height = `${height}px`;
+    node.append(clone(part));
+    return { full: true, index, column: 0, edge, node, height: height + 2 * FIGURE_GAP };
+  }
+
+  private tablePart(node: HTMLElement, available: number): [HTMLElement, HTMLElement?] | null {
+    if (this.measure.height(node, PAGE_WIDTH) <= available) return [node];
+    return this.measure.split(node, PAGE_WIDTH, available);
+  }
+
+  private composeTable(
+    start: Cursor, index: number, filled: Filled, slots: Slot[], skipped: Set<number>, dueAnchors: number[]
+  ): { filled: Filled; slots: Slot[]; skipped: Set<number>; tablePending?: TableContinuation } {
+    const node = this.units[index].node;
+    const withTable = new Set(skipped).add(index);
+    const complete: Array<{ filled: Filled; slots: Slot[]; score: number }> = [];
+    for (const edge of ["top", "bottom"] as const) {
+      if (edge === "top" && slots.some(slot => !slot.full || slot.edge === "bottom")) continue;
+      const first = this.units.slice(start.index, index + 1).find(unit => unit.kind !== "boundary");
+      if (edge === "top" && this.layout.sectionPageBreaks && first?.heading) continue;
+      const slot = this.tableSlot(index, node, edge);
+      const proposed = [...slots, slot];
+      if ([0, 1].some(column => this.reserved(proposed, column) > PAGE_HEIGHT + 0.1)) continue;
+      const trial = this.fill(start, proposed, withTable);
+      if (dueAnchors.some(anchor => trial.cursor.index <= anchor)) continue;
+      if (this.layout.sectionPageBreaks && first?.heading && trial.cursor.index <= index) continue;
+      complete.push({ filled: trial, slots: proposed, score: this.progress(trial.cursor) });
+    }
+    complete.sort((a, b) => b.score - a.score || this.occupied(b.filled, b.slots) - this.occupied(a.filled, a.slots));
+    if (complete[0]) return { ...complete[0], skipped: withTable };
+
+    // Find the largest row prefix that leaves space for the preceding text in
+    // both columns. Following text waits until the continuation is complete.
+    let low = 0;
+    let high = PAGE_HEIGHT - Math.max(this.reserved(slots, 0), this.reserved(slots, 1)) - 2 * FIGURE_GAP;
+    let best: { filled: Filled; slots: Slot[]; skipped: Set<number>; tablePending?: TableContinuation } | undefined;
+    for (let attempt = 0; attempt < 13 && high - low > 0.1; attempt++) {
+      const available = (low + high) / 2;
+      const part = this.tablePart(node, available);
+      if (!part) { low = available; continue; }
+      const proposed = [...slots, this.tableSlot(index, part[0], "bottom")];
+      const trial = this.fill(start, proposed, withTable, false, index);
+      if (trial.cursor.index <= index || dueAnchors.some(anchor => trial.cursor.index <= anchor)) {
+        high = available; continue;
+      }
+      best = { filled: trial, slots: proposed, skipped: withTable,
+        tablePending: part[1] ? { index, node: part[1] } : undefined };
+      low = available;
+    }
+    return best ?? { filled, slots, skipped };
+  }
+
+  compose(start: Cursor, emitted: Set<number>, pending?: number, tablePending?: TableContinuation): { filled: Filled; slots: Slot[]; pending?: number; tablePending?: TableContinuation; skipped: Set<number> } {
     const skipped = new Set(emitted);
     const dueAnchors = [...emitted].filter(index => index >= start.index);
-    let slots = pending === undefined ? [] : [this.slot(pending, 0, "top")];
+    let slots: Slot[] = [];
+    if (tablePending) {
+      const part = this.tablePart(tablePending.node, PAGE_HEIGHT - 2 * FIGURE_GAP);
+      if (!part) throw new Error("PDF 표의 한 행을 페이지에 배치하지 못했습니다.");
+      slots = [this.tableSlot(tablePending.index, part[0], "top")];
+      if (part[1]) return { filled: { cursor: { ...start }, columns: [[], []], used: [0, 0] }, slots, skipped,
+        tablePending: { index: tablePending.index, node: part[1] } };
+    } else if (pending !== undefined) slots = [this.slot(pending, 0, "top")];
     if (pending !== undefined) skipped.add(pending);
     let filled = this.fill(start, slots, skipped);
     for (let count = 0; filled.encounter !== undefined && count <= this.units.length; count++) {
       const index = filled.encounter;
       const withFigure = new Set(skipped).add(index);
+      if (this.units[index].kind === "table") {
+        const table = this.composeTable(start, index, filled, slots, skipped, dueAnchors);
+        if (table.tablePending || !table.skipped.has(index)) return table;
+        filled = table.filled; slots = table.slots; skipped.add(index);
+        continue;
+      }
       const candidates: Array<{ filled: Filled; slots: Slot[]; pending?: number; score: number; occupied: number }> = [];
       const firstNode = this.units[start.index];
       for (const column of this.layout.mode === "two-column-a" ? [0] : [0, 1]) {
@@ -234,6 +325,7 @@ class PageComposer {
           if (this.layout.sectionPageBreaks && edge === "top" && (firstNode?.kind === "boundary" || firstNode?.heading)) continue;
           const slot = this.slot(index, column, edge);
           if (slots.length && this.rank(slot) < this.rank(slots[slots.length - 1])) continue;
+          if (slot.full && edge === "top" && slots.some(s => !s.full && s.edge === "top")) continue;
           const proposed = [...slots, slot];
           if ([0, 1].some(c => this.reserved(proposed, c) > PAGE_HEIGHT + 0.1)) continue;
           const trial = this.fill(start, proposed, withFigure);
@@ -283,19 +375,18 @@ class PageComposer {
       }
       page.append(container);
     }
-    const consumed = new Map<string, number>();
-    for (const slot of slots) {
-      const key = `${slot.column}-${slot.edge}`;
-      const before = consumed.get(key) ?? 0;
-      const base = slot.edge === "top" ? 0 : PAGE_HEIGHT - this.reserved(slots, slot.column, "bottom");
-      slot.node.style.top = `${base + before + FIGURE_GAP}px`;
+    slots.forEach((slot, index) => {
+      const adjacent = slot.edge === "top" ? slots.slice(0, index) : slots.slice(index + 1);
+      const reserved = slot.full ? Math.max(this.reserved(adjacent, 0, slot.edge), this.reserved(adjacent, 1, slot.edge))
+        : this.reserved(adjacent, slot.column, slot.edge);
+      const top = slot.edge === "top" ? reserved : PAGE_HEIGHT - reserved - slot.height;
+      slot.node.style.top = `${top + FIGURE_GAP}px`;
       const width = Number.parseFloat(slot.node.style.width);
-      const target = this.layout.mode === "two-column-a" ? PAGE_WIDTH : this.width;
+      const target = slot.full ? PAGE_WIDTH : this.width;
       const left = slot.column * (this.width + this.layout.columnGapMm * PX_PER_MM) + (target - width) / 2;
       slot.node.style.left = `${left}px`;
       page.append(slot.node);
-      consumed.set(key, before + slot.height);
-    }
+    });
     return page;
   }
 }
@@ -329,23 +420,27 @@ export async function layoutEditorialPdf(
   let cursor: Cursor = { index: 0, offset: 0 };
   let emitted = new Set<number>();
   let pending: number | undefined;
+  let tablePending: TableContinuation | undefined;
   const pages: HTMLElement[] = [];
   try {
     const view = root.ownerDocument.defaultView;
     if (!view) throw new Error("PDF 출력 창이 닫혔습니다.");
+    let tableNumber = 0;
     for (const unit of units) {
-      if (unit.node.tagName === "TABLE") unit.node = measurer.expandTallTable(unit.node as HTMLTableElement, composer.width, PAGE_HEIGHT);
+      if (unit.kind !== "table") continue;
+      const prepared = preparePdfTable(unit.node, `t${++tableNumber}`, measurer, composer.width, PAGE_WIDTH, PAGE_HEIGHT - 2 * FIGURE_GAP, layout.tableWidth);
+      unit.node = prepared.node; unit.full = prepared.width === "full";
     }
     let pageNumber = 0;
-    while (cursor.index < units.length || pending !== undefined) {
+    while (cursor.index < units.length || pending !== undefined || tablePending) {
       if (!root.isConnected) throw new Error("PDF 내보내기가 취소되었습니다.");
-      const result = composer.compose(cursor, emitted, pending);
+      const result = composer.compose(cursor, emitted, pending, tablePending);
       const occupied = composer.occupied(result.filled, result.slots);
       if (occupied <= 0 && composer.progress(result.filled.cursor) <= composer.progress(cursor)) {
         throw new Error("PDF 한 단에 배치할 수 없는 블록이 있습니다. 표의 긴 셀이나 제목 길이를 확인하세요.");
       }
       if (occupied > 0) pages.push(composer.render(root.ownerDocument, result.filled, result.slots, ++pageNumber));
-      cursor = result.filled.cursor; emitted = result.skipped; pending = result.pending;
+      cursor = result.filled.cursor; emitted = result.skipped; pending = result.pending; tablePending = result.tablePending;
       if (pageNumber > 5000) throw new Error("PDF 페이지 수가 조판 한도를 초과했습니다.");
       await new Promise<void>(resolve => view.setTimeout(resolve, 0));
     }

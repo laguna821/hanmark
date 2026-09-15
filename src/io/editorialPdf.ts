@@ -1935,8 +1935,13 @@ function appendEditorialPdfTable(
   ownerDocument: Document,
   parent: HTMLElement,
   block: EditorialTableBlock,
-  depth: number
+  depth: number,
+  deferTableLayout = false
 ): void {
+  if (deferTableLayout) {
+    appendEditorialPdfNormalTable(ownerDocument, parent, block.header, block.rows, depth);
+    return;
+  }
   const columnCount = editorialPdfTableColumnCount(block);
   const headerRows = block.header.length > 0
     ? estimateEditorialPdfTableRowRows(
@@ -2065,7 +2070,8 @@ function appendEditorialPdfContainerFallback(
   parent: HTMLElement,
   labelText: string,
   blocks: readonly EditorialBlock[],
-  depth: number
+  depth: number,
+  deferTableLayout = false
 ): void {
   const container = createHtmlElement(ownerDocument, "section");
   container.className = EDITORIAL_PDF_CONTAINER_FALLBACK_CLASS;
@@ -2077,7 +2083,7 @@ function appendEditorialPdfContainerFallback(
   );
   const body = createHtmlElement(ownerDocument, "div");
   body.className = EDITORIAL_PDF_CONTAINER_FALLBACK_BODY_CLASS;
-  appendBlocks(ownerDocument, body, blocks, depth + 1);
+  appendBlocks(ownerDocument, body, blocks, depth + 1, deferTableLayout);
   container.appendChild(label);
   container.appendChild(body);
   parent.appendChild(container);
@@ -2087,7 +2093,8 @@ function appendBlocks(
   ownerDocument: Document,
   parent: HTMLElement,
   blocks: readonly EditorialBlock[],
-  depth = 0
+  depth = 0,
+  deferTableLayout = false
 ): void {
   if (depth > MAX_EDITORIAL_PDF_RENDER_DEPTH) {
     throw new Error("PDF content nesting exceeds the safe rendering limit.");
@@ -2124,14 +2131,14 @@ function appendBlocks(
             marker.setAttribute("aria-hidden", "true");
             listItem.appendChild(marker);
           }
-          appendBlocks(ownerDocument, listItem, item.blocks, depth + 1);
+          appendBlocks(ownerDocument, listItem, item.blocks, depth + 1, deferTableLayout);
           list.appendChild(listItem);
         }
         parent.appendChild(list);
         break;
       }
       case "table": {
-        appendEditorialPdfTable(ownerDocument, parent, block, depth);
+        appendEditorialPdfTable(ownerDocument, parent, block, depth, deferTableLayout);
         break;
       }
       case "quote": {
@@ -2144,12 +2151,13 @@ function appendBlocks(
             parent,
             "인용",
             block.blocks,
-            depth
+            depth,
+            deferTableLayout
           );
           break;
         }
         const quote = createHtmlElement(ownerDocument, "blockquote");
-        appendBlocks(ownerDocument, quote, block.blocks, depth + 1);
+        appendBlocks(ownerDocument, quote, block.blocks, depth + 1, deferTableLayout);
         parent.appendChild(quote);
         break;
       }
@@ -2163,7 +2171,8 @@ function appendBlocks(
             parent,
             block.kind,
             block.blocks,
-            depth
+            depth,
+            deferTableLayout
           );
           break;
         }
@@ -2176,7 +2185,7 @@ function appendBlocks(
           "CALLOUT"
         );
         callout.appendChild(label);
-        appendBlocks(ownerDocument, callout, block.blocks, depth + 1);
+        appendBlocks(ownerDocument, callout, block.blocks, depth + 1, deferTableLayout);
         parent.appendChild(callout);
         break;
       }
@@ -2219,7 +2228,8 @@ export function buildEditorialPdfRoot(
   ownerDocument: Document,
   editorial: EditorialDocument,
   fileTitle: string,
-  renderTheme?: EditorialPdfRenderTheme
+  renderTheme?: EditorialPdfRenderTheme,
+  layout?: EditorialPdfLayout
 ): HTMLElement {
   const theme = renderTheme?.resolved.theme ?? BUILTIN_EDITORIAL_PDF_THEME;
   const root = createHtmlElement(ownerDocument, "section");
@@ -2301,7 +2311,7 @@ export function buildEditorialPdfRoot(
     appendInlines(ownerDocument, masthead, editorial.masthead);
     body.appendChild(masthead);
   }
-  appendBlocks(ownerDocument, body, editorial.blocks);
+  appendBlocks(ownerDocument, body, editorial.blocks, 0, Boolean(layout && layout.mode !== "single"));
   root.appendChild(body);
   return root;
 }
@@ -2738,7 +2748,8 @@ export class EditorialPdfService {
           ownerDocument,
           editorial,
           fileTitle,
-          renderTheme
+          renderTheme,
+          request.layout
         );
         return { root, style };
       });

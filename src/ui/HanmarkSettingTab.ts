@@ -31,7 +31,7 @@ import {
 } from "../legacy-port/settings";
 import type { WordTemplateStore } from "../legacy-port/wordTemplateStore";
 import { errorMessage } from "../utils/errors";
-import { normalizeEditorialPdfLayout, EDITORIAL_PDF_LAYOUT_CHOICES } from "../io/editorialPdfLayout";
+import { normalizeEditorialPdfLayout, EDITORIAL_PDF_LAYOUT_CHOICES, EDITORIAL_PDF_TABLE_WIDTH_CHOICES } from "../io/editorialPdfLayout";
 
 export const HWPX_ENGINE_VERSION = "4.2.5";
 
@@ -295,6 +295,11 @@ export class HanmarkSettingTab extends PluginSettingTab {
       .addDropdown(dropdown => dropdown.addOptions({ "8": "8mm", "10": "10mm", "12": "12mm" })
         .setValue(String(this.host.settings.editorialPdfLayout.columnGapMm))
         .onChange(value => { void this.runAction(() => update({ columnGapMm: Number(value) })); }));
+    new Setting(container).setName("PDF 표 폭")
+      .setDesc("2단 출력에 적용합니다. 자동은 표마다 읽기 좋은 폭을 고르며 그림 A/B 설정과 독립적입니다.")
+      .addDropdown(dropdown => dropdown.addOptions(EDITORIAL_PDF_TABLE_WIDTH_CHOICES)
+        .setValue(this.host.settings.editorialPdfLayout.tableWidth)
+        .onChange(tableWidth => { void this.runAction(() => update({ tableWidth })); }));
     new Setting(container).setName("PDF 최상위 제목에서 새 페이지 시작")
       .setDesc("표지 제목을 제외한 본문 최상위 제목을 기준으로 합니다. 연속 제목은 한 묶음으로 처리합니다.")
       .addToggle(toggle => toggle.setValue(this.host.settings.editorialPdfLayout.sectionPageBreaks)

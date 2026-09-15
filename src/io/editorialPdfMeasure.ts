@@ -44,6 +44,13 @@ export class PdfMeasurer {
     body.appendChild(this.box);
   }
 
+  inspect<T>(node: HTMLElement, width: number, read: (copy: HTMLElement) => T): T {
+    this.box.style.width = `${width}px`;
+    const copy = node.cloneNode(true) as HTMLElement;
+    this.box.replaceChildren(copy);
+    return read(copy);
+  }
+
   height(node: HTMLElement, width: number): number {
     const cached = this.heights.get(node)?.get(width);
     if (cached !== undefined) return cached;
@@ -58,7 +65,7 @@ export class PdfMeasurer {
 
   split(node: HTMLElement, width: number, available: number): [HTMLElement, HTMLElement] | null {
     if (available < 36) return null;
-    if (node.tagName === "TABLE") return this.splitTable(node as HTMLTableElement, width, available);
+    if (node.tagName === "TABLE" || node.querySelector("table")) return this.splitTable(node, width, available);
     this.box.style.width = `${width}px`;
     const copy = node.cloneNode(true) as HTMLElement;
     this.box.replaceChildren(copy);
@@ -111,54 +118,32 @@ export class PdfMeasurer {
     return null;
   }
 
-  private splitTable(table: HTMLTableElement, width: number, available: number): [HTMLElement, HTMLElement] | null {
-    const rows = Array.from(table.tBodies[0]?.rows ?? []);
-    for (let count = rows.length - 1; count > 0; count--) {
-      const head = table.cloneNode(true) as HTMLTableElement;
-      const tail = table.cloneNode(true) as HTMLTableElement;
-      for (const row of Array.from(head.tBodies[0].rows).slice(count)) row.remove();
-      for (const row of Array.from(tail.tBodies[0].rows).slice(0, count)) row.remove();
+  private splitTable(node: HTMLElement, width: number, available: number): [HTMLElement, HTMLElement] | null {
+    const getTable = (root: HTMLElement): HTMLTableElement | null =>
+      root.tagName === "TABLE" ? root as HTMLTableElement : root.querySelector("table");
+    const table = getTable(node);
+    const rows = table?.tBodies[0]?.rows;
+    if (!rows || rows.length < 2) return null;
+    // Column widths are frozen before fragmentation, so prefix heights are monotonic.
+    let low = 1, high = rows.length - 1;
+    let best: [HTMLElement, HTMLElement] | null = null;
+    while (low <= high) {
+      const count = Math.floor((low + high) / 2);
+      const head = node.cloneNode(true) as HTMLElement;
+      const tail = node.cloneNode(true) as HTMLElement;
+      const headTable = getTable(head)!;
+      const tailTable = getTable(tail)!;
+      for (const row of Array.from(headTable.tBodies[0].rows).slice(count)) row.remove();
+      for (const row of Array.from(tailTable.tBodies[0].rows).slice(0, count)) row.remove();
       tail.setAttribute("data-pdf-continuation", "true");
-      tail.tHead?.setAttribute("data-pdf-repeated-header", "true");
-      if (this.height(head, width) <= available) return [head, tail];
+      tail.querySelectorAll(".hanmark-pdf-table-lead").forEach(lead => lead.remove());
+      tail.querySelectorAll("li").forEach(item => item.setAttribute("data-pdf-continued-item", "true"));
+      tail.querySelectorAll("li > span[aria-hidden]").forEach(marker => marker.remove());
+      tailTable.tHead?.setAttribute("data-pdf-repeated-header", "true");
+      if (this.height(head, width) <= available) { best = [head, tail]; low = count + 1; }
+      else high = count - 1;
     }
-    return null;
-  }
-
-  /** The legacy row estimate assumes a full-width page. Recheck at column width. */
-  expandTallTable(table: HTMLTableElement, width: number, pageHeight: number): HTMLElement {
-    const rows = Array.from(table.tBodies[0]?.rows ?? []);
-    const tooTall = rows.some((_, index) => {
-      const probe = table.cloneNode(true) as HTMLTableElement;
-      Array.from(probe.tBodies[0].rows).forEach((row, i) => { if (i !== index) row.remove(); });
-      return this.height(probe, width) > pageHeight;
-    });
-    if (!tooTall) return table;
-    const document = table.ownerDocument;
-    const result = createPdfElement(document, "div");
-    result.className = "hanmark-editorial-pdf-table-fallback";
-    result.dataset.pdfSourceId = table.dataset.pdfSourceId;
-    if (table.tHead) {
-      const heading = table.cloneNode(false) as HTMLTableElement;
-      heading.appendChild(table.tHead.cloneNode(true)); result.append(heading);
-    }
-    const headers = Array.from(table.tHead?.rows[0]?.cells ?? []);
-    for (const row of rows) {
-      const card = createPdfElement(document, "div");
-      card.className = "hanmark-editorial-pdf-table-fallback-row";
-      Array.from(row.cells).forEach((cell, index) => {
-        const label = createPdfElement(document, "div");
-        label.className = "hanmark-editorial-pdf-table-fallback-label";
-        label.setAttribute("data-pdf-repeated-header", "true");
-        label.textContent = headers[index]?.textContent ?? String(index + 1);
-        const value = createPdfElement(document, "div");
-        value.className = "hanmark-editorial-pdf-table-fallback-value";
-        for (const child of Array.from(cell.childNodes)) value.appendChild(child.cloneNode(true));
-        card.append(label, value);
-      });
-      result.append(card);
-    }
-    return result;
+    return best;
   }
 
   dispose(): void { this.box.remove(); }

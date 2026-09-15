@@ -57,7 +57,10 @@ try {
     }, "pdf");
     modal.open();
   });
+  assert.equal(await page.locator("#hanmark-pdf-table-width").isDisabled(), true);
   await page.locator("#hanmark-pdf-layout").selectOption("two-column-a");
+  assert.equal(await page.locator("#hanmark-pdf-table-width").inputValue(), "auto");
+  await page.locator("#hanmark-pdf-table-width").selectOption("full");
   await page.locator("#hanmark-pdf-gap").selectOption("12");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "PDF로 저장", exact: true }).click();
@@ -67,7 +70,7 @@ try {
   const calls = await page.evaluate(() => globalThis.calls);
   assert.equal(calls.exports.length, 1, "A cancelled save reuses the generated PDF");
   assert.deepEqual(calls.activation, [true, true], "The picker runs within a fresh user gesture");
-  assert.deepEqual(calls.exports[0].layout, { mode: "two-column-a", columnGapMm: 12, sectionPageBreaks: true });
+  assert.deepEqual(calls.exports[0].layout, { mode: "two-column-a", columnGapMm: 12, sectionPageBreaks: true, tableWidth: "full" });
   await page.getByRole("button", { name: "같은 형식 다시 내보내기", exact: true }).click();
   await page.getByRole("button", { name: "프린터로 인쇄", exact: true }).click();
   assert.equal(await page.evaluate(() => globalThis.calls.nativeClosed), true);

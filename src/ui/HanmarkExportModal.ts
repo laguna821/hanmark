@@ -13,7 +13,7 @@ import {
 import type { HtmlExportTheme } from "../legacy-port/settings";
 import { errorMessage } from "../utils/errors";
 import type { PreparedPdf } from "../io/pdfOutputAdapter";
-import { normalizeEditorialPdfLayout, EDITORIAL_PDF_LAYOUT_CHOICES, type EditorialPdfLayout } from "../io/editorialPdfLayout";
+import { normalizeEditorialPdfLayout, EDITORIAL_PDF_LAYOUT_CHOICES, EDITORIAL_PDF_TABLE_WIDTH_CHOICES, type EditorialPdfLayout } from "../io/editorialPdfLayout";
 
 type HanmarkExportActionResult =
   | HanmarkExportOutcome
@@ -573,6 +573,16 @@ export class HanmarkExportModal extends Modal {
     gap.value = String(this.pdfLayout.columnGapMm);
     gap.disabled = this.busy || this.pdfLayout.mode === "single";
     gap.onchange = () => { this.pdfLayout = normalizeEditorialPdfLayout({ ...this.pdfLayout, columnGapMm: Number(gap.value) }); };
+    const tableRow = root.createDiv({ cls: "hanmark-export-option-row" });
+    tableRow.createEl("label", { text: "표 폭", attr: { for: "hanmark-pdf-table-width" } });
+    const tableWidth = tableRow.createEl("select", { attr: { id: "hanmark-pdf-table-width" } });
+    for (const [value, label] of Object.entries(EDITORIAL_PDF_TABLE_WIDTH_CHOICES)) {
+      tableWidth.createEl("option", { value, text: label });
+    }
+    tableWidth.value = this.pdfLayout.tableWidth;
+    tableWidth.disabled = this.busy || this.pdfLayout.mode === "single";
+    tableWidth.onchange = () => { this.pdfLayout = normalizeEditorialPdfLayout({ ...this.pdfLayout, tableWidth: tableWidth.value }); };
+    root.createEl("small", { text: "자동: 표마다 줄바꿈과 열 너비를 살펴 한 단 또는 본문 전체 폭으로 배치합니다." });
     const sectionLabel = root.createEl("label", { cls: "hanmark-export-option-row" });
     const sections = sectionLabel.createEl("input", { type: "checkbox" });
     sections.checked = this.pdfLayout.sectionPageBreaks;

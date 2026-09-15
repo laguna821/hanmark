@@ -624,7 +624,7 @@ describe("settings v9 migration", () => {
       settingsVersion: 8,
       futureSetting: { remains: true }
     });
-    assert.equal(settings.settingsVersion, 10);
+    assert.equal(settings.settingsVersion, 11);
     assert.deepEqual(settings.editorialPdfThemeLibrary, {
       schemaVersion: 1,
       activeId: BUILTIN_EDITORIAL_PDF_THEME_ID,
