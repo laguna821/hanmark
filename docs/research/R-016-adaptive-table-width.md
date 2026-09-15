@@ -81,3 +81,9 @@
 첫 후보 8a23325에서 macOS CI 전체 검사가 통과했다. Ubuntu는 표 셀의 PDF 위치 검사를 통과했지만 본문 marker 비교에서 실패했다. PDF 추출이 정렬된 단어 안에 삽입하는 공백을 제거하고 비공백 문자·순서의 완전 일치 검사를 유지한 23f5409에서 Ubuntu 전체 CI가 통과했다. 문서 내용이나 renderer를 바꾸어 검사를 우회하지 않았다.
 
 첫 Community preview의 선택 의존성 경고는 R-015의 후속 패치로 대응한다. 이 변경 후 최종 CI와 preview를 같은 SHA로 다시 실행한다.
+
+## 후속 정식 배포 승인
+
+최종 후보 `3d16b001ee7a8a316efc48f88b6d03634fd03375`의 Windows/macOS/Ubuntu CI와 Community Preview가 통과했다. CI: https://github.com/laguna821/hanmark/actions/runs/34949231662. Preview는 Completed 및 `Pass: No vulnerable dependencies found.`를 표시했다.
+
+사용자는 이후 새 브랜치와 정식 Release 게시, Community 가이드에 따른 업데이트를 명시적으로 요청했다. 위 후보 단계의 태그·기본 브랜치 제외 범위는 후속 [R-017](R-017-261-publication-contract.md)로 대체한다. macOS 실기 생략 결정은 유지한다.
