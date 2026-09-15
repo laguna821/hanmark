@@ -1,4 +1,5 @@
 import type { HanmarkTemplateLibrary } from "../io/templateLibrary";
+import { normalizeEditorialPdfLayout, type EditorialPdfLayout } from "../io/editorialPdfLayout";
 import {
   emptyEditorialPdfThemeLibrary,
   normalizeEditorialPdfThemeLibrary,
@@ -102,7 +103,7 @@ export interface CustomFontEntry {
  * small prevents the retired Python and one-slot HWPX settings from returning.
  */
 export interface HanmarkSettings extends Record<string, unknown> {
-  settingsVersion: 9;
+  settingsVersion: 10;
   pandocPath: string;
   toolbarPosition: ToolbarPosition;
   showToolbarOnStartup: boolean;
@@ -128,10 +129,11 @@ export interface HanmarkSettings extends Record<string, unknown> {
   hanmarkTemplateLibrary?: HanmarkTemplateLibrary;
   /** Named Editorial PDF themes are Vault-local and contain no resolved colors. */
   editorialPdfThemeLibrary: EditorialPdfThemeLibraryV1;
+  editorialPdfLayout: EditorialPdfLayout;
 }
 
 export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze({
-  settingsVersion: 9,
+  settingsVersion: 10,
   pandocPath: "pandoc",
   toolbarPosition: "top",
   showToolbarOnStartup: true,
@@ -150,7 +152,8 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   customFonts: [],
   toolbarSkinMode: "auto",
   toolbarSkin: cloneToolbarSkin(TOOLBAR_SKIN_DEFAULTS),
-  editorialPdfThemeLibrary: emptyEditorialPdfThemeLibrary()
+  editorialPdfThemeLibrary: emptyEditorialPdfThemeLibrary(),
+  editorialPdfLayout: normalizeEditorialPdfLayout(undefined)
 });
 
 export type HanmarkRuntimePlatform = "windows" | "macos" | "linux";
@@ -330,7 +333,7 @@ export function normalizeHanmarkSettings(
 
   return {
     ...preserved,
-    settingsVersion: 9,
+    settingsVersion: 10,
     pandocPath: nonEmptyString(data.pandocPath, DEFAULT_HANMARK_SETTINGS.pandocPath),
     toolbarPosition: "top",
     showToolbarOnStartup:
@@ -364,6 +367,7 @@ export function normalizeHanmarkSettings(
     customFonts,
     toolbarSkinMode: normalizeToolbarSkinMode(data.toolbarSkinMode),
     toolbarSkin: normalizeToolbarSkin(data.toolbarSkin),
+    editorialPdfLayout: normalizeEditorialPdfLayout(data.editorialPdfLayout),
     editorialPdfThemeLibrary: normalizeEditorialPdfThemeLibrary(
       data.editorialPdfThemeLibrary
     )

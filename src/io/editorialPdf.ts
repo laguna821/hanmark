@@ -15,6 +15,9 @@ import {
   type ResolvedEditorialPdfTheme
 } from "./editorialPdfTheme";
 import type { HanmarkExportOutcome } from "./exportTypes";
+import type { PdfOutputAdapter } from "./pdfOutputAdapter";
+import { layoutEditorialPdf } from "./editorialPdfFlow";
+import type { EditorialPdfLayout } from "./editorialPdfLayout";
 
 export const EDITORIAL_PDF_MIN_CHROMIUM = 131;
 export const EDITORIAL_PDF_BODY_CLASS = "hanmark-editorial-pdf-active";
@@ -155,6 +158,7 @@ export interface EditorialPdfRequest {
   chromiumMajor?: number;
   watchdogMs?: number;
   assetTimeoutMs?: number;
+  layout?: EditorialPdfLayout;
 }
 
 export interface EditorialPdfRenderTheme {
@@ -2690,6 +2694,14 @@ export class EditorialPdfService {
   private printInProgress = false;
 
   async print(request: EditorialPdfRequest): Promise<HanmarkExportOutcome> {
+    return await this.run(request) as HanmarkExportOutcome;
+  }
+
+  async generate(request: EditorialPdfRequest, adapter: PdfOutputAdapter): Promise<Uint8Array> {
+    return await this.run(request, adapter) as Uint8Array;
+  }
+
+  private async run(request: EditorialPdfRequest, adapter?: PdfOutputAdapter): Promise<HanmarkExportOutcome | Uint8Array> {
     if (this.printInProgress) {
       throw new Error(
         "PDF 내보내기가 이미 진행 중입니다. 현재 인쇄 작업이 끝난 뒤 다시 시도하세요."
@@ -2748,12 +2760,15 @@ export class EditorialPdfService {
       });
 
       let cleaned = false;
+      let generating = false;
+      let cancelled = false;
       let watchdog: number | undefined;
       let delayedCleanup: number | undefined;
       const primePrintLayout = (): void => {
         primeEditorialPdfPrintLayout(root, view);
       };
       const cleanup = (): void => {
+        if (generating) { cancelled = true; return; }
         if (cleaned) return;
         cleaned = true;
         if (watchdog) view.clearTimeout(watchdog);
@@ -2777,12 +2792,12 @@ export class EditorialPdfService {
       view.addEventListener("beforeprint", primePrintLayout, {
         once: true
       });
-      view.addEventListener("afterprint", schedulePostPrintCleanup, {
+      if (!adapter) view.addEventListener("afterprint", schedulePostPrintCleanup, {
         once: true
       });
-      view.addEventListener("error", cleanup, { once: true });
+      if (!adapter) view.addEventListener("error", cleanup, { once: true });
       view.addEventListener("beforeunload", cleanup, { once: true });
-      watchdog = view.setTimeout(
+      if (!adapter) watchdog = view.setTimeout(
         cleanup,
         request.watchdogMs ?? DEFAULT_WATCHDOG_MS
       );
@@ -2797,6 +2812,7 @@ export class EditorialPdfService {
             style
           )
         );
+        await runEditorialPdfStageAsync("페이지 조판", () => layoutEditorialPdf(root, style, request.layout));
         await runEditorialPdfStageAsync(
           "페이지 조판",
           () => waitForEditorialPdfLayout(
@@ -2805,6 +2821,18 @@ export class EditorialPdfService {
             request.assetTimeoutMs ?? DEFAULT_ASSET_TIMEOUT_MS
           )
         );
+        if (cleaned) throw new Error("PDF 내보내기가 취소되었습니다.");
+        if (adapter) {
+          generating = true;
+          try {
+            const bytes = await adapter.render(view);
+            if (cancelled) throw new Error("PDF 내보내기가 취소되었습니다.");
+            return bytes;
+          } finally {
+            generating = false;
+            cleanup();
+          }
+        }
         runEditorialPdfStage("인쇄 호출", () => view.print());
         return {
           format: "pdf",

@@ -106,7 +106,7 @@ test("export modal persists theme selection with rollback and reports warnings",
     main,
     /this\.settings\.editorialPdfThemeLibrary = previous;\s*throw error;/u
   );
-  assert.match(main, /theme: activeEditorialPdfThemeSnapshot\(/u);
+  assert.match(main, /const theme = activeEditorialPdfThemeSnapshot\(/u);
 });
 
 test("settings and CSS expose keyboard-visible PDF theme management", async () => {

@@ -24,7 +24,7 @@ describe("HanMark unified export center", () => {
       ["hwpx", "편집 가능한 한글 문서로 내보냅니다."],
       ["docx", "Word 문서로 내보냅니다. Pandoc이 필요합니다."],
       ["html", "모바일 브라우저에 적합한 HTML로 내보냅니다."],
-      ["pdf", "52/48 전면 표지와 브랜드 머리말을 갖춘 Editorial PDF로 인쇄합니다."]
+      ["pdf", "표지와 브랜드 머리말을 갖춘 Editorial PDF로 저장합니다."]
     ] as const;
 
     for (const [format, microcopy] of cards) {
@@ -58,7 +58,7 @@ describe("HanMark unified export center", () => {
 
     assert.doesNotMatch(main, /workspace:export-pdf/u);
     assert.match(main, /new EditorialPdfService\(\)/u);
-    assert.match(main, /this\.editorialPdf\.print\(\{/u);
+    assert.match(main, /this\.editorialPdf\.generate\(request, createDesktopPdfOutputAdapter\(\)\)/u);
     assert.match(main, /prepareSelfContainedHtmlMarkdown\(body,/u);
     assert.match(main, /choosePdfImageFailureAction/u);
     assert.match(main, /this\.editorialPdf\.dispose\(\)/u);
@@ -81,11 +81,11 @@ describe("HanMark unified export center", () => {
     );
     assert.match(
       modal,
-      /원문은 변경하지 않으며 이미지와 Pretendard 글꼴을 준비한 뒤/u
+      /이미지와 글꼴을 준비해 PDF를 생성합니다./u
     );
     assert.match(
       modal,
-      /if \(this\.format === "pdf"\) \{[\s\S]{0,240}?super\.close\(\);[\s\S]{0,120}?this\.actions\.exportPdf/u
+      /if \(this\.nativePdfPrint\) super\.close\(\);[\s\S]{0,120}?this\.actions\.exportPdf/u
     );
   });
 

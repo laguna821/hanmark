@@ -31,6 +31,7 @@ import {
 } from "../legacy-port/settings";
 import type { WordTemplateStore } from "../legacy-port/wordTemplateStore";
 import { errorMessage } from "../utils/errors";
+import { normalizeEditorialPdfLayout, EDITORIAL_PDF_LAYOUT_CHOICES } from "../io/editorialPdfLayout";
 
 export const HWPX_ENGINE_VERSION = "4.2.5";
 
@@ -120,6 +121,7 @@ export class HanmarkSettingTab extends PluginSettingTab {
     this.renderImportedImageSettings(containerEl);
     this.renderHtmlExportSettings(containerEl);
     this.renderEditorialPdfSettings(containerEl);
+    this.renderPdfLayoutSettings(containerEl);
     this.renderToolbarSettings(containerEl);
     this.renderAdvancedDocxSettings(containerEl, version);
   }
@@ -275,6 +277,28 @@ export class HanmarkSettingTab extends PluginSettingTab {
             );
           });
       });
+  }
+
+  private renderPdfLayoutSettings(container: HTMLElement): void {
+    const update = async (patch: Record<string, unknown>): Promise<void> => {
+      const previous = this.host.settings.editorialPdfLayout;
+      this.host.settings.editorialPdfLayout = normalizeEditorialPdfLayout({ ...previous, ...patch });
+      try { await this.host.saveSettings(); }
+      catch (error) { this.host.settings.editorialPdfLayout = previous; throw error; }
+    };
+    new Setting(container).setName("PDF 기본 편집 방식")
+      .setDesc("2단 A는 전체 폭 그림, B는 한 단 폭 그림을 배치합니다. 내보내기 창에서 이번 출력만 변경할 수 있습니다.")
+      .addDropdown(dropdown => dropdown.addOptions(EDITORIAL_PDF_LAYOUT_CHOICES)
+        .setValue(this.host.settings.editorialPdfLayout.mode)
+        .onChange(mode => { void this.runAction(() => update({ mode })); }));
+    new Setting(container).setName("PDF 가운데 간격")
+      .addDropdown(dropdown => dropdown.addOptions({ "8": "8mm", "10": "10mm", "12": "12mm" })
+        .setValue(String(this.host.settings.editorialPdfLayout.columnGapMm))
+        .onChange(value => { void this.runAction(() => update({ columnGapMm: Number(value) })); }));
+    new Setting(container).setName("PDF 최상위 제목에서 새 페이지 시작")
+      .setDesc("표지 제목을 제외한 본문 최상위 제목을 기준으로 합니다. 연속 제목은 한 묶음으로 처리합니다.")
+      .addToggle(toggle => toggle.setValue(this.host.settings.editorialPdfLayout.sectionPageBreaks)
+        .onChange(sectionPageBreaks => { void this.runAction(() => update({ sectionPageBreaks })); }));
   }
 
   private renderToolbarSettings(container: HTMLElement): void {

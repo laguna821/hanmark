@@ -1,6 +1,6 @@
 {
   "name": "hanmark",
-  "version": "2.5.6",
+  "version": "2.6.0",
   "description": "No-setup Markdown export to HWPX, self-contained HTML, and Editorial PDF.",
   "main": "main.js",
   "scripts": {
@@ -13,7 +13,9 @@
     "check-bundle": "node scripts/check-bundle.mjs",
     "check-community": "node scripts/check-community.mjs",
     "check-release": "node scripts/check-release.mjs",
-    "check": "npm run lint && npm run test && npm run build && npm run check-bundle && npm run check-community && npm run check-release"
+    "check": "npm run lint && npm run test && npm run build && npm run check-bundle && npm run check-community && npm run check-release",
+    "test:pdf-render": "node --import tsx scripts/test-editorial-pdf-render.mjs",
+    "test:pdf-ui": "node scripts/test-pdf-export-ui.mjs"
   },
   "keywords": [
     "hwp",
@@ -24,7 +26,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@xmldom/xmldom": "^0.8.10",
+    "@xmldom/xmldom": "^0.8.15",
     "docx-preview": "0.4.0",
     "jszip": "^3.10.1",
     "kordoc": "4.2.5",
@@ -36,15 +38,16 @@
     "adm-zip": "0.6.0",
     "body-parser": "2.3.0",
     "esbuild": "0.28.1",
-    "fast-uri": "3.1.5",
-    "hono": "4.12.34",
+    "fast-uri": "3.1.7",
+    "hono": "4.13.7",
     "ip-address": "10.3.1",
     "protobufjs": "8.7.1",
-    "sharp": "0.35.3"
+    "sharp": "0.35.3",
+    "qs": "6.16.0"
   },
   "devDependencies": {
-    "@fontsource/pretendard": "5.3.0",
     "@eslint/json": "0.14.0",
+    "@fontsource/pretendard": "5.3.0",
     "@types/markdown-it": "14.1.2",
     "@types/node": "^20.0.0",
     "@typescript-eslint/parser": "8.65.0",
@@ -52,6 +55,7 @@
     "eslint": "9.39.5",
     "eslint-plugin-obsidianmd": "0.4.1",
     "obsidian": "^1.5.0",
+    "playwright": "1.62.1",
     "tslib": "^2.8.1",
     "tsx": "4.21.0",
     "typescript": "^5.8.2"

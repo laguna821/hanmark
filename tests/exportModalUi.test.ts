@@ -34,7 +34,7 @@ test("unified export modal keeps format-specific options and one active footer",
   );
   assert.match(
     source,
-    /this\.result = result\.status === "saved" \? result : null;/u
+    /this\.result = result\.status !== "cancelled" \? result : null;/u
   );
   assert.match(source, /result !== false && result !== null/u);
   assert.doesNotMatch(source, /text: "템플릿 관리"/u);

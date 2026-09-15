@@ -2,7 +2,7 @@ name: Publish verified plugin
 
 on:
   push:
-    tags: ["2.5.6"]
+    tags: ["2.6.0"]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -28,6 +28,9 @@ jobs:
       - run: npm ci --omit=optional
       - run: npm audit --omit=dev --omit=optional
       - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:pdf-render
+      - run: npm run test:pdf-ui
 
   release:
     needs: verify
@@ -74,5 +77,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           release/main.js release/manifest.json release/styles.css
           --verify-tag
-          --title "HanMark 2.5.6 — Custom PDF Theme Builder"
-          --notes-file "release-notes/2.5.6.md"
+          --title "HanMark 2.6.0 — PDF Save and Journal Layout"
+          --notes-file "release-notes/2.6.0.md"

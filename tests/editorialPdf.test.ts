@@ -2877,6 +2877,41 @@ describe("Achmage Editorial PDF helpers", () => {
     );
   });
 
+  it("keeps the PDF tree alive until byte generation settles and rejects concurrent output", async () => {
+    const harness = createPrintHarness();
+    const service = new EditorialPdfService();
+    let started!: () => void;
+    let finish!: (bytes: Uint8Array) => void;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    const output = new Promise<Uint8Array>(resolve => { finish = resolve; });
+    const request = { markdown: "# Bytes\n\nKeep this page.", fileName: "bytes", window: harness.view, document: harness.document, chromiumMajor: 150 };
+    const running = service.generate(request, { render: async () => { started(); return output; } });
+    await entered;
+    const root = harness.document.querySelector(".hanmark-editorial-pdf-root");
+    assert.ok(root);
+    await assert.rejects(service.print(request), /이미 진행 중/u);
+    service.dispose();
+    assert.equal(harness.document.querySelector(".hanmark-editorial-pdf-root"), root);
+    finish(new TextEncoder().encode("%PDF-1.7"));
+    await assert.rejects(running, /취소/u);
+    assert.equal(harness.document.querySelector(".hanmark-editorial-pdf-root"), null);
+    assert.equal(harness.printCalls(), 0);
+    const bytes = await service.generate(request, { render: async () => new TextEncoder().encode("%PDF-1.7") });
+    assert.equal(new TextDecoder().decode(bytes), "%PDF-1.7");
+    assert.equal(harness.document.querySelector(".hanmark-editorial-pdf-root"), null);
+  });
+
+  it("cleans a failed direct PDF and permits retry without native print", async () => {
+    const harness = createPrintHarness();
+    const service = new EditorialPdfService();
+    const request = { markdown: "# Retry", fileName: "retry", window: harness.view, document: harness.document, chromiumMajor: 150 };
+    await assert.rejects(service.generate(request, { render: async () => { throw new Error("PDF bridge failed"); } }), /bridge failed/u);
+    assert.equal(harness.document.querySelector(".hanmark-editorial-pdf-root"), null);
+    assert.equal(harness.printCalls(), 0);
+    await service.generate(request, { render: async () => new Uint8Array([1]) });
+    assert.equal(harness.document.querySelector(".hanmark-editorial-pdf-root"), null);
+  });
+
   it("owns an idempotent print lifecycle without private Electron APIs", async () => {
     const source = await readFile("src/io/editorialPdf.ts", "utf8");
 

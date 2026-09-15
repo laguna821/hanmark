@@ -2,7 +2,7 @@ name: Verify plugin
 
 on:
   push:
-    branches: ["2.5.6"]
+    branches: ["2.6.0"]
   pull_request:
 
 permissions:
@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -28,3 +28,6 @@ jobs:
       - run: npm ci --omit=optional
       - run: npm audit --omit=dev --omit=optional
       - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:pdf-render
+      - run: npm run test:pdf-ui

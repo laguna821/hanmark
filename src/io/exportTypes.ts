@@ -29,6 +29,8 @@ export interface HanmarkExportOutcome {
   displayPath?: string;
   vaultPath?: string;
   warnings?: string[];
+  /** A delegated action is not confirmation that a file reached disk. */
+  delivery?: "download" | "print";
 }
 
 export interface HanmarkKordocExportOptions {

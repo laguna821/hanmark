@@ -9,6 +9,8 @@ release/
 
 # Smoke tests / scratch
 _smoke/
+test-artifacts/
+.pdf-*.log
 *.bundle.cjs
 
 # OS / editor

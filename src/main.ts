@@ -628,7 +628,17 @@ export default class HanmarkPlugin extends Plugin {
         },
         openPdfThemeManager: (mode) =>
           this.openEditorialPdfThemeManager(mode),
-        exportPdf: async () => this.exportEditorialPdf(),
+        activePdfLayout: () => normalizeEditorialPdfLayout(this.settings.editorialPdfLayout),
+        exportPdf: async (layout, nativePrint) => this.exportEditorialPdf(layout, nativePrint),
+        savePdf: async (prepared) => {
+          const saved = await this.gateway.saveFile(prepared.bytes, prepared.fileName);
+          return {
+            format: "pdf",
+            status: saved.cancelled ? "cancelled" : saved.method === "download" ? "delegated" : "saved",
+            fileName: saved.fileName, displayPath: saved.displayPath,
+            delivery: saved.method === "download" ? "download" : undefined
+          };
+        },
         revealOutput: (outcome) => this.revealExportOutput(outcome),
         applySkin: (root) => applyToolbarSkin(root, this.settings)
       },
@@ -772,13 +782,20 @@ export default class HanmarkPlugin extends Plugin {
     }
   }
 
-  private async exportEditorialPdf(): Promise<HanmarkExportOutcome | null> {
+  private async exportEditorialPdf(
+    layout = normalizeEditorialPdfLayout(this.settings.editorialPdfLayout),
+    nativePrint = false
+  ): Promise<HanmarkExportOutcome | PreparedPdf | null> {
     const view = this.currentMarkdownView();
     if (!view?.file) {
       new Notice("PDF로 내보낼 Markdown 문서를 여세요.");
       return null;
     }
     const body = extractEditableBodyStrict(view.editor.getValue());
+    const file = view.file;
+    const fileName = file.basename;
+    const theme = activeEditorialPdfThemeSnapshot(this.settings.editorialPdfThemeLibrary);
+    const layoutSnapshot: EditorialPdfLayout = normalizeEditorialPdfLayout(layout);
     const progress = new Notice("Editorial PDF 이미지를 준비하는 중…", 0);
     try {
       let prepared: Awaited<
@@ -786,7 +803,7 @@ export default class HanmarkPlugin extends Plugin {
       >;
       while (true) {
         prepared = await prepareSelfContainedHtmlMarkdown(body, {
-          loader: createObsidianImageLoader(this.app, view.file),
+          loader: createObsidianImageLoader(this.app, file),
           onProgress: (imageProgress) => {
             progress.setMessage(
               `PDF 이미지 처리 중 ${imageProgress.completed}/${
@@ -806,14 +823,14 @@ export default class HanmarkPlugin extends Plugin {
         }
         progress.setMessage("PDF 이미지를 다시 불러오는 중…");
       }
-      progress.setMessage("Editorial PDF 인쇄 화면을 여는 중…");
-      return await this.editorialPdf.print({
+      progress.setMessage(nativePrint ? "Editorial PDF 인쇄 화면을 여는 중…" : "Editorial PDF를 생성하는 중…");
+      const request = {
         markdown: prepared.markdown,
-        fileName: view.file.basename,
-        theme: activeEditorialPdfThemeSnapshot(
-          this.settings.editorialPdfThemeLibrary
-        )
-      });
+        fileName, theme, layout: layoutSnapshot
+      };
+      if (nativePrint) return { ...await this.editorialPdf.print(request), delivery: "print" };
+      const bytes = await this.editorialPdf.generate(request, createDesktopPdfOutputAdapter());
+      return { format: "pdf", status: "ready", fileName: `${fileName}_pdf.pdf`, bytes };
     } catch (error) {
       new Notice(`PDF 내보내기 실패: ${errorMessage(error)}`, 8_000);
       return null;
@@ -1005,3 +1022,5 @@ export default class HanmarkPlugin extends Plugin {
     controller.openTabById(this.manifest.id);
   }
 }
+import { createDesktopPdfOutputAdapter, type PreparedPdf } from "./io/pdfOutputAdapter";
+import { normalizeEditorialPdfLayout, type EditorialPdfLayout } from "./io/editorialPdfLayout";
