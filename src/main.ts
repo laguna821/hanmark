@@ -42,7 +42,7 @@ import {
   prepareSelfContainedHtmlMarkdown
 } from "./io/htmlExportService";
 import type { ImageFailure } from "./io/imageAssets";
-import { EditorialPdfService } from "./io/editorialPdf";
+import { EditorialPdfService, editorialPdfDiagramPaper } from "./io/editorialPdf";
 import {
   activeEditorialPdfThemeSnapshot,
   listEditorialPdfThemeSnapshots,
@@ -52,7 +52,9 @@ import {
 } from "./io/editorialPdfTheme";
 import { importCloudSettings } from "./io/kordocImport";
 import { isImportableExtension, type ImportInput } from "./io/importRunner";
-import { assemblyNotice, prepareExportMarkdown } from "./io/exportPreparation";
+import { assemblyNotice, diagramNotice, prepareExportMarkdown } from "./io/exportPreparation";
+import { exportDiagramOptions } from "./ui/diagramEnvironment";
+import type { DiagramPalette } from "./io/diagramSvg";
 import { createVaultAssemblyHost } from "./io/vaultAssemblyHost";
 import {
   createCleanLegacyImportCopy,
@@ -393,10 +395,13 @@ export default class HanmarkPlugin extends Plugin {
         if (!sourcePath) return body;
         const prepared = await prepareExportMarkdown(createVaultAssemblyHost(this.app), body, sourcePath, {
           assembleEmbeds: this.settings.assembleEmbeds,
-          outputLanguage: this.settings.outputLanguage
+          outputLanguage: this.settings.outputLanguage,
+          diagrams: exportDiagramOptions(this.settings, "docx")
         });
         const notice = assemblyNotice(prepared.warnings);
         if (notice) new Notice(notice, 8_000);
+        const diagrams = diagramNotice(prepared.warnings);
+        if (diagrams) new Notice(diagrams, 8_000);
         return prepared.markdown;
       }
     });
@@ -600,13 +605,16 @@ export default class HanmarkPlugin extends Plugin {
   }
 
   /** Note assembly for HTML and PDF; DOCX and HWPX run the same step internally. */
-  private async prepareExportBody(file: TFile, body: string): Promise<string> {
+  private async prepareExportBody(file: TFile, body: string, paper?: DiagramPalette): Promise<string> {
     const prepared = await prepareExportMarkdown(createVaultAssemblyHost(this.app), body, file.path, {
       assembleEmbeds: this.settings.assembleEmbeds,
-      outputLanguage: this.settings.outputLanguage
+      outputLanguage: this.settings.outputLanguage,
+      diagrams: exportDiagramOptions(this.settings, "markup", paper)
     });
     const notice = assemblyNotice(prepared.warnings);
     if (notice) new Notice(notice, 8_000);
+    const diagrams = diagramNotice(prepared.warnings);
+    if (diagrams) new Notice(diagrams, 8_000);
     return prepared.markdown;
   }
 
@@ -699,6 +707,7 @@ export default class HanmarkPlugin extends Plugin {
           autoPauseEnabled: () => this.settings.previewAutoPause,
           outputLanguage: () => this.settings.outputLanguage,
           assembleEmbeds: () => this.settings.assembleEmbeds,
+      diagrams: () => exportDiagramOptions(this.settings, "hwpx"),
           gongmunPlan: (file, preset, formId) => planGongmunExport(this.app, file, this, preset, formId),
           gongmunForms: () => listGongmunForms(this),
           gongmunPicker: () => this.gongmunPickerHost(),
@@ -1462,9 +1471,9 @@ export default class HanmarkPlugin extends Plugin {
       return null;
     }
     const file = view.file;
-    const body = await this.prepareExportBody(file, extractEditableBodyStrict(view.editor.getValue()));
-    const fileName = file.basename;
     const theme = activeEditorialPdfThemeSnapshot(this.settings.editorialPdfThemeLibrary);
+    const body = await this.prepareExportBody(file, extractEditableBodyStrict(view.editor.getValue()), editorialPdfDiagramPaper(theme));
+    const fileName = file.basename;
     const layoutSnapshot: EditorialPdfLayout = normalizeEditorialPdfLayout(layout);
     const progress = new Notice(t("exportFlow.pdf.preparingImages"), 0);
     try {

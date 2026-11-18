@@ -982,6 +982,26 @@ export const en: MessageTable = {
     one: "{count} note assembly message: {first}",
     other: "{count} note assembly messages: {first}"
   },
+  // Mermaid diagrams (all exports, R-033)
+  "diagram.defaultAlt": "Diagram",
+  "diagram.warning.keptAsCode": "A Mermaid diagram could not be drawn and stays as code ({type}: {first}): {reason}",
+  "diagram.warning.fontFallback": "The diagram font '{wanted}' cannot be used in pictures; {used} was used instead.",
+  "diagram.reason.unsupported": "Unsupported diagram type",
+  "diagram.reason.syntax": "Syntax error on line {line}",
+  "diagram.error.tooLong": "The diagram source is too long",
+  "diagram.error.unsafe": "The drawn result cannot be placed in a document",
+  "diagram.error.noRaster": "Diagrams cannot be turned into pictures in this environment",
+  "diagram.notice": {
+    one: "{count} Mermaid diagram message: {first}",
+    other: "{count} Mermaid diagram messages: {first}"
+  },
+  "settings.mermaidDiagrams.name": "Export Mermaid diagrams as pictures",
+  "settings.mermaidDiagrams.desc":
+    "Exports Mermaid code blocks as drawn diagrams: pictures (PNG) in HWPX and DOCX, vector diagrams with selectable text in HTML and PDF. When off, they stay code as before. Applies to the previews too.",
+  "settings.mermaidPalette.name": "Use the document palette for diagrams",
+  "settings.mermaidPalette.desc":
+    "When off, diagrams keep the colors and font shown in the note (a dark background is replaced by the document palette). When on, the document palette is always used.",
+  "settings.mermaidDiagrams.saveFailed": "Could not save the diagram setting: {detail}",
   "settings.export.heading": "All exports",
   "settings.assembleEmbeds.name": "Insert embedded notes into the document",
   "settings.assembleEmbeds.desc":

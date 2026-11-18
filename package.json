@@ -36,7 +36,8 @@
     "jszip": "^3.10.1",
     "kordoc": "4.25.0",
     "markdown-it": "14.3.3",
-    "markdown-it-footnote": "4.0.0"
+    "markdown-it-footnote": "4.0.0",
+    "pele": "1.13.0"
   },
   "overrides": {
     "esbuild": "0.28.1",

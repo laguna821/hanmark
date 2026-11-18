@@ -3,6 +3,7 @@ import type {
   DocumentStyleRole,
   RoleStyleProfile
 } from "../io/documentStyle";
+import { replaceDiagramTokensInHtml } from "../io/diagramStage";
 import {
   parseEditorialDocument,
   safeEditorialImageUrl,
@@ -884,10 +885,18 @@ ${renderEditorialBlocks(document.blocks, documentLanguage(options))}
 </html>`;
 }
 
+const DIAGRAM_FIGURE_CSS =
+  ".hanmark-diagram{margin:1.4em auto;padding:0;text-align:center;break-inside:avoid}" +
+  ".hanmark-diagram svg{display:block;max-width:100%;height:auto;margin:0 auto}" +
+  ".hanmark-diagram figcaption{margin-top:.5em;font-size:.88em;line-height:1.5}";
+
 export function renderStandaloneHtml(markdown: string, options: HtmlExportOptions): string {
-  return options.theme === "classic"
+  const html = options.theme === "classic"
     ? renderClassicStandaloneHtml(markdown, options)
     : renderEditorialStandaloneHtml(markdown, options);
+  // Drawn diagrams (R-033) travel as token paragraphs and become inline SVG figures here.
+  const drawn = replaceDiagramTokensInHtml(html);
+  return drawn === html ? html : drawn.replace("</head>", () => `<style>${DIAGRAM_FIGURE_CSS}</style></head>`);
 }
 
 export function renderStandaloneHtmlBytes(

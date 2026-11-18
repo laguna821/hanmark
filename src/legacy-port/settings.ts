@@ -172,6 +172,10 @@ export interface HanmarkSettings extends Record<string, unknown> {
   openHangulFilesInHanmark: boolean;
   /** Inline embedded notes before every export (note assembly, 2.7.0 W6). */
   assembleEmbeds: boolean;
+  /** Export Mermaid code blocks as drawn diagrams (R-033). */
+  mermaidDiagrams: boolean;
+  /** Always draw diagrams with the document palette instead of the note's colours (R-033). */
+  mermaidPaperPalette: boolean;
   /** What the HWPX preview shows when it opens: quick HWPX or the official-document form (R-026). */
   hwpxPreviewMode: "quick" | "gongmun";
   /** Toolbar folded to a slim strip (R-028); hiding it completely stays `showToolbarOnStartup`. */
@@ -229,6 +233,8 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   importDestination: { ...DEFAULT_IMPORT_DESTINATION },
   openHangulFilesInHanmark: true,
   assembleEmbeds: true,
+  mermaidDiagrams: true,
+  mermaidPaperPalette: false,
   hwpxPreviewMode: "quick",
   toolbarCollapsed: false,
   toolbarPeek: false,
@@ -477,6 +483,8 @@ export function normalizeHanmarkSettings(
       typeof data.assembleEmbeds === "boolean"
         ? data.assembleEmbeds
         : DEFAULT_HANMARK_SETTINGS.assembleEmbeds,
+    mermaidDiagrams: data.mermaidDiagrams !== false,
+    mermaidPaperPalette: data.mermaidPaperPalette === true,
     hwpxPreviewMode: data.hwpxPreviewMode === "gongmun" ? "gongmun" : "quick",
     toolbarCollapsed: booleanOr(data.toolbarCollapsed, DEFAULT_HANMARK_SETTINGS.toolbarCollapsed),
     toolbarPeek: booleanOr(data.toolbarPeek, DEFAULT_HANMARK_SETTINGS.toolbarPeek),

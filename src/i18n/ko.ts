@@ -884,6 +884,23 @@ export const ko = {
   "assembly.warning.depth": "임베드가 너무 깊어 더 넣지 않았습니다: {names}",
   "assembly.warning.section": "임베드한 제목이나 블록을 찾지 못했습니다: {names}",
   "assembly.notice": "노트 조립 안내 {count}건: {first}",
+  // Mermaid 도식 (모든 내보내기, R-033)
+  "diagram.defaultAlt": "도식",
+  "diagram.warning.keptAsCode": "Mermaid 도식을 그리지 못해 코드로 두었습니다 ({type}: {first}): {reason}",
+  "diagram.warning.fontFallback": "도식 글꼴 '{wanted}'을(를) 그림에 쓸 수 없어 {used}(으)로 그렸습니다.",
+  "diagram.reason.unsupported": "지원하지 않는 도식 종류",
+  "diagram.reason.syntax": "{line}번째 줄 문법 오류",
+  "diagram.error.tooLong": "도식 원문이 너무 깁니다",
+  "diagram.error.unsafe": "그린 결과를 문서에 넣을 수 없습니다",
+  "diagram.error.noRaster": "이 환경에서는 도식을 그림으로 바꿀 수 없습니다",
+  "diagram.notice": "Mermaid 도식 안내 {count}건: {first}",
+  "settings.mermaidDiagrams.name": "Mermaid 도식을 그림으로",
+  "settings.mermaidDiagrams.desc":
+    "Mermaid 코드 블록을 그린 도식으로 내보냅니다. HWPX와 DOCX에는 그림(PNG)으로, HTML과 PDF에는 글자를 고를 수 있는 벡터 도식으로 들어갑니다. 끄면 예전처럼 코드로 남습니다. 미리보기에도 적용됩니다.",
+  "settings.mermaidPalette.name": "도식 색을 문서용 기본 색으로",
+  "settings.mermaidPalette.desc":
+    "끄면 노트에서 보이는 도식 색과 글꼴을 그대로 씁니다(배경이 어두우면 문서용 기본 색으로 바꿉니다). 켜면 항상 문서용 기본 색으로 그립니다.",
+  "settings.mermaidDiagrams.saveFailed": "도식 설정을 저장하지 못했습니다: {detail}",
   "settings.export.heading": "모든 내보내기",
   "settings.assembleEmbeds.name": "노트 임베드를 본문으로 합치기",
   "settings.assembleEmbeds.desc":
