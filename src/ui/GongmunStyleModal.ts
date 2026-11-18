@@ -14,7 +14,11 @@ import {
   type GongmunTemplateRecord,
   type TemplateLibraryHost
 } from "../io/templateLibrary";
-import { GONGMUN_PRESETS } from "../io/gongmunExport";
+import { gongmunPresetLabel } from "../io/gongmunExport";
+import { GONGMUN_FRAMES, agencyLook, agencyOfLook, frameOfPreset, LOOK_BASIC, presetsOfFrame, type GongmunFrame } from "../io/gongmunFormId";
+import { AGENCY_FRAMES, gongmunFrameDescription, gongmunFrameLabel, isKnownAgency } from "../io/gongmunForms";
+import { GongmunLookModal } from "./GongmunLookModal";
+import type { GongmunPickerHost } from "./gongmunFormPicker";
 import { renderQuickHwpxPreview } from "../io/kordocEngine";
 import { bytesAsArrayBuffer, type FileGateway } from "../io/fileGateway";
 import { appendSanitizedSvg } from "./svgSanitize";
@@ -49,6 +53,8 @@ export interface GongmunStyleModalHost {
   gateway: FileGateway;
   /** Called after a save or delete so the caller can refresh its choices. */
   changed(activeId: string): void;
+  /** The look chooser's host (favorites, recent looks); without it a form starts from 기본 only. */
+  lookPicker?: () => GongmunPickerHost;
 }
 
 type TriState = "" | "on" | "off";
@@ -62,8 +68,10 @@ function fromTriState(value: string): boolean | undefined {
 }
 
 /**
- * Create or edit an institution style (2.7.0 W5) with a live preview rendered by
- * the same engine and options the export uses.
+ * Create or edit one of the user's own forms with a live preview rendered by the same
+ * engine and options the export uses (2.7.0 W5). Since 3.0.0 (R-030) a form is a look
+ * for one frame: the window asks for the frame (and, where a frame has two document
+ * types, which one), the look the form starts from, and then the form's own options.
  */
 export class GongmunStyleModal extends Modal {
   private draft: GongmunTemplateRecord;
@@ -104,6 +112,15 @@ export class GongmunStyleModal extends Modal {
   onClose(): void {
     if (this.previewTimer !== null) window.clearTimeout(this.previewTimer);
     this.contentEl.empty();
+  }
+
+  /** The form's options as stored and previewed: a base look only where the frame takes one. */
+  private savedOptions(): GongmunStyleOptions {
+    const options = this.options();
+    const agency = this.baseAgency();
+    if (agency) options.agency = agency;
+    else delete options.agency;
+    return options;
   }
 
   private options(): GongmunStyleOptions {
@@ -190,6 +207,7 @@ export class GongmunStyleModal extends Modal {
         this.draft = { ...this.draft, name: value };
       });
     });
+    this.renderFrameAndBase(form);
     this.text(form, t("gongmun.style.org.name"), "org", t("gongmun.style.org.desc"));
     this.choice(form, t("gongmun.style.bodyFont.name"), "bodyFont", [
       ["myeongjo", t("gongmun.style.bodyFont.myeongjo")],
@@ -301,18 +319,10 @@ export class GongmunStyleModal extends Modal {
       );
     }
 
-    new Setting(previewColumn).setName(t("gongmun.style.preview.name")).setHeading();
-    // The form's document type: choosing the form makes this type (R-026).
     new Setting(previewColumn)
-      .setName(t("gongmun.style.preset.name"))
-      .setDesc(t("gongmun.style.preset.desc"))
-      .addDropdown((dropdown) => {
-        for (const preset of GONGMUN_PRESETS) dropdown.addOption(preset.value, tKey(preset.label));
-        dropdown.setValue(this.previewPreset).onChange((value) => {
-          this.previewPreset = GONGMUN_PRESETS.find((preset) => preset.value === value)?.value ?? "report";
-          this.schedulePreview(0);
-        });
-      });
+      .setName(t("gongmun.style.preview.name"))
+      .setDesc(t("gongmun.style.preview.of", { frame: gongmunFrameLabel(this.frame()), look: this.draft.name.trim() || t("template.gongmunDefaultName") }))
+      .setHeading();
     this.previewEl = previewColumn.createDiv({ cls: "hanmark-gongmun-style-paper" });
 
     const actions = contentEl.createDiv({ cls: "hanmark-dialog-actions" });
@@ -326,6 +336,75 @@ export class GongmunStyleModal extends Modal {
     save.classList.add("mod-cta");
     save.onclick = () => void this.save();
     this.schedulePreview(0);
+  }
+
+  private frame(): GongmunFrame {
+    return frameOfPreset(this.previewPreset).frame;
+  }
+
+  /** The Kordoc agency the form starts from, when its frame takes agency looks. */
+  private baseAgency(): string | undefined {
+    const agency = this.get("agency");
+    return typeof agency === "string" && AGENCY_FRAMES.includes(this.frame()) && isKnownAgency(agency) ? agency : undefined;
+  }
+
+  /**
+   * 틀 and 바탕 모양 (R-030): the frame the form is a look for, the document type where
+   * the frame has two, and the look whose measured values sit under the form's options.
+   */
+  private renderFrameAndBase(form: HTMLElement): void {
+    const frame = this.frame();
+    new Setting(form)
+      .setName(t("gongmun.frame.label"))
+      .setDesc(`${gongmunFrameDescription(frame)} ${t("gongmun.style.frame.desc")}`)
+      .addDropdown((dropdown) => {
+        dropdown.selectEl.id = "hanmark-style-frame";
+        for (const item of GONGMUN_FRAMES) dropdown.addOption(item, gongmunFrameLabel(item));
+        dropdown.setValue(frame).onChange((value) => {
+          const next = GONGMUN_FRAMES.find((item) => item === value) ?? "report";
+          this.previewPreset = presetsOfFrame(next)[0] ?? "report";
+          this.render();
+        });
+      });
+    const kinds = presetsOfFrame(frame);
+    if (kinds.length > 1) {
+      new Setting(form)
+        .setName(t("gongmun.style.preset.name"))
+        .setDesc(t("gongmun.style.preset.desc"))
+        .addDropdown((dropdown) => {
+          dropdown.selectEl.id = "hanmark-style-kind";
+          for (const preset of kinds) dropdown.addOption(preset, gongmunPresetLabel(preset));
+          dropdown.setValue(this.previewPreset).onChange((value) => {
+            this.previewPreset = kinds.find((preset) => preset === value) ?? kinds[0];
+            this.schedulePreview(0);
+          });
+        });
+    }
+    const base = new Setting(form).setName(t("gongmun.style.base.name"));
+    const picker = this.host.lookPicker;
+    if (!AGENCY_FRAMES.includes(frame) || !picker) {
+      base.setDesc(t("gongmun.style.base.none"));
+      return;
+    }
+    const agency = this.baseAgency();
+    base.setDesc(t("gongmun.style.base.desc"));
+    base.addButton((button) => {
+      button.buttonEl.id = "hanmark-style-base";
+      button.setButtonText(agency ?? t("gongmun.look.basic")).onClick(() => {
+        new GongmunLookModal(this.app, {
+          host: picker(),
+          frame,
+          current: agency ? agencyLook(agency) : LOOK_BASIC,
+          title: t("gongmun.style.base.choose"),
+          // A form starts from 기본, 공통, or an agency; never from another form.
+          filter: (look) => look.kind === "basic" || look.kind === "common" || look.kind === "agency",
+          pick: (look) => {
+            this.set("agency", agencyOfLook(look));
+            this.render();
+          }
+        }).open();
+      });
+    });
   }
 
   private schedulePreview(delay = 500): void {
@@ -344,7 +423,7 @@ export class GongmunStyleModal extends Modal {
     target.createEl("p", { cls: "setting-item-description", text: t("gongmun.style.preview.loading") });
     try {
       const result = await renderQuickHwpxPreview(PREVIEW_SAMPLE, {
-        gongmun: resolveGongmunOptions({ preset: this.previewPreset, style: this.options() }),
+        gongmun: resolveGongmunOptions({ preset: this.previewPreset, style: this.savedOptions() }),
         profile: this.draft.tableStyle
       });
       if (version !== this.previewVersion || !target.isConnected) return;
@@ -375,7 +454,7 @@ export class GongmunStyleModal extends Modal {
     const host = this.host.templateHost;
     const previous = structuredClone(host.settings.hanmarkTemplateLibrary);
     try {
-      const saved = putGongmunTemplateInMemory(host, { ...this.draft, preset: this.previewPreset, options: this.options() });
+      const saved = putGongmunTemplateInMemory(host, { ...this.draft, preset: this.previewPreset, options: this.savedOptions() });
       if (this.isNew) setActiveGongmunTemplateInMemory(host, saved.id);
       await host.saveSettings();
       new Notice(t("gongmun.style.saved", { name: saved.name }));

@@ -177,3 +177,12 @@ export function migrateLegacyFormId(
   if (isStyleLook(trimmed)) return formatGongmunFormId(choiceOfPreset(presetOfStyle(trimmed) ?? fallback, trimmed));
   return undefined;
 }
+
+// i18n-data-begin: Kordoc preset ids
+const PRESETS_IN_MENU_ORDER: readonly GongmunPreset[] = ["official", "report", "plan", "notice", "minutes", "gaejosik", "press", "ministry", "bangchim"];
+// i18n-data-end
+
+/** Document types of a frame, in menu order (보고서: 보고서, 계획서; 일반 문서: 통지·안내, 회의록). */
+export function presetsOfFrame(frame: GongmunFrame): GongmunPreset[] {
+  return PRESETS_IN_MENU_ORDER.filter((preset) => frameOfPreset(preset).frame === frame);
+}

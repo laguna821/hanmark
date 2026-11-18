@@ -1,6 +1,6 @@
 import { Modal, type App } from "obsidian";
 import type { GongmunFrame } from "../io/gongmunFormId";
-import { listGongmunLooks } from "../io/gongmunForms";
+import { listGongmunLooks, type GongmunLookEntry } from "../io/gongmunForms";
 import { t } from "../i18n";
 import { renderLookChooser, type GongmunPickerHost } from "./gongmunFormPicker";
 
@@ -16,6 +16,10 @@ export class GongmunLookModal extends Modal {
       host: GongmunPickerHost;
       frame: GongmunFrame;
       current: string;
+      /** Narrows the list to the looks the caller can use. */
+      filter?: (look: GongmunLookEntry) => boolean;
+      /** Window title; the general "choose a look" title when omitted. */
+      title?: string;
       pick: (look: string, name: string) => void;
     }
   ) {
@@ -24,12 +28,13 @@ export class GongmunLookModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("hanmark-look-modal");
-    this.titleEl.setText(t("gongmun.look.choose"));
+    this.titleEl.setText(this.input.title ?? t("gongmun.look.choose"));
     const search = renderLookChooser(this.contentEl.createDiv(), {
       host: this.input.host,
       frame: this.input.frame,
       current: this.input.current,
       idPrefix: "hanmark-look-modal",
+      filter: this.input.filter,
       onPick: (look) => {
         const name = listGongmunLooks(this.input.host.library, this.input.frame).find((item) => item.id === look)?.name ?? "";
         this.close();
