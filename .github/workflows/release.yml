@@ -27,7 +27,7 @@ jobs:
           cache: npm
       - run: npm ci --omit=optional
       - run: npm audit --omit=dev --omit=optional
-      - run: npm audit --include=dev --include=optional
+      - run: npm audit --include=dev --include=optional --audit-level=critical
       - run: npm run check
       - run: npx playwright install --with-deps chromium
       - run: npm run test:pdf-render
@@ -54,7 +54,7 @@ jobs:
       - name: Verify runtime dependency audit
         run: npm audit --omit=dev --omit=optional
       - name: Verify complete lockfile audit
-        run: npm audit --include=dev --include=optional
+        run: npm audit --include=dev --include=optional --audit-level=critical
       - name: Verify, test, and build
         run: npm run check
       - name: Verify tag and manifest version

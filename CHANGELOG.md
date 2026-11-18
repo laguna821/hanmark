@@ -5,6 +5,7 @@ Only versions published as GitHub Releases are listed as releases. The 2.x miles
 ## 2.7.1
 
 - Editorial PDF: the paper around the text no longer turns black when Obsidian uses a dark theme. Chromium paints the page margins with the window background, which Obsidian takes from the theme, so the header and footer band of every body page came out dark. Every PDF page box now paints the paper color itself.
+- Dependencies: refreshed packages flagged by new npm advisories, within the ranges their parents accept: markdown-it 14.3.3 (GHSA-gfr2-rv44-r23c, GHSA-vfgh-jcmw-g37q), and overrides zod 4.6.7 (GHSA-mrhx-c7xc-m3w5; only used by Kordoc's MCP server, not bundled), proxy-addr 2.0.8, qs 6.17.1, body-parser 2.4.0, hono 4.13.19, @hono/node-server 2.1.9, @modelcontextprotocol/sdk 1.32.2, fast-uri 3.1.9, and ip-address 10.7.6. The runtime audit stays blocking; the full-lockfile audit now blocks on critical advisories only, because the dev-only picomatch advisory (GHSA-fc5q-39xc-vjpf, ESLint toolchain) has no patched release yet.
 
 ## 2.7.0
 
