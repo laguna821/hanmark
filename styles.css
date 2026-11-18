@@ -1021,6 +1021,17 @@
   border-color: var(--text-error);
 }
 
+.hanmark-import-option-group {
+  margin-top: 10px;
+}
+
+.hanmark-import-option-title {
+  margin: 0 0 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
 .hanmark-import-progress p {
   margin: 4px 0 0;
   color: var(--text-muted);

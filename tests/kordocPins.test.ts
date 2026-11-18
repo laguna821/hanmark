@@ -6,6 +6,7 @@ import JSZip from "jszip";
 import { markdownToHwpx, parse, type GongmunOptions } from "kordoc";
 import {
   ALLOWED_PARSE_OPTION_KEYS,
+  DEFAULT_IMPORT_OPTIONS,
   FORCED_PARSE_OPTIONS,
   IMPORT_PRESET_IDS,
   kordocParseOptions,
@@ -31,17 +32,15 @@ async function sectionXml(data: ArrayBuffer): Promise<string> {
 }
 
 describe("Kordoc 4.25.0 forced options and behaviour pins (R-029)", () => {
-  it("forces the offline values and the 4.15.7 output on every parse options object", () => {
+  it("forces the offline values on every parse options object; the import notation is the user's (R-032)", () => {
     assert.deepEqual({ ...FORCED_PARSE_OPTIONS }, {
       hancomFallback: false,
-      ocr: false,
-      layoutTables: "keep",
-      scriptTags: false
+      ocr: false
     });
     assert.ok(Object.isFrozen(FORCED_PARSE_OPTIONS));
     for (const preset of IMPORT_PRESET_IDS) {
       const whitelisted = toParseOptions(
-        { preset, pages: "", images: true, htmlTables: false, removeHeaderFooter: false, dedupeRunningHeaders: false },
+        { ...DEFAULT_IMPORT_OPTIONS, preset, scriptTags: false },
         { password: "secret" }
       );
       const sent = kordocParseOptions(whitelisted) as Record<string, unknown>;

@@ -86,19 +86,30 @@ async function hwpxInput(name: string, markdown: string): Promise<ImportInput> {
   return { name, bytes: new Uint8Array(data) };
 }
 
+/** What the 3.0.0 defaults send: Obsidian tables, script tags, layout tables kept. */
+const NOTATION = { layoutTables: "keep", scriptTags: true, tableFormat: "gfm" } as const;
+
 describe("import options (2.7.0 W3)", () => {
-  it("passes no options for the default preset so the Markdown stays Kordoc's default", () => {
-    assert.deepEqual(toParseOptions(DEFAULT_IMPORT_OPTIONS), {});
+  it("passes only the chosen notation for the default preset (R-032)", () => {
+    assert.deepEqual(toParseOptions(DEFAULT_IMPORT_OPTIONS), NOTATION);
   });
 
   it("maps each preset to documented offline parse options", () => {
-    assert.deepEqual(toParseOptions({ ...DEFAULT_IMPORT_OPTIONS, preset: "text" }), { plain: true, images: false });
+    assert.deepEqual(toParseOptions({ ...DEFAULT_IMPORT_OPTIONS, preset: "text" }), {
+      ...NOTATION,
+      scriptTags: false,
+      plain: true,
+      images: false
+    });
     assert.deepEqual(toParseOptions({ ...DEFAULT_IMPORT_OPTIONS, preset: "form" }), {
+      layoutTables: "keep",
+      scriptTags: true,
+      htmlCellLinks: true,
       keepTrailingEmptyCols: true,
       includeFieldPlaceholders: true,
       keepEmptyParagraphs: true
     });
-    assert.deepEqual(toParseOptions({ ...DEFAULT_IMPORT_OPTIONS, preset: "exam" }), { tables: false });
+    assert.deepEqual(toParseOptions({ ...DEFAULT_IMPORT_OPTIONS, preset: "exam" }), { ...NOTATION, tables: false });
   });
 
   it("never produces OCR, model-download, file-path, or inline-image options", () => {
@@ -107,10 +118,14 @@ describe("import options (2.7.0 W3)", () => {
       for (const flags of [false, true]) {
         const options = toParseOptions(
           {
+            ...DEFAULT_IMPORT_OPTIONS,
             preset,
             pages: "1-2",
             images: !flags,
-            htmlTables: flags,
+            tables: flags ? "html" : "pipe",
+            flattenLayout: flags,
+            memos: flags,
+            imagesInFlow: flags,
             removeHeaderFooter: flags,
             dedupeRunningHeaders: flags
           },
@@ -137,10 +152,10 @@ describe("import options (2.7.0 W3)", () => {
   });
 
   it("accepts .hml alongside the other supported extensions", () => {
-    for (const extension of ["hwp", "HWPX", "hwpml", "hml", "pdf", "docx", "xlsx", "xls"]) {
+    for (const extension of ["hwp", "HWPX", "hwpml", "hml", "pdf", "docx", "pptx", "xlsx", "xls"]) {
       assert.ok(isImportableExtension(extension), extension);
     }
-    assert.equal(isImportableExtension("pptx"), false);
+    assert.equal(isImportableExtension("png"), false);
   });
 
   it("stores the import preset and destination safely in settings v12", () => {
