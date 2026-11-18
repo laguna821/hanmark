@@ -1,7 +1,7 @@
 {
   "name": "hanmark",
-  "version": "2.7.1",
-  "description": "No-setup Markdown export to HWPX, self-contained HTML, and Editorial PDF.",
+  "version": "3.0.0",
+  "description": "No-setup Markdown export to HWPX, DOCX, self-contained HTML, and Editorial PDF.",
   "main": "main.js",
   "scripts": {
     "gen-assets": "node scripts/gen-embedded-assets.mjs && node scripts/gen-hayro-wasm.mjs && node scripts/gen-form-templates.mjs && node scripts/gen-font-css.mjs",

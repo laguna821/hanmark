@@ -2,6 +2,29 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 3.0.0
+
+- Engine: replaced the pinned Kordoc 4.15.7 with Kordoc 4.25.0 and rewrote the build hardening for it (R-029). Kordoc's new PDF engine hayro (Rust, WebAssembly) is embedded in `main.js` and checked by SHA-256 at build time; PDF.js and the 24 injected Korean CMaps are no longer bundled. Kordoc's Hancom Office automation (PowerShell/COM) and its OCR code and model table are removed from the bundle; `hancomFallback: false` and `ocr: false` are forced on every parse. `main.js` contains no `fetch` call and no URL outside an allow-list of XML namespaces and links the interface shows.
+- Official documents are chosen as a frame (틀: 기안문, 일반 문서, 보고서, 개조식 보고서, 업무보고, 보도자료, 서울방침) and a look (모양) instead of one list of ten forms (R-030). 보고서 has cover and contents switches, 일반 문서 a closing-line switch, 서울방침 is new.
+- Looks: 기본, 공통, and Kordoc's 52 central-agency looks for 보고서, 개조식 보고서, 업무보고, and 보도자료, plus the two Hallym University looks and the user's own. The chooser filters by name, groups agencies (부, 처, 청, 위원회, 그 밖의 기관), pins recent and favourite looks, and marks agencies measured from few documents. A note can name its look with `공문_기관서식` (`gongmun-agency-style`).
+- Looks from samples (R-036): 견본으로 내 모양 만들기 learns a look from a sample HWPX, shows what was taken and what was not, previews the note beside the sample, and stores it in plugin data. From a report PDF only bullet levels, line spacing, band colour, and the left margin are taken. Looks are exported and imported as `.kpack` files, which are validated as untrusted input.
+- Import (R-032): tables as Obsidian pipe tables by default, with "merged tables as HTML" (the 2.7 behaviour) and "all HTML" as choices; sub/superscripts as `<sup>`/`<sub>` by default; borderless layout tables unwrapped into text by default; PPTX files; Hangul memos; PDF pictures in reading order; messages for the engine's new warning codes. Choices are remembered. Image-file inputs are not offered because they need OCR.
+- Mermaid diagrams (R-033): `mermaid` blocks are drawn with Pele 1.13.0 in every export: a 2x PNG picture with a caption in HWPX and DOCX, inline SVG in HTML and Editorial PDF. Colours and font come from the note's theme (a paper palette when the theme is dark); `%% @caption` and `%% @alt` become caption and alternative text; `%% @key`, `@interp`, and `@aux` mark nodes. A diagram keeps the direction the note shows and is placed smaller when wider than the page. Blocks that cannot be drawn stay code and are reported.
+- DOCX (R-031): a built-in writer makes DOCX without Pandoc from the shared document model and the Word template settings (headings, lists, tables, footnotes, links, images, callouts, code), with the same bytes on every run. The Pandoc path remains as 고급 (Pandoc). The DOCX preview works without Pandoc.
+- HWP (R-034): HWPX로 변환 converts HWP 5.x to HWPX keeping formatting, from the document viewer, the file menu, or a command; HWP 3.x is rebuilt without formatting. HWP 5.x forms can be filled (result: HWPX). Comments written as `==text==%%memo%%` can be exported as Hangul memos.
+- Equations: `$…# Changelog
+
+Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
+
+ can be exported as Hangul equation objects in HWPX (off by default).
+- Export window: one 내보낼 때 group per format with the Mermaid, memo, and equation switches; quick commands, batch export, and previews use the same choices.
+- Checker (R-035): notation, bullet-style wording, budget arithmetic, logic, and AI-style wording checks from Kordoc 4.25.0 in one window with family filters, jump-and-select, fix, bulk fix for mechanical rules, and ignore (stored in the note property `공문_점검무시`). Optional underlines in the editor with a tooltip, and an optional check before official-document export. Logic and AI-style checks are off by default.
+- Fixed: `<sup>` and `<sub>` in a note are written as real sub/superscripts in HWPX and by the Pandoc path (they were dropped).
+- Behavior changes: official-document file names are `frame_look`; imported notes use the new default notation; stored form ids, user forms, per-note form memory, and `htmlTables` settings from 2.7.x are migrated on load; `공문_종류` values and aliases keep working.
+- Dependencies: Kordoc 4.25.0 and Pele 1.13.0 pinned; twelve package overrides retired; the runtime audit reports no vulnerabilities.
+- Bundle: `main.js` is 6,272,248 bytes (4,262,290 in 2.7.1); the cap is 6,450,000.
+- Limits: no output was checked in Hancom Office; HWPX diagrams are pictures and leave quotes and callouts; memos in table cells do not round-trip; equations and memos are not drawn faithfully in the HWPX preview; a look used as the sample skips cover, contents, equations, and finishing; the built-in DOCX writer keeps equations as text; check messages are in Korean; saving a note back into its source file is not available.
+
 ## 2.7.1
 
 - Editorial PDF: the paper around the text no longer turns black when Obsidian uses a dark theme. Chromium paints the page margins with the window background, which Obsidian takes from the theme, so the header and footer band of every body page came out dark. Every PDF page box now paints the paper color itself.

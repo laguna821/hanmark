@@ -10,11 +10,13 @@ const [manifest, pkg, lock, versions, ciWorkflow, releaseWorkflow] = await Promi
   readFile(".github/workflows/release.yml", "utf8")
 ]);
 
+// The one place to change when the minimum Obsidian version moves (also manifest.json and versions.json).
+const MIN_APP_VERSION = "1.8.9";
 const version = manifest.version;
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid manifest version: ${version}`);
 if (pkg.version !== version) throw new Error(`package.json ${pkg.version} != manifest.json ${version}`);
-if (manifest.minAppVersion !== "1.8.9") {
-  throw new Error(`Editorial PDF requires minAppVersion 1.8.9, found ${manifest.minAppVersion}`);
+if (manifest.minAppVersion !== MIN_APP_VERSION) {
+  throw new Error(`HanMark ${version} declares minAppVersion ${MIN_APP_VERSION}, found ${manifest.minAppVersion}`);
 }
 if (versions[version] !== manifest.minAppVersion) {
   throw new Error(`versions.json ${versions[version]} != minAppVersion ${manifest.minAppVersion}`);
@@ -23,6 +25,14 @@ if (versions[version] !== manifest.minAppVersion) {
 const KORDOC_VERSION = "4.25.0";
 if (pkg.dependencies?.kordoc !== KORDOC_VERSION) {
   throw new Error(`kordoc must be pinned exactly to ${KORDOC_VERSION}`);
+}
+// Pele draws Mermaid diagrams in every export (R-033).
+const PELE_VERSION = "1.13.0";
+if (pkg.dependencies?.pele !== PELE_VERSION) {
+  throw new Error(`pele must be pinned exactly to ${PELE_VERSION}`);
+}
+if (lock.packages?.["node_modules/pele"]?.version !== PELE_VERSION) {
+  throw new Error(`package-lock must resolve pele exactly to ${PELE_VERSION}`);
 }
 if (pkg.dependencies?.["markdown-it"] !== "14.3.3") {
   throw new Error("markdown-it must be pinned exactly to 14.3.3");
