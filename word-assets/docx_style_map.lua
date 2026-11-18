@@ -32,9 +32,77 @@ function Header(el)
   )
 end
 
+-- HanMark draws Mermaid diagrams as PNG pictures and marks each one with a text chunk
+-- "hanmark-scale" right after the PNG header (value: scale digit, then "c" when the next
+-- paragraph is the caption). Read the mark from the start of the data URL so the picture
+-- paragraph is centred and its caption gets the built-in writer's style (R-033).
+local BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+local function decode_base64_head(text, count)
+  local out = {}
+  local bits, held = 0, 0
+  for index = 1, math.min(#text, count) do
+    local value = BASE64:find(text:sub(index, index), 1, true)
+    if not value then
+      break
+    end
+    held = held * 64 + (value - 1)
+    bits = bits + 6
+    if bits >= 8 then
+      bits = bits - 8
+      local byte = math.floor(held / (2 ^ bits))
+      held = held % (2 ^ bits)
+      out[#out + 1] = string.char(byte)
+    end
+  end
+  return table.concat(out)
+end
+
+-- nil for other images, "plain" for a diagram, "captioned" when its caption follows.
+local function diagram_mark(el)
+  if #el.content ~= 1 or el.content[1].t ~= "Image" then
+    return nil
+  end
+  local data = el.content[1].src:match("^data:image/png;base64,(.*)$")
+  if not data then
+    return nil
+  end
+  local head = decode_base64_head(data, 400)
+  -- The chunk length (4 bytes before "tEXt") tells whether the "c" belongs to the mark;
+  -- the byte after the text is the chunk's checksum and may itself be a "c".
+  local at = head:find("tEXthanmark%-scale%z%d")
+  if not at or at < 5 then
+    return nil
+  end
+  local b1, b2, b3, b4 = head:byte(at - 4, at - 1)
+  local length = ((b1 * 256 + b2) * 256 + b3) * 256 + b4
+  local text = head:sub(at + 4, at + 3 + length)
+  if text:match("^hanmark%-scale%z[1-8]c$") then
+    return "captioned"
+  end
+  if text:match("^hanmark%-scale%z[1-8]$") then
+    return "plain"
+  end
+  return nil
+end
+
+local caption_follows = false
+
 function Para(el)
   if FORMAT ~= "docx" then
     return el
+  end
+
+  local mark = diagram_mark(el)
+  if mark then
+    last_was_heading = false
+    caption_follows = mark == "captioned"
+    return pandoc.Div({ el }, pandoc.Attr("", {}, { ["custom-style"] = "Diagram Figure" }))
+  end
+  if caption_follows then
+    caption_follows = false
+    last_was_heading = false
+    return pandoc.Div({ el }, pandoc.Attr("", {}, { ["custom-style"] = "Image Caption" }))
   end
 
   local style_name = last_was_heading and "First Paragraph" or "Body Text"

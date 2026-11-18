@@ -194,6 +194,41 @@ describe("built-in DOCX writer: structures (R-031)", () => {
     assert.match(table, /<w:tblStyle w:val="TableNormal"\/>/);
   });
 
+  it("keeps a list inside a callout in the callout's shaded box (R-031)", async () => {
+    const xml = await documentXml("> [!note]\n> 본문\n>\n> - 첫째\n>   - 안쪽\n> - [ ] 할 일\n>\n> 1. 하나\n\n- 밖의 항목");
+    const items = paragraphs(xml);
+    const box = (space: number): RegExp =>
+      new RegExp(`<w:pBdr><w:left w:val="single" w:sz="18" w:space="${space}" w:color="7F7F7F"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>`);
+    // Level 0 starts 120 twips (6 pt) right of the callout text: the bar moves out to 8 + 6 pt.
+    const first = items.find((item) => item.text === "첫째")!;
+    assert.match(first.xml, /<w:pStyle w:val="Compact"\/><w:numPr><w:ilvl w:val="0"\/><w:numId w:val="\d+"\/><\/w:numPr><w:pBdr>/, "numbering stays, then the box");
+    assert.match(first.xml, box(14));
+    // Level 1 starts 600 twips (30 pt) in; Word allows 31 pt at most.
+    assert.match(items.find((item) => item.text === "안쪽")!.xml, box(31));
+    assert.match(items.find((item) => item.text.endsWith("할 일"))!.xml, box(14));
+    const ordered = items.find((item) => item.text === "하나")!;
+    assert.match(ordered.xml, box(14));
+    assert.match(ordered.xml, /<w:numPr>/);
+    // The callout's own paragraphs take the box from their style; a list outside has none.
+    assert.doesNotMatch(items.find((item) => item.text === "본문")!.xml, /<w:pBdr>|<w:shd /);
+    assert.doesNotMatch(items.find((item) => item.text === "밖의 항목")!.xml, /<w:pBdr>|<w:shd /);
+  });
+
+  it("leaves the body's paragraph spacing between a list and a table right under it (R-031)", async () => {
+    const table = "| 가 | 나 |\n|---|---|\n| 1 | 2 |";
+    const gap = Math.max(120, Math.round((TEMPLATE.styles["Body Text"].paragraph?.spacingAfterPt ?? 0) * 20));
+    const xml = await documentXml(`- 첫째\n- 둘째\n\n${table}\n\n끝`);
+    const items = paragraphs(xml);
+    assert.match(items.find((item) => item.text === "둘째")!.xml, new RegExp(`<w:pStyle w:val="Compact"/><w:numPr>.*?</w:numPr><w:spacing w:after="${gap}"/></w:pPr>`));
+    assert.doesNotMatch(items.find((item) => item.text === "첫째")!.xml, /<w:spacing /, "only the last item");
+    assert.match(xml, /<\/w:p><w:tbl>/, "no filler paragraph before the table");
+    // A task item keeps its indent after the spacing (child order of the paragraph properties).
+    const task = paragraphs(await documentXml(`- [ ] 할 일\n\n${table}`)).find((item) => item.text.endsWith("할 일"))!;
+    assert.match(task.xml, new RegExp(`<w:spacing w:after="${gap}"/><w:ind w:left="480" w:hanging="360"/></w:pPr>`));
+    // A paragraph before a table already has its own space below.
+    assert.doesNotMatch(paragraphs(await documentXml(`문단\n\n${table}`)).find((item) => item.text === "문단")!.xml, /<w:spacing /);
+  });
+
   it("leaves the body's paragraph spacing under a table and keeps two tables apart", async () => {
     const table = "| 가 | 나 |\n|---|---|\n| 1 | 2 |";
     const gap = Math.max(120, Math.round((TEMPLATE.styles["Body Text"].paragraph?.spacingAfterPt ?? 0) * 20));
