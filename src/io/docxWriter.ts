@@ -315,6 +315,8 @@ interface BlockContext {
   list?: ListFrame;
   /** True right after a heading at the top level (First Paragraph rule). */
   afterHeading?: boolean;
+  /** Inside a callout: indented paragraphs (lists) carry the callout's box themselves. */
+  callout?: boolean;
 }
 
 interface ParagraphOptions {
@@ -326,7 +328,16 @@ interface ParagraphOptions {
   keepNext?: boolean;
   /** Space above this paragraph in twips (the gap under a table). */
   spacingBefore?: number;
+  /**
+   * The callout's bar and shading for a paragraph that starts `boxStart` twips to the
+   * right of the callout's text (a list item): the bar is pushed back out by that much,
+   * so the shaded box keeps one left edge. Word caps the distance at 31 pt.
+   */
+  boxStart?: number;
 }
+
+/** Distance of the callout bar from its text, in points (also in the callout styles). */
+const CALLOUT_BAR_SPACE_PT = 8;
 
 function paragraph(runs: string, options: ParagraphOptions): string {
   // Child order follows CT_PPr.
@@ -334,6 +345,13 @@ function paragraph(runs: string, options: ParagraphOptions): string {
   if (options.keepNext) parts.push("<w:keepNext/>");
   if (options.numbering) {
     parts.push(`<w:numPr><w:ilvl w:val="${options.numbering.level}"/><w:numId w:val="${options.numbering.numId}"/></w:numPr>`);
+  }
+  if (options.boxStart !== undefined) {
+    const space = Math.min(31, CALLOUT_BAR_SPACE_PT + Math.round(Math.max(0, options.boxStart) / 20));
+    parts.push(
+      `<w:pBdr><w:left w:val="single" w:sz="18" w:space="${space}" w:color="7F7F7F"/></w:pBdr>` +
+        '<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>'
+    );
   }
   if (options.spacingBefore) parts.push(`<w:spacing w:before="${options.spacingBefore}"/>`);
   if (!options.numbering && (options.indent || options.hanging)) {
@@ -345,6 +363,25 @@ function paragraph(runs: string, options: ParagraphOptions): string {
     parts.push(`<w:jc w:val="${options.alignment === "justify" ? "both" : options.alignment}"/>`);
   }
   return `<w:p><w:pPr>${parts.join("")}</w:pPr>${runs}</w:p>`;
+}
+
+/** Adds space below the last paragraph of `xml` (child order of CT_PPr kept). */
+function withSpaceAfterLastParagraph(xml: string, twips: number): string {
+  const start = xml.lastIndexOf("<w:p><w:pPr>");
+  if (start < 0) return xml;
+  const open = start + "<w:p><w:pPr>".length;
+  const close = xml.indexOf("</w:pPr>", open);
+  if (close < 0) return xml;
+  let properties = xml.slice(open, close);
+  if (/<w:spacing\b[^>]*\bw:after=/u.test(properties)) return xml;
+  if (/<w:spacing\b/u.test(properties)) {
+    properties = properties.replace(/<w:spacing\b/u, `<w:spacing w:after="${twips}"`);
+  } else {
+    const at = properties.search(/<w:(?:ind|jc)\b/u);
+    const spacing = `<w:spacing w:after="${twips}"/>`;
+    properties = at < 0 ? properties + spacing : properties.slice(0, at) + spacing + properties.slice(at);
+  }
+  return xml.slice(0, open) + properties + xml.slice(close);
 }
 
 const MATH_SPAN = /\$\$[\s\S]+?\$\$|\$(?=\S)(?:[^$\\\n]|\\[\s\S])+?(?<=\S)\$(?!\d)/g;
@@ -611,6 +648,8 @@ class DocxBuilder {
     const numId = this.newNumber(block.ordered, level, block.ordered ? (block.start ?? 1) : 1);
     const frame: ListFrame = { numId, level };
     const textIndent = context.indent + LIST_STEP_TWIPS * (level + 1);
+    // A list in a callout stays in the callout's shaded box (R-031).
+    const box = context.callout ? { boxStart: LIST_STEP_TWIPS * (level + 1) - LIST_HANGING_TWIPS } : {};
     let output = "";
     for (const item of block.items) {
       const blocks = [...item.blocks];
@@ -620,11 +659,12 @@ class DocxBuilder {
       const leadRuns = lead ? this.inlines(lead.inlines, context.rels) : "";
       if (item.checked !== undefined) {
         const mark = textRun(`${item.checked ? TASK_DONE : TASK_OPEN}\t`, {});
-        output += this.p(mark + leadRuns, { style: STYLE.compact, indent: textIndent, hanging: LIST_HANGING_TWIPS });
+        output += this.p(mark + leadRuns, { style: STYLE.compact, indent: textIndent, hanging: LIST_HANGING_TWIPS, ...box });
       } else {
-        output += this.p(leadRuns, { style: STYLE.compact, numbering: frame });
+        // The numbering level sets the same indent: LIST_STEP_TWIPS per level, hanging marker.
+        output += this.p(leadRuns, { style: STYLE.compact, numbering: frame, ...box });
       }
-      output += this.blocks(blocks, { rels: context.rels, style: STYLE.compact, indent: textIndent, list: frame });
+      output += this.blocks(blocks, { rels: context.rels, style: STYLE.compact, indent: textIndent, list: frame, callout: context.callout });
     }
     return output;
   }
@@ -633,7 +673,10 @@ class DocxBuilder {
     let output = "";
     let afterHeading = false;
     let afterDiagram = false;
+    let afterList = false;
     for (const block of blocks) {
+      const wasAfterList = afterList;
+      afterList = false;
       const wasAfterHeading = afterHeading;
       const wasAfterDiagram = afterDiagram;
       afterHeading = false;
@@ -651,6 +694,7 @@ class DocxBuilder {
         output += this.p(runs, {
           style,
           indent: context.indent,
+          ...(context.callout && context.list ? { boxStart: context.indent } : {}),
           alignment: placed || caption ? "center" : block.alignment,
           ...(afterDiagram ? { keepNext: true } : {})
         });
@@ -663,7 +707,11 @@ class DocxBuilder {
         afterHeading = true;
       } else if (block.type === "list") {
         output += this.list(block, context);
+        afterList = true;
       } else if (block.type === "table") {
+        // List items carry no space below them, so a table right under a list would touch it:
+        // the list's last paragraph takes the body spacing below (R-031).
+        if (wasAfterList && !this.gapAfterTable) output = withSpaceAfterLastParagraph(output, this.tableGapTwips);
         if (this.gapAfterTable) {
           output += `<w:p><w:pPr><w:pStyle w:val="${STYLE.compact}"/><w:spacing w:before="0" w:after="0" w:line="${this.tableGapTwips}" w:lineRule="exact"/></w:pPr></w:p>`;
         }
@@ -682,7 +730,7 @@ class DocxBuilder {
           indent: context.indent,
           keepNext: block.blocks.length > 0
         });
-        output += this.blocks(block.blocks, { ...context, style: STYLE.calloutBody });
+        output += this.blocks(block.blocks, { ...context, style: STYLE.calloutBody, callout: true });
       } else if (block.type === "code") {
         output += this.p(textRun(this.plain(block.value).replace(/\r?\n$/, ""), {}), { style: STYLE.code, indent: context.indent });
       } else {
