@@ -22,7 +22,7 @@ const hayroWasmData = await readFile(new URL("../src/io/hayroWasmData.ts", impor
 // feedback (R-024 to R-026: heading mapping and finishing, Hallym University
 // forms, per-type frames, one form list, the preview toolbar): 4,179,268 bytes
 // (+32,035; new modules 16,197 bytes).
-// 2.7.1: 4,262,290 bytes. Kordoc 4.25.0 engine port (R-029): 5,221,731 bytes.
+// 2.7.1: 4,262,290 bytes. Kordoc 4.25.0 engine port (R-029): 5,221,758 bytes.
 // Kordoc and HanMark code shrank to about 2.97 MB (PDF.js, the Korean CMaps, and
 // the OCR subgraph left the bundle); the embedded hayro PDF engine adds 2,248,248
 // bytes (4,124,364 bytes of wasm, raw DEFLATE, base64). An Obsidian plugin ships

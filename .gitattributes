@@ -12,3 +12,6 @@ src/io/hayroWasmData.ts text eol=lf
 *.docx binary
 *.pdf binary
 styles.css text eol=lf
+
+# Third-party license texts are kept byte for byte.
+third-party-licenses/** -text

@@ -43,19 +43,17 @@ import { resolveOutputLocale, t, type LanguagePreference } from "../i18n";
  * always wins.
  * - totalRow "keep": a 합계/총계/계 row stays where the note has it (4.23.0 moves
  *   it under the header row by default).
- * - bodyTitleBox false, for the bullet-style report without a cover only: the
- *   first "#" stays chapter Ⅰ instead of becoming a title box (4.25.0).
+ * - bodyTitleBox false and toc true, for the bullet-style report without a cover
+ *   only: the first "#" stays chapter Ⅰ instead of becoming a title box, and the
+ *   contents page stays in front (4.25.0 made both follow the cover).
  */
 export function pinGongmunDefaults(gongmun: GongmunOptions | undefined): GongmunOptions | undefined {
   if (!gongmun) return gongmun;
   const pinned: GongmunOptions = { ...gongmun };
   if (pinned.totalRow === undefined) pinned.totalRow = "keep";
-  if (
-    pinned.bodyTitleBox === undefined &&
-    pinned.cover === false &&
-    normalizeGongmunPreset(pinned.preset) === "gaejosik"
-  ) {
-    pinned.bodyTitleBox = false;
+  if (pinned.cover === false && normalizeGongmunPreset(pinned.preset) === "gaejosik") {
+    if (pinned.bodyTitleBox === undefined) pinned.bodyTitleBox = false;
+    if (pinned.toc === undefined) pinned.toc = true;
   }
   return pinned;
 }

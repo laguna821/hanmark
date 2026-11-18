@@ -104,12 +104,14 @@ describe("Kordoc 4.25.0 forced options and behaviour pins (R-029)", () => {
       preset: "gaejosik",
       cover: false,
       totalRow: "keep",
-      bodyTitleBox: false
+      bodyTitleBox: false,
+      toc: true
     });
+    assert.equal(pinGongmunDefaults({ preset: "gaejosik", cover: false, toc: false })?.toc, false);
     assert.deepEqual(pinGongmunDefaults({ preset: "개조식" as GongmunOptions["preset"], cover: false })?.bodyTitleBox, false);
     assert.equal(pinGongmunDefaults({ preset: "gaejosik", cover: false, bodyTitleBox: true })?.bodyTitleBox, true);
     assert.equal(pinGongmunDefaults({ preset: "gaejosik" })?.bodyTitleBox, undefined, "with a cover the title box is unchanged");
-    assert.equal(pinGongmunDefaults({ preset: "report", cover: false })?.bodyTitleBox, undefined);
+    assert.deepEqual(pinGongmunDefaults({ preset: "report", cover: false }), { preset: "report", cover: false, totalRow: "keep" });
     const input: GongmunOptions = { preset: "plan" };
     pinGongmunDefaults(input);
     assert.deepEqual(input, { preset: "plan" }, "the caller's object is not mutated");

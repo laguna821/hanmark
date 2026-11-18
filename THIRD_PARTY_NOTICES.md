@@ -59,17 +59,16 @@ before the two `@font-face` declarations.
 ### Software bundled in `main.js`
 
 `main.js` is one esbuild bundle. It contains the following npm packages at the
-versions pinned by `package-lock.json` (HanMark 2.7.0). HanMark uses JSZip under
-the MIT option of its dual license.
+versions pinned by `package-lock.json` (Kordoc 4.25.0 engine, R-029). HanMark uses
+JSZip under the MIT option of its dual license.
 
 | Package | Version | License | Copyright |
 |---|---|---|---|
-| pdfjs-dist (PDF.js) | 4.10.38 | Apache-2.0 | Mozilla Foundation |
-| kordoc | 4.15.7 | MIT | Copyright (c) 2026 chrisryugj |
+| kordoc | 4.25.0 | MIT | Copyright (c) 2026 chrisryugj |
 | docx-preview | 0.4.0 | Apache-2.0 | Volodymyr Baydalka |
-| @xmldom/xmldom | 0.9.12 (Kordoc) and 0.8.15 | MIT | Copyright 2019 - present Christopher J. Brody and other contributors; Copyright 2012 - 2017 @jindw and other contributors |
+| @xmldom/xmldom | 0.8.15 | MIT | Copyright 2019 - present Christopher J. Brody and other contributors; Copyright 2012 - 2017 @jindw and other contributors |
 | entities | 4.5.0 | BSD-2-Clause | Copyright (c) Felix Böhm |
-| markdown-it | 14.3.0 | MIT | Copyright (c) 2014 Vitaly Puzrin, Alex Kocharin |
+| markdown-it | 14.3.3 | MIT | Copyright (c) 2014 Vitaly Puzrin, Alex Kocharin |
 | markdown-it-footnote | 4.0.0 | MIT | Copyright (c) 2014-2015 Vitaly Puzrin, Alex Kocharin |
 | linkify-it | 5.0.2 | MIT | Copyright (c) 2015 Vitaly Puzrin |
 | mdurl | 2.0.0 | MIT | Copyright (c) 2015 Vitaly Puzrin, Alex Kocharin |
@@ -104,10 +103,45 @@ are reproduced in the next section. The Apache License 2.0 text is available at
   standard draft letter forms described below.
 - **claw-hwp** — Copyright (c) 2026 DoHyun468 — MIT License. Chart XML
   generation, form-matching rules, and validation checks.
-- **Pix2Text** (MIT) and **PaddleOCR PP-OCRv5** (Apache License 2.0) — Kordoc's
-  optional OCR code. It is present in the bundle but HanMark never calls it:
-  no OCR option is ever passed, no model is downloaded, and no model weights are
-  redistributed.
+- **PDF.js** — Copyright Mozilla Foundation — Apache License 2.0. Kordoc 4.25.0
+  no longer bundles PDF.js, but parts of its PDF reading are ported from it
+  (text-chunk rules, bidirectional text reordering, PDF string decoding, link
+  targets, DeviceCMYK conversion, and text-state arithmetic).
+- **quick-xml** — Copyright (c) 2016 Johann Tuffe — MIT License — and
+  **memchr** — Copyright (c) 2015 Andrew Gallant — Unlicense OR MIT. Kordoc's
+  XML parser is compiled from them to WebAssembly and is part of Kordoc's code
+  inside `main.js`.
+- **korean-report-hwpx** — Copyright (c) 2026 Upstage — MIT License. Measured
+  report and press-release styles of central government agencies, used by
+  Kordoc's official-document generator (`agency` option).
+
+Kordoc's optional OCR code (Pix2Text, PaddleOCR PP-OCRv5) is no longer in the
+bundle: the build cuts it off, no model is downloaded, and no model weights are
+redistributed.
+
+The license texts Kordoc ships for these works are kept unchanged in
+`third-party-licenses/kordoc-4.25.0/`.
+
+#### hayro (PDF engine, WebAssembly)
+
+Kordoc 4.25.0 reads PDF text with **hayro** — <https://github.com/LaurenzV/hayro>
+— Copyright (c) The Hayro Authors — Apache License 2.0 OR MIT (Kordoc chooses
+Apache-2.0). Kordoc builds it, with a small Rust wrapper of its own, from the
+pinned upstream commit `61f50b42` into `hayro-pdf.wasm`, without changes.
+
+HanMark embeds that file unchanged (4,124,364 bytes, SHA-256
+`5da10f8423f48d6c40236f49db956afac25e160e170f80c957cebfd2a7e187e5`): raw DEFLATE,
+then base64, in `src/io/hayroWasmData.ts`, written by
+`scripts/gen-hayro-wasm.mjs`. The build checks the hash against the installed
+Kordoc package.
+
+The module also contains the Rust crates hayro depends on (Apache-2.0, MIT,
+BSD-3-Clause, Zlib, Unicode-3.0, and Unlicense OR MIT) and the Rust standard
+library (MIT OR Apache-2.0). The full crate list with versions, the chosen
+license for each crate, and the non-Apache license texts are in
+`third-party-licenses/kordoc-4.25.0/hayro-pdf.txt`, unchanged from Kordoc. hayro's
+own notice says that parts of its code come from PDFBox, PDF.js, and the png
+crate (Apache-2.0).
 
 #### Embedded data
 
@@ -117,10 +151,7 @@ are reproduced in the next section. The Apache License 2.0 text is available at
   HWPX files are embedded unchanged (base64) in `src/io/formTemplateData.ts` by
   `scripts/gen-form-templates.mjs`. The underlying form layout is a statutory
   Korean public form.
-- **Korean PDF CMaps** — 24 CMap files (Adobe-Korea1, UniKS, KSC and KSCms
-  encodings) from `pdfjs-dist/cmaps`, embedded unchanged (base64) in
-  `src/io/pdfCMapData.ts` by `scripts/gen-pdf-cmaps.mjs`. Copyright 1990-2009
-  Adobe Systems Incorporated, under the license reproduced below.
+- **hayro PDF engine** — see "hayro (PDF engine, WebAssembly)" above.
 
 #### Test fixture (not part of `main.js`)
 
@@ -212,38 +243,6 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
-#### Adobe CMap license (Korean PDF CMaps)
-
-Copyright 1990-2009 Adobe Systems Incorporated.
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-Redistributions of source code must retain the above copyright notice, this
-list of conditions and the following disclaimer.
-
-Redistributions in binary form must reproduce the above copyright notice, this
-list of conditions and the following disclaimer in the documentation and/or
-other materials provided with the distribution.
-
-Neither the name of Adobe Systems Incorporated nor the names of its
-contributors may be used to endorse or promote products derived from this
-software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
----
-
 ## 한국어
 
 ### Kami
@@ -279,8 +278,8 @@ HanMark는 내장 Editorial PDF 레이아웃을 위해 Pretendard 400·600 굵�
 
 ### `main.js`에 포함된 소프트웨어
 
-`main.js`는 esbuild로 묶은 파일 하나입니다. HanMark 2.7.0의 `package-lock.json`이
-고정한 판의 npm 패키지 25개가 들어 있으며, 패키지·판·라이선스·저작권 표시는 영어
+`main.js`는 esbuild로 묶은 파일 하나입니다. `package-lock.json`이 고정한 판의 npm
+패키지 23개(Kordoc 4.25.0 엔진, R-029)가 들어 있으며, 패키지·판·라이선스·저작권 표시는 영어
 절의 표와 같습니다. JSZip은 이중 라이선스 중 MIT를 따릅니다. Apache-2.0 패키지
 가운데 NOTICE 파일이 있는 것은 Kordoc뿐이며 그 내용을 아래에 옮깁니다.
 
@@ -294,9 +293,38 @@ HanMark는 내장 Editorial PDF 레이아웃을 위해 Pretendard 400·600 굵�
   배포용 문서 복호화(TypeScript로 재작성), 아래 표준 기안문 서식 2종.
 - **claw-hwp** — Copyright (c) 2026 DoHyun468 — MIT License. 차트 XML 생성,
   양식 대응 규칙, 검증 항목.
-- **Pix2Text**(MIT)·**PaddleOCR PP-OCRv5**(Apache License 2.0) — Kordoc의 선택형
-  OCR 코드입니다. 번들 안에 있지만 HanMark는 호출하지 않습니다. OCR 옵션을 넘기지
-  않고, 모델을 내려받지 않으며, 모델 가중치를 재배포하지 않습니다.
+- **PDF.js** — Copyright Mozilla Foundation — Apache License 2.0. Kordoc 4.25.0은
+  PDF.js를 묶지 않지만, PDF 읽기의 일부(글 조각 규칙, 양방향 글 배열, PDF 문자열
+  해독, 링크 대상, DeviceCMYK 변환, 글 상태 계산)를 PDF.js에서 옮겨 왔습니다.
+- **quick-xml** — Copyright (c) 2016 Johann Tuffe — MIT License, **memchr** —
+  Copyright (c) 2015 Andrew Gallant — Unlicense OR MIT. Kordoc의 XML 파서는 이
+  둘을 WebAssembly로 컴파일한 것이며 `main.js` 안 Kordoc 코드에 들어 있습니다.
+- **korean-report-hwpx** — Copyright (c) 2026 Upstage — MIT License.
+  중앙행정기관별 보고서·보도자료 서식 실측값. Kordoc 공문서 생성기의 `agency`
+  옵션이 씁니다.
+
+Kordoc의 선택형 OCR 코드(Pix2Text, PaddleOCR PP-OCRv5)는 이제 번들에 없습니다.
+빌드가 잘라 내며, 모델을 내려받지 않고, 모델 가중치를 재배포하지 않습니다.
+
+Kordoc이 이 저작물들에 대해 싣는 라이선스 전문은
+`third-party-licenses/kordoc-4.25.0/`에 바꾸지 않고 둡니다.
+
+#### hayro (PDF 엔진, WebAssembly)
+
+Kordoc 4.25.0은 PDF 글을 **hayro**(<https://github.com/LaurenzV/hayro>,
+Copyright (c) The Hayro Authors, Apache License 2.0 OR MIT 중 Kordoc이
+Apache-2.0 선택)로 읽습니다. Kordoc이 자체 Rust 래퍼와 함께 상위 커밋
+`61f50b42`을 바꾸지 않고 `hayro-pdf.wasm`으로 빌드합니다.
+
+HanMark는 이 파일(4,124,364바이트, SHA-256
+`5da10f8423f48d6c40236f49db956afac25e160e170f80c957cebfd2a7e187e5`)을 바꾸지 않고
+raw DEFLATE 뒤 base64로 `src/io/hayroWasmData.ts`에 넣습니다
+(`scripts/gen-hayro-wasm.mjs`). 빌드는 설치된 Kordoc 패키지와 해시를 대조합니다.
+
+이 모듈에는 hayro가 의존하는 Rust 크레이트(Apache-2.0, MIT, BSD-3-Clause, Zlib,
+Unicode-3.0, Unlicense OR MIT)와 Rust 표준 라이브러리(MIT OR Apache-2.0)가 함께
+컴파일되어 있습니다. 크레이트 목록·판·고른 라이선스·Apache 외 라이선스 전문은
+Kordoc이 만든 그대로 `third-party-licenses/kordoc-4.25.0/hayro-pdf.txt`에 있습니다.
 
 #### 내장 데이터
 
@@ -305,15 +333,12 @@ HanMark는 내장 Editorial PDF 레이아웃을 위해 Pretendard 400·600 굵�
   2025-2026 Edward Kim — MIT License. `scripts/gen-form-templates.mjs`가 HWPX 두 개를
   바꾸지 않고 `src/io/formTemplateData.ts`에 base64로 넣습니다. 서식 배치 자체는
   법령 부속 공공 서식입니다.
-- **한국어 PDF CMap** — `pdfjs-dist/cmaps`의 CMap 24개(Adobe-Korea1·UniKS·KSC·KSCms
-  인코딩). `scripts/gen-pdf-cmaps.mjs`가 바꾸지 않고 `src/io/pdfCMapData.ts`에
-  base64로 넣습니다. Copyright 1990-2009 Adobe Systems Incorporated, 라이선스
-  전문은 영어 절에 있습니다.
+- **hayro PDF 엔진** — 위 "hayro (PDF 엔진, WebAssembly)" 절을 보세요.
 
 #### 시험 자료 (`main.js`에 들어가지 않음)
 
 - `tests/fixtures/password/HWP5-password-123456.hwpx` — Kordoc 시험 자산으로 쓰인
   rhwp 예제(MIT). 해당 폴더의 README를 보세요.
 
-MIT·BSD 2-Clause(entities)·zlib(pako)·ISC(inherits)·Adobe CMap 라이선스 전문은
-영어 절에 원문 그대로 실었습니다.
+MIT·BSD 2-Clause(entities)·zlib(pako)·ISC(inherits) 라이선스 전문은 영어 절에
+원문 그대로 실었습니다.
