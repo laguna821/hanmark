@@ -276,10 +276,33 @@ function lintSlice(
   return findings;
 }
 
+/**
+ * The engine can report one problem twice, once for the whole expression and once for a
+ * part of it ("200달러" and "달러" in "월 100~200달러"). Findings of one rule whose ranges
+ * overlap on a line are one finding: the longest range, the first on a tie.
+ */
+export function mergeOverlaps(findings: readonly CheckFinding[]): CheckFinding[] {
+  const kept: CheckFinding[] = [];
+  const ordered = [...findings].sort((a, b) => b.length - a.length || a.line - b.line || a.ch - b.ch);
+  for (const finding of ordered) {
+    const end = finding.ch + finding.length;
+    const covered = kept.some(
+      (other) =>
+        other.rule === finding.rule &&
+        other.line === finding.line &&
+        finding.ch < other.ch + other.length &&
+        other.ch < end
+    );
+    if (!covered) kept.push(finding);
+  }
+  return kept;
+}
+
 function finish(findings: CheckFinding[], ignored: ReadonlySet<string>): { kept: CheckFinding[]; hidden: number } {
-  const kept = findings.filter((finding) => !isIgnored(finding, ignored));
+  const merged = mergeOverlaps(findings);
+  const kept = merged.filter((finding) => !isIgnored(finding, ignored));
   kept.sort((a, b) => a.line - b.line || a.ch - b.ch || a.rule.localeCompare(b.rule));
-  return { kept, hidden: findings.length - kept.length };
+  return { kept, hidden: merged.length - kept.length };
 }
 
 function empty(tooLarge: boolean): CheckResult {

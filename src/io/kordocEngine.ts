@@ -38,6 +38,7 @@ import {
 } from "./fontResolver";
 import { fontGuideLines } from "./fontGuide";
 import { resolveOutputLocale, t, type LanguagePreference } from "../i18n";
+import { assertEngineCapability } from "./engineCapability";
 
 /**
  * Official-document defaults that Kordoc changed after 4.15.7, pinned to the old
@@ -231,6 +232,7 @@ async function generateKordocPackage(
   const engineWarnings: string[] = [];
   const sample = options.sampleLook ? await openSampleLook(options.sampleLook) : undefined;
   if (sample) engineWarnings.push(...sample.roleWarnings(markdown));
+  assertEngineCapability("documents");
   const raw = await markdownToHwpx(
     markdown,
     sample

@@ -7,6 +7,7 @@ import { describeImportFailure, describeImportWarning } from "./messageCatalog";
 import { inlineImportedMemos } from "./hwpxMemos";
 import { kordocParseOptions, toParseOptions, type ImportOptions } from "./importOptions";
 import { errorMessage } from "../utils/errors";
+import { assertEngineCapability } from "./engineCapability";
 import { t } from "../i18n";
 
 /** Extensions HanMark offers to convert (Kordoc detects the real format by content). */
@@ -168,6 +169,8 @@ export async function importOne(
 ): Promise<ImportResult> {
   let result: ParseResult;
   try {
+    // An old installer cannot run the engines; say so instead of an engine exception (R-037).
+    assertEngineCapability(looksLikePdf(input) ? "pdf" : "documents");
     result = await parse(
           bytesAsArrayBuffer(input.bytes),
           kordocParseOptions(toParseOptions(job.options, { password, onProgress: onPage }))
