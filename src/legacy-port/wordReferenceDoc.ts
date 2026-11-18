@@ -290,6 +290,24 @@ function sortStyleChildren(style: Element): void {
   if (run) sortChildren(run, RUN_PROPERTY_ORDER);
 }
 
+/** Paragraph style of a diagram picture on the Pandoc path (docx_style_map.lua names it). */
+export const DIAGRAM_FIGURE_STYLE_NAME = "Diagram Figure";
+const DIAGRAM_FIGURE_STYLE_ID = "DiagramFigure";
+
+/**
+ * Pandoc cannot centre a paragraph directly, so the reference document carries a
+ * centred style for the paragraph that holds a diagram picture (R-033). The built-in
+ * writer centres that paragraph itself and does not use this style.
+ */
+export function addDiagramFigureStyle(xml: string): string {
+  if (xml.includes(`w:styleId="${DIAGRAM_FIGURE_STYLE_ID}"`)) return xml;
+  const style =
+    `<w:style w:type="paragraph" w:customStyle="1" w:styleId="${DIAGRAM_FIGURE_STYLE_ID}"><w:name w:val="${DIAGRAM_FIGURE_STYLE_NAME}"/>` +
+    `<w:basedOn w:val="${WORD_STYLE_ID_MAP["Body Text"]}"/><w:pPr><w:keepNext/><w:jc w:val="center"/></w:pPr></w:style>`;
+  const end = xml.lastIndexOf("</w:styles>");
+  return end < 0 ? xml : xml.slice(0, end) + style + xml.slice(end);
+}
+
 /** Writes every style of the template into a styles.xml (creating missing ones). */
 export function applyWordTemplateStyles(xml: string, template: WordTemplateSpec): string {
   const doc = parseXml(xml, "styles.xml");
@@ -384,7 +402,7 @@ export async function buildReferenceDocx(
 ): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(asArrayBuffer(baseReferenceDocx));
   const styles = await zip.file("word/styles.xml")?.async("string");
-  if (styles) zip.file("word/styles.xml", applyWordTemplateStyles(styles, template));
+  if (styles) zip.file("word/styles.xml", addDiagramFigureStyle(applyWordTemplateStyles(styles, template)));
   const document = await zip.file("word/document.xml")?.async("string");
   if (document) zip.file("word/document.xml", applyWordTemplatePage(document, template));
   const settings = await zip.file("word/settings.xml")?.async("string");

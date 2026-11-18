@@ -69,7 +69,7 @@
 |---|---|---|---|
 | HWPX(빠른·공문서·미리보기) | PNG 그림, 그린 크기의 2배 화소, 가운데, 본문 폭 이하 | 그림 바로 아래 가운데 문단, 그림 문단에 "다음 문단과 함께" | 넣지 않음(Markdown → HWPX 경로에 설명 칸이 없음) |
 | 내장 DOCX | PNG 그림, 가운데 | `Image Caption` 스타일, 가운데, 그림 문단에 `keepNext` | 그림 설명(`descr`) |
-| Pandoc DOCX | Markdown의 PNG data URL(Pandoc이 직접 읽음) | 일반 문단 | Pandoc의 그림 대체 글 |
+| Pandoc DOCX | Markdown의 PNG data URL(Pandoc이 직접 읽음) | 가운데 정렬 문단 스타일 `Diagram Figure`, 제목은 `Image Caption` | Pandoc의 그림 대체 글 |
 | HTML(두 테마) | 인라인 SVG `<figure class="hanmark-diagram">` | `<figcaption>` | SVG `<title>` |
 | Editorial PDF | 인라인 SVG(글자를 고를 수 있음) | 그림 아래 가운데 8pt 문단 | SVG `<title>` |
 
@@ -111,7 +111,7 @@
 - Editorial PDF 2단 배치에서 제목 문단이 떠 있는 도식과 떨어질 수 있다(1단은 붙어 있음).
 - 한컴 오피스 실표시는 확인하지 않았다. Kordoc 재렌더와 재파싱으로만 확인했다.
 - Obsidian 1.8.9 창에서의 실행은 확인하지 않았다(Chrome과 Node로 확인).
-- Pandoc DOCX는 그림을 가운데로 맞추지 않고 제목에 캡션 스타일을 주지 않는다.
+- (해결, 2026-11-18) Pandoc DOCX: Lua 필터가 PNG의 `hanmark-scale` 표시(tEXt 청크 길이로 판정)를 읽어 그림 문단에 가운데 정렬 스타일 `Diagram Figure`를, 뒤의 제목 문단에 `Image Caption`을 준다. 참조 문서에 `Diagram Figure` 스타일을 더한다. Pandoc 3.9로 확인했다(`tests/pandocDiagramFilter.test.ts`, Pandoc이 없으면 건너뜀). 표시 없는 그림은 그대로다.
 
 ## 9. 구현 영향
 
