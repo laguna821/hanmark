@@ -36,8 +36,13 @@ async function read(data: ArrayBuffer | Uint8Array, extra: Record<string, unknow
 }
 
 describe("HWP to HWPX conversion (R-034)", () => {
-  it("names Kordoc's own engine, never a default that could pick Hancom Office", () => {
+  it("uses Kordoc's lean converter and never the wrapper that offers a Hancom Office engine", async () => {
     assert.equal(HWP_CONVERT_ENGINE, "kordoc");
+    const source = await readFile("src/io/hwpConvert.ts", "utf8");
+    assert.match(source, /import \{ hwpToHwpx, parse, validateHwpx \} from "kordoc";/u);
+    for (const file of ["src/io/hwpConvert.ts", "src/ui/hwpConvertFlow.ts", "src/io/formFill.ts", "src/io/hwpxMemos.ts"]) {
+      assert.doesNotMatch(await readFile(file, "utf8"), /\bconvertToHwpx\s*\(|engine:\s*"(?:hancom|auto)"/u, file);
+    }
   });
 
   it("converts an HWP 5.x document with its formatting, valid and identical on every run", async () => {
@@ -251,6 +256,7 @@ describe("comments as Hangul memos (R-034)", () => {
 
 interface Runtime {
   convert(bytes: Uint8Array, engine: string): Promise<{ mode: string; engine: string; byteLength: number }>;
+  lean(bytes: Uint8Array): Promise<number>;
 }
 
 describe("HWP conversion inside the plugin bundle (R-034)", () => {
@@ -258,7 +264,8 @@ describe("HWP conversion inside the plugin bundle (R-034)", () => {
 
   before(async () => {
     bundle = await loadHardenedKordocBundle<Runtime>(
-      'import { convertToHwpx } from "kordoc";\n' +
+      'import { convertToHwpx, hwpToHwpx } from "kordoc";\n' +
+        "export async function lean(bytes) { return (await hwpToHwpx(new Uint8Array(bytes))).byteLength; }\n" +
         "export async function convert(bytes, engine) {\n" +
         "  const result = await convertToHwpx(new Uint8Array(bytes), { engine });\n" +
         "  return { mode: result.mode, engine: result.engine, byteLength: result.data.byteLength };\n" +
@@ -275,6 +282,7 @@ describe("HWP conversion inside the plugin bundle (R-034)", () => {
     const converted = await bundle.runtime.convert(source, "kordoc");
     assert.deepEqual([converted.mode, converted.engine], ["preserve", "kordoc"]);
     assert.ok(converted.byteLength > 1000);
+    assert.equal(await bundle.runtime.lean(source), converted.byteLength, "the converter HanMark calls gives the same document");
     for (const engine of ["hancom", "auto"]) {
       await assert.rejects(() => bundle.runtime.convert(source, engine), /does not bundle Hancom Office automation/u, engine);
     }

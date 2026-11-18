@@ -105,7 +105,8 @@ export class HwpConvertReportModal extends Modal {
       if (item.path) {
         const path = item.path;
         row.createDiv({ text: t("convert.report.saved", { path }) });
-        row.createDiv({ text: t(item.mode === "content" ? "convert.report.modeContent" : "convert.report.modePreserve") });
+        // HWP 3.x says in its own note that only text and tables came over.
+        if (item.mode === "preserve") row.createDiv({ text: t("convert.report.modePreserve") });
         for (const note of item.notes) row.createDiv({ text: note });
         row.createEl("button", { text: t("convert.report.view"), attr: { type: "button" } }).onclick = () => {
           this.close();

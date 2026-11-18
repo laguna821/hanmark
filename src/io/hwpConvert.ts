@@ -1,6 +1,7 @@
-import { convertToHwpx, parse, validateHwpx } from "kordoc";
+import { hwpToHwpx, parse, validateHwpx } from "kordoc";
 import { bytesAsArrayBuffer } from "./fileGateway";
 import { finalizeHwpxPackage } from "./hwpxPostProcess";
+import { generateValidatedHwpx } from "./kordocEngine";
 import { kordocParseOptions } from "./importOptions";
 import { describeImportFailure } from "./messageCatalog";
 import { t } from "../i18n";
@@ -8,10 +9,13 @@ import { t } from "../i18n";
 /**
  * HWP to HWPX conversion (3.0.0, R-034).
  *
- * Kordoc's own converter runs in memory: HWP 5.x keeps its formatting, HWP 3.x
- * carries text and tables over with default formatting. The second engine Kordoc
- * offers (saving through Hancom Office) is removed from the bundle; the engine
- * is named here so that no default can ever select it.
+ * HWP 5.x goes through Kordoc's formatting-preserving converter (`hwpToHwpx`), in
+ * memory. HWP 3.x has no such converter: its text, tables and pictures are read
+ * and written as a new document with default formatting, and the report says so.
+ *
+ * Kordoc's `convertToHwpx` wraps both and adds an engine that saves through Hancom
+ * Office. HanMark does not call it: the wrapper loads Kordoc's whole entry module
+ * (OCR and print code included), and the choice of engine should not exist here.
  */
 export const HWP_CONVERT_ENGINE = "kordoc" as const;
 
@@ -35,6 +39,11 @@ export class HwpConvertError extends Error {
   }
 }
 
+/** True for an OLE2 compound file, the container of HWP 5.x. */
+export function isOle2Bytes(bytes: Uint8Array): boolean {
+  return bytes.length > 8 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+}
+
 /** True for a ZIP package (HWPX); HWP 5.x is an OLE2 file and HWP 3.x a plain binary. */
 export function isHwpxBytes(bytes: Uint8Array): boolean {
   return bytes.length > 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && (bytes[2] === 0x03 || bytes[2] === 0x05);
@@ -44,11 +53,16 @@ function copy(bytes: Uint8Array): ArrayBuffer {
   return bytesAsArrayBuffer(bytes.slice());
 }
 
+/** Reads a document as it stands (layout tables kept, script tags on), through the offline whitelist. */
+function readDocument(bytes: Uint8Array, password?: string): ReturnType<typeof parse> {
+  return parse(copy(bytes), kordocParseOptions({ layoutTables: "keep", scriptTags: true, ...(password ? { password } : {}) }));
+}
+
 /** Why a conversion failed, in the words the import report uses. */
 async function explainFailure(bytes: Uint8Array, error: unknown, password?: string): Promise<HwpConvertError> {
   const original = error instanceof Error ? error.message : String(error);
   try {
-    const parsed = await parse(copy(bytes), kordocParseOptions({ images: false, ...(password ? { password } : {}) }));
+    const parsed = await readDocument(bytes, password);
     if (!parsed.success) {
       const described = describeImportFailure(parsed.code, parsed.fileType);
       return new HwpConvertError(`${described.title} ${described.fix ?? ""}`.trim(), Boolean(described.passwordHelps), original);
@@ -59,15 +73,52 @@ async function explainFailure(bytes: Uint8Array, error: unknown, password?: stri
   return new HwpConvertError(t("convert.error.failed", { detail: original }), false, original);
 }
 
+const REBUILD_FORMATS: readonly string[] = ["hwp3", "hwpml"];
+
+/**
+ * HWP 3.x (and HWPML): read the document as it stands, layout tables and all, and
+ * write its text, tables and pictures as a new HWPX with default formatting.
+ */
+async function rebuildAsHwpx(bytes: Uint8Array, password?: string): Promise<Uint8Array> {
+  const parsed = await readDocument(bytes, password);
+  if (!parsed.success) {
+    const described = describeImportFailure(parsed.code, parsed.fileType);
+    throw new HwpConvertError(`${described.title} ${described.fix ?? ""}`.trim(), Boolean(described.passwordHelps), parsed.error);
+  }
+  if (!REBUILD_FORMATS.includes(parsed.fileType)) {
+    throw new HwpConvertError(t("convert.error.notHwp"), false, parsed.fileType);
+  }
+  const pictures = new Map(parsed.images?.map((image) => [image.filename, image]) ?? []);
+  const generated = await generateValidatedHwpx(parsed.markdown, {
+    images: {
+      allowFailures: true,
+      loader: (source) => {
+        const picture = pictures.get(decodeURIComponent(source));
+        return picture
+          ? Promise.resolve({ data: picture.data, contentType: picture.mimeType })
+          : Promise.reject(new Error(source));
+      }
+    }
+  });
+  return new Uint8Array(generated.data);
+}
+
 /**
  * Converts one HWP document to a validated, deterministic HWPX package. An HWPX
  * input is returned re-packed (same content). Nothing is written anywhere.
  */
 export async function convertHwpToHwpx(bytes: Uint8Array, password?: string): Promise<ConvertedHwp> {
-  let converted: Awaited<ReturnType<typeof convertToHwpx>>;
+  let converted: { data: Uint8Array; mode: "preserve" | "content"; warnings: string[] };
   try {
-    converted = await convertToHwpx(bytes.slice(), { engine: HWP_CONVERT_ENGINE, ...(password ? { password } : {}) });
+    if (isHwpxBytes(bytes)) {
+      converted = { data: bytes, mode: "preserve", warnings: [] };
+    } else if (isOle2Bytes(bytes)) {
+      converted = { data: await hwpToHwpx(bytes.slice(), password ? { password } : {}), mode: "preserve", warnings: [] };
+    } else {
+      converted = { data: await rebuildAsHwpx(bytes, password), mode: "content", warnings: [] };
+    }
   } catch (error: unknown) {
+    if (error instanceof HwpConvertError) throw error;
     throw await explainFailure(bytes, error, password);
   }
   // Fixed ZIP dates and entry order: the same document gives the same bytes on every run.

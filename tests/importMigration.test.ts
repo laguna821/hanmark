@@ -166,9 +166,15 @@ describe("legacy imported-note migration", () => {
 
 it("new Kordoc imports write only parsed Markdown and attachment links", async () => {
   const source = await readFile("src/io/importRunner.ts", "utf8");
+  // The body is the parsed Markdown; only the memo option (off by default) moves the
+  // memos the engine listed at the end to their text (R-034).
   assert.match(
     source,
-    /persistImportedImages\([\s\S]*?result\.markdown\.trim\(\),[\s\S]*?result\.images/u
+    /const memoNote = job\.options\.memos \? inlineImportedMemos\(result\.markdown, result\.memos\)\.markdown : result\.markdown;/u
+  );
+  assert.match(
+    source,
+    /persistImportedImages\([\s\S]*?memoNote\.trim\(\),[\s\S]*?result\.images/u
   );
   assert.match(
     source,
