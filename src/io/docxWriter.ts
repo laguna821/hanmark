@@ -324,6 +324,8 @@ interface ParagraphOptions {
   numbering?: ListFrame;
   alignment?: EditorialAlignment;
   keepNext?: boolean;
+  /** Space above this paragraph in twips (the gap under a table). */
+  spacingBefore?: number;
 }
 
 function paragraph(runs: string, options: ParagraphOptions): string {
@@ -333,6 +335,7 @@ function paragraph(runs: string, options: ParagraphOptions): string {
   if (options.numbering) {
     parts.push(`<w:numPr><w:ilvl w:val="${options.numbering.level}"/><w:numId w:val="${options.numbering.numId}"/></w:numPr>`);
   }
+  if (options.spacingBefore) parts.push(`<w:spacing w:before="${options.spacingBefore}"/>`);
   if (!options.numbering && (options.indent || options.hanging)) {
     parts.push(
       `<w:ind w:left="${options.indent ?? 0}"${options.hanging ? ` w:hanging="${options.hanging}"` : ""}/>`
@@ -403,11 +406,26 @@ class DocxBuilder {
   private readonly usedFootnotes = new Set<number>();
   private drawingId = 0;
 
+  /**
+   * Word sets a table flush against the block under it, and joins two tables that follow
+   * each other. The block after a table therefore gets the body's paragraph spacing above
+   * it; only between two tables, where no block can carry it, a thin paragraph stands.
+   */
+  private gapAfterTable = false;
+
   constructor(
     private readonly textWidthTwips: number,
     private readonly footnoteCount: number,
-    private readonly equations: readonly string[]
+    private readonly equations: readonly string[],
+    private readonly tableGapTwips: number = 160
   ) {}
+
+  /** A paragraph outside table cells; it takes the gap a table before it left open. */
+  private p(runs: string, options: ParagraphOptions, takeGap = true): string {
+    const gap = this.gapAfterTable && takeGap;
+    this.gapAfterTable = false;
+    return paragraph(runs, gap ? { ...options, spacingBefore: this.tableGapTwips } : options);
+  }
 
   note(code: DocxNoticeCode, count = 1): void {
     this.notices.set(code, (this.notices.get(code) ?? 0) + count);
@@ -602,9 +620,9 @@ class DocxBuilder {
       const leadRuns = lead ? this.inlines(lead.inlines, context.rels) : "";
       if (item.checked !== undefined) {
         const mark = textRun(`${item.checked ? TASK_DONE : TASK_OPEN}\t`, {});
-        output += paragraph(mark + leadRuns, { style: STYLE.compact, indent: textIndent, hanging: LIST_HANGING_TWIPS });
+        output += this.p(mark + leadRuns, { style: STYLE.compact, indent: textIndent, hanging: LIST_HANGING_TWIPS });
       } else {
-        output += paragraph(leadRuns, { style: STYLE.compact, numbering: frame });
+        output += this.p(leadRuns, { style: STYLE.compact, numbering: frame });
       }
       output += this.blocks(blocks, { rels: context.rels, style: STYLE.compact, indent: textIndent, list: frame });
     }
@@ -630,22 +648,27 @@ class DocxBuilder {
         const runs = this.inlines(block.inlines, context.rels);
         const placed = this.diagramPlaced as false | "plain" | "captioned";
         afterDiagram = placed === "captioned";
-        output += paragraph(runs, {
+        output += this.p(runs, {
           style,
           indent: context.indent,
           alignment: placed || caption ? "center" : block.alignment,
           ...(afterDiagram ? { keepNext: true } : {})
         });
       } else if (block.type === "heading") {
-        output += paragraph(this.inlines(block.inlines, context.rels), {
+        // A heading brings its own space above.
+        output += this.p(this.inlines(block.inlines, context.rels), {
           style: WORD_STYLE_ID_MAP[`Heading ${block.level}`],
           indent: context.indent
-        });
+        }, false);
         afterHeading = true;
       } else if (block.type === "list") {
         output += this.list(block, context);
       } else if (block.type === "table") {
+        if (this.gapAfterTable) {
+          output += `<w:p><w:pPr><w:pStyle w:val="${STYLE.compact}"/><w:spacing w:before="0" w:after="0" w:line="${this.tableGapTwips}" w:lineRule="exact"/></w:pPr></w:p>`;
+        }
         output += this.table(block, context);
+        this.gapAfterTable = true;
       } else if (block.type === "quote") {
         output += this.blocks(block.blocks, {
           ...context,
@@ -654,15 +677,16 @@ class DocxBuilder {
         });
       } else if (block.type === "callout") {
         if (block.collapsed !== undefined) this.note("callout-fold");
-        output += paragraph(textRun(block.kind.toUpperCase(), {}), {
+        output += this.p(textRun(block.kind.toUpperCase(), {}), {
           style: STYLE.calloutTitle,
           indent: context.indent,
           keepNext: block.blocks.length > 0
         });
         output += this.blocks(block.blocks, { ...context, style: STYLE.calloutBody });
       } else if (block.type === "code") {
-        output += paragraph(textRun(this.plain(block.value).replace(/\r?\n$/, ""), {}), { style: STYLE.code, indent: context.indent });
+        output += this.p(textRun(this.plain(block.value).replace(/\r?\n$/, ""), {}), { style: STYLE.code, indent: context.indent });
       } else {
+        this.gapAfterTable = false;
         output += `<w:p><w:pPr><w:pStyle w:val="${context.style}"/><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr></w:pPr></w:p>`;
       }
     }
@@ -759,7 +783,13 @@ export async function writeDocx(markdown: string, options: DocxWriteOptions): Pr
   const language = options.language ?? "ko";
   const protectedSource = protectMath(markdown);
   const parsed = parseEditorialBlocks(protectedSource.markdown);
-  const builder = new DocxBuilder(textWidthTwips(options.template), parsed.footnotes.length, protectedSource.equations);
+  const bodySpacing = options.template.styles["Body Text"]?.paragraph?.spacingAfterPt ?? 0;
+  const builder = new DocxBuilder(
+    textWidthTwips(options.template),
+    parsed.footnotes.length,
+    protectedSource.equations,
+    Math.max(120, Math.round(bodySpacing * 20))
+  );
   const body = builder.blocks(parsed.blocks, { rels: builder.documentRels, style: STYLE.body, indent: 0 });
 
   const footnoteMark = `<w:r><w:rPr><w:rStyle w:val="${STYLE.footnoteReference}"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>`;

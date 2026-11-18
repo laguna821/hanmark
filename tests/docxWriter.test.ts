@@ -194,6 +194,33 @@ describe("built-in DOCX writer: structures (R-031)", () => {
     assert.match(table, /<w:tblStyle w:val="TableNormal"\/>/);
   });
 
+  it("leaves the body's paragraph spacing under a table and keeps two tables apart", async () => {
+    const table = "| 가 | 나 |\n|---|---|\n| 1 | 2 |";
+    const gap = Math.max(120, Math.round((TEMPLATE.styles["Body Text"].paragraph?.spacingAfterPt ?? 0) * 20));
+    const after = paragraphs(await documentXml(`${table}\n\n다음 문단\n\n그다음`)).filter((item) => !item.xml.includes("<w:jc ") && item.text);
+    const next = after.find((item) => item.text === "다음 문단")!;
+    assert.match(next.xml, new RegExp(`<w:pPr><w:pStyle w:val="BodyText"/><w:spacing w:before="${gap}"/></w:pPr>`));
+    assert.doesNotMatch(after.find((item) => item.text === "그다음")!.xml, /<w:spacing /, "only the block right under the table");
+    // A picture, a list item and a code block under a table take the gap too; a heading keeps its own.
+    assert.match(await documentXml(`${table}\n\n- 항목`), new RegExp(`</w:tbl><w:p><w:pPr><w:pStyle w:val="Compact"/><w:numPr>.*?</w:numPr><w:spacing w:before="${gap}"/></w:pPr>`));
+    assert.match(await documentXml(`${table}\n\n![그림](${pngDataUri(40, 20, [0, 0, 0])})`), new RegExp(`</w:tbl><w:p><w:pPr><w:pStyle w:val="BodyText"/><w:spacing w:before="${gap}"/>`));
+    assert.match(await documentXml(`${table}\n\n## 제목`), /<\/w:tbl><w:p><w:pPr><w:pStyle w:val="Heading2"\/><\/w:pPr>/);
+    // Word joins tables that touch: a thin paragraph of the same height stands between them.
+    const two = await documentXml(`${table}\n\n<!-- -->\n\n${table}\n\n끝`);
+    assert.equal((two.match(/<w:tbl>/g) ?? []).length, 2);
+    assert.match(two, new RegExp(`</w:tbl><w:p><w:pPr><w:pStyle w:val="Compact"/><w:spacing w:before="0" w:after="0" w:line="${gap}" w:lineRule="exact"/></w:pPr></w:p><w:tbl>`));
+  });
+
+  it("lets a link take the size of the text around it", async () => {
+    const styles = (await parts(await write("본문 [밖](https://example.com/a)[^1]\n\n[^1]: 각주 [근거](https://example.com/b)"))).get("word/styles.xml")!;
+    const link = /<w:style w:type="character" w:styleId="Hyperlink">[\s\S]*?<\/w:style>/.exec(styles)![0];
+    assert.doesNotMatch(link, /<w:sz |<w:szCs /, "the Hyperlink style sets no size");
+    assert.match(link, /<w:u w:val="single"\/>/);
+    const reference = await buildReferenceDocx(new Uint8Array(await new JSZip().file("word/styles.xml", `<?xml version="1.0"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr></w:style></w:styles>`).generateAsync({ type: "uint8array" })), TEMPLATE);
+    const patched = await (await JSZip.loadAsync(reference)).file("word/styles.xml")!.async("string");
+    assert.doesNotMatch(/<w:style w:type="character" w:styleId="Hyperlink">[\s\S]*?<\/w:style>/.exec(patched)![0], /<w:sz |<w:szCs /, "the Pandoc reference document too");
+  });
+
   it("writes footnotes as Word footnotes and reports references Word cannot hold", async () => {
     const written = await write(
       "본문[^a] 다시[^a] 다른[^b]\n\n[^a]: 첫 각주 [링크](https://example.com/n)\n[^b]: 둘째 각주\n"
