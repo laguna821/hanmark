@@ -1237,6 +1237,55 @@
   font-size: var(--font-ui-small);
 }
 
+.hanmark-gongmun-lint-summary {
+  margin: 4px 0;
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-gongmun-lint-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.hanmark-gongmun-lint-errors-only {
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.hanmark-check-mark {
+  text-decoration: underline wavy var(--text-warning, #b7791f);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.hanmark-check-mark.is-error {
+  text-decoration-color: var(--text-error);
+}
+
+.hanmark-check-tooltip {
+  max-width: 360px;
+  padding: 8px 10px;
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+}
+
+.hanmark-check-tooltip-hint {
+  color: var(--text-muted);
+}
+
+.hanmark-check-tooltip-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.hanmark-status-check.is-on {
+  color: var(--text-accent);
+}
 .hanmark-template-fonts {
   margin-top: 14px;
   padding-top: 10px;
