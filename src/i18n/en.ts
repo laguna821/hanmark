@@ -88,7 +88,7 @@ export const en: MessageTable = {
 
   // Import window
   "import.modal.title": "Import documents",
-  "import.modal.drop": "Drop HWP, HWPX, PDF, DOCX, or XLSX, PPTX files or folders here",
+  "import.modal.drop": "Drop HWP, HWPX, PDF, DOCX, XLSX, or PPTX files or folders here",
   "import.modal.pickFiles": "Choose files…",
   "import.modal.pickFolder": "Choose a folder…",
   "import.modal.selected": {
