@@ -5,6 +5,8 @@ import { normalizeLanguagePreference, type LanguagePreference } from "../i18n";
 import {
   DEFAULT_IMPORT_DESTINATION,
   normalizeImportPreset,
+  normalizeRememberedImportOptions,
+  type RememberedImportOptions,
   type ImportDestination,
   type ImportPresetId
 } from "../io/importOptions";
@@ -149,6 +151,8 @@ export interface HanmarkSettings extends Record<string, unknown> {
   previewAutoPause: boolean;
   /** Conversion style selected first in the import window. */
   importPreset: ImportPresetId;
+  /** Advanced import options used last time (R-032). */
+  importAdvanced: RememberedImportOptions;
   /** Where notes created by an import go. */
   importDestination: ImportDestination;
   /** Open .hwp/.hwpx files in HanMark's read-only viewer (applies after restart). */
@@ -207,6 +211,7 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   outputLanguage: "auto",
   previewAutoPause: true,
   importPreset: "default",
+  importAdvanced: normalizeRememberedImportOptions(undefined),
   importDestination: { ...DEFAULT_IMPORT_DESTINATION },
   openHangulFilesInHanmark: true,
   assembleEmbeds: true,
@@ -447,6 +452,7 @@ export function normalizeHanmarkSettings(
         ? data.previewAutoPause
         : DEFAULT_HANMARK_SETTINGS.previewAutoPause,
     importPreset: normalizeImportPreset(data.importPreset),
+    importAdvanced: normalizeRememberedImportOptions(data.importAdvanced),
     importDestination: normalizeImportDestination(data.importDestination),
     openHangulFilesInHanmark:
       typeof data.openHangulFilesInHanmark === "boolean"

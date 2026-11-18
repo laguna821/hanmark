@@ -9,7 +9,7 @@ import { errorMessage } from "../utils/errors";
 import { t } from "../i18n";
 
 /** Extensions HanMark offers to convert (Kordoc detects the real format by content). */
-export const IMPORT_EXTENSIONS: readonly string[] = ["hwp", "hwpx", "hwpml", "hml", "docx", "pdf", "xlsx", "xls"];
+export const IMPORT_EXTENSIONS: readonly string[] = ["hwp", "hwpx", "hwpml", "hml", "docx", "pptx", "pdf", "xlsx", "xls"];
 
 /** Files above this size need an explicit confirmation before conversion. */
 export const LARGE_IMPORT_BYTES = 50 * 1024 * 1024;

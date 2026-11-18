@@ -474,6 +474,11 @@ export default class HanmarkPlugin extends Plugin {
       app: this.app,
       gateway: this.gateway,
       defaultPreset: () => this.settings.importPreset,
+      rememberedOptions: () => this.settings.importAdvanced,
+      rememberOptions: async (options) => {
+        this.settings.importAdvanced = options;
+        await this.saveSettings();
+      },
       folderFor: (input) => this.importFolderFor(input),
       confirmEachImport: () => this.settings.importDestination.mode === "ask",
       cloudSettings: () => importCloudSettings(this),

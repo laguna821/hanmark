@@ -8,7 +8,12 @@ import {
   type App
 } from "obsidian";
 import {
-  DEFAULT_IMPORT_OPTIONS,
+  IMPORT_TABLE_STYLES,
+  normalizeImportTableStyle,
+  initialImportOptions,
+  rememberedImportOptions,
+  type RememberedImportOptions,
+  type ImportTableStyle,
   IMPORT_PRESET_IDS,
   IMPORT_PRESET_LABELS,
   normalizeImportPreset,
@@ -35,18 +40,33 @@ import { normalizeImportedImageFolder } from "../legacy-port/settings";
 import { ImportReportModal } from "./ImportReportModal";
 import { confirmAction, promptSecret } from "./dialogs";
 import { errorMessage } from "../utils/errors";
-import { t, tKey } from "../i18n";
+import { t, tKey, type MessageKey } from "../i18n";
 import { setPhase } from "./motion";
 
 /** Ask before converting at least this many files in one go. */
 const BULK_CONFIRM_THRESHOLD = 25;
 const PAGE_RANGE_EXAMPLE = "1-3, 7";
 
+const TABLE_STYLE_NAME: Readonly<Record<ImportTableStyle, MessageKey>> = {
+  pipe: "import.modal.tables.option.pipe",
+  mixed: "import.modal.tables.option.mixed",
+  html: "import.modal.tables.option.html"
+};
+const TABLE_STYLE_DESC: Readonly<Record<ImportTableStyle, MessageKey>> = {
+  pipe: "import.modal.tables.desc.pipe",
+  mixed: "import.modal.tables.desc.mixed",
+  html: "import.modal.tables.desc.html"
+};
+
 export interface ImportHost {
   app: App;
   gateway: FileGateway;
   /** Preset selected first (from settings). */
   defaultPreset(): unknown;
+  /** Advanced options used last time (R-032); absent on hosts that keep nothing. */
+  rememberedOptions?(): unknown;
+  /** Stores the advanced options of an import that was started. */
+  rememberOptions?(options: RememberedImportOptions): Promise<void> | void;
   /**
    * Destination policy from settings: the folder for the note made from `input`
    * (next to a Vault original, the open note's folder, or a fixed folder).
@@ -138,7 +158,7 @@ export class ImportModal extends Modal {
   constructor(private readonly host: ImportHost, initialInputs: ImportInput[] = []) {
     super(host.app);
     this.inputs = [...initialInputs];
-    this.options = { ...DEFAULT_IMPORT_OPTIONS, preset: normalizeImportPreset(host.defaultPreset()) };
+    this.options = initialImportOptions(host);
     this.folder = host.folderFor(this.inputs[0]);
   }
 
@@ -275,24 +295,77 @@ export class ImportModal extends Modal {
         });
         text.setDisabled(this.running);
       });
-    const toggles: ReadonlyArray<{
-      key: "images" | "htmlTables" | "removeHeaderFooter" | "dedupeRunningHeaders";
-      name: string;
-      desc: string;
-    }> = [
-      { key: "images", name: t("import.modal.images.name"), desc: t("import.modal.images.desc") },
-      { key: "htmlTables", name: t("import.modal.htmlTables.name"), desc: t("import.modal.htmlTables.desc") },
-      { key: "removeHeaderFooter", name: t("import.modal.headerFooter.name"), desc: t("import.modal.headerFooter.desc") },
-      { key: "dedupeRunningHeaders", name: t("import.modal.dedupe.name"), desc: t("import.modal.dedupe.desc") }
-    ];
-    for (const toggle of toggles) {
-      new Setting(details).setName(toggle.name).setDesc(toggle.desc).addToggle((control) => {
-        control.setValue(this.options[toggle.key]).onChange((value) => {
-          this.options[toggle.key] = value;
+    const preset = this.options.preset;
+    const group = (title: string): HTMLElement => {
+      const section = details.createDiv({ cls: "hanmark-import-option-group" });
+      section.createEl("h4", { text: title, cls: "hanmark-import-option-title" });
+      return section;
+    };
+    const toggle = (
+      parent: HTMLElement,
+      key: "images" | "scriptTags" | "flattenLayout" | "memos" | "imagesInFlow" | "removeHeaderFooter" | "dedupeRunningHeaders",
+      name: string,
+      desc: string,
+      locked?: string
+    ): void => {
+      new Setting(parent).setName(name).setDesc(locked ?? desc).addToggle((control) => {
+        control.setValue(locked ? false : this.options[key]).onChange((value) => {
+          this.options[key] = value;
         });
-        control.setDisabled(this.running || (toggle.key === "images" && this.options.preset === "text"));
+        control.setDisabled(this.running || locked !== undefined);
+        control.toggleEl.dataset.hanmarkImportOption = key;
       });
-    }
+    };
+
+    // How the note is written: the three choices of R-032.
+    const notation = group(t("import.modal.group.notation"));
+    new Setting(notation)
+      .setName(t("import.modal.tables.name"))
+      .setDesc(
+        preset === "exam"
+          ? t("import.modal.tables.lockedExam")
+          : preset === "form" && this.options.tables === "pipe"
+            ? t("import.modal.tables.lockedForm")
+            : tKey(TABLE_STYLE_DESC[this.options.tables])
+      )
+      .addDropdown((dropdown) => {
+        for (const style of IMPORT_TABLE_STYLES) dropdown.addOption(style, tKey(TABLE_STYLE_NAME[style]));
+        dropdown.setValue(this.options.tables).onChange((value) => {
+          this.options.tables = normalizeImportTableStyle(value);
+          this.render();
+        });
+        dropdown.setDisabled(this.running || preset === "exam");
+        dropdown.selectEl.dataset.hanmarkImportOption = "tables";
+      });
+    toggle(
+      notation,
+      "scriptTags",
+      t("import.modal.scriptTags.name"),
+      t("import.modal.scriptTags.desc"),
+      preset === "text" ? t("import.modal.scriptTags.lockedText") : undefined
+    );
+    toggle(
+      notation,
+      "flattenLayout",
+      t("import.modal.flattenLayout.name"),
+      t("import.modal.flattenLayout.desc"),
+      preset === "form" ? t("import.modal.flattenLayout.lockedForm") : undefined
+    );
+
+    const pictures = group(t("import.modal.group.images"));
+    toggle(
+      pictures,
+      "images",
+      t("import.modal.images.name"),
+      t("import.modal.images.desc"),
+      preset === "text" ? t("import.modal.images.lockedText") : undefined
+    );
+    toggle(pictures, "imagesInFlow", t("import.modal.imagesInFlow.name"), t("import.modal.imagesInFlow.desc"));
+
+    const byFormat = group(t("import.modal.group.format"));
+    toggle(byFormat, "memos", t("import.modal.memos.name"), t("import.modal.memos.desc"));
+    toggle(byFormat, "removeHeaderFooter", t("import.modal.headerFooter.name"), t("import.modal.headerFooter.desc"));
+    toggle(byFormat, "dedupeRunningHeaders", t("import.modal.dedupe.name"), t("import.modal.dedupe.desc"));
   }
 
   private addInputs(inputs: readonly ImportInput[], skipped: number): void {
@@ -393,6 +466,7 @@ export class ImportModal extends Modal {
     const endJob = this.host.trackJob?.();
     let results: ImportResult[];
     try {
+      await this.host.rememberOptions?.(rememberedImportOptions(this.options));
       results = await runImportJob(this.app, job, {
         onProgress: (progress) => this.showProgress(progress),
         isCancelled: () => this.cancelled
@@ -506,7 +580,7 @@ export async function importVaultFiles(host: ImportHost, files: readonly TFile[]
   if (!imageDestination) return;
   const job: ImportJob = {
     inputs,
-    options: { ...DEFAULT_IMPORT_OPTIONS, preset: normalizeImportPreset(host.defaultPreset()), ...options },
+    options: { ...initialImportOptions(host), ...options },
     folderFor: (input) => normalizeImportedImageFolder(host.folderFor(input)),
     imageDestination,
     cloudSettings,
