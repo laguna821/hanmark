@@ -325,6 +325,46 @@ try {
   assert.equal(await activeForm(), "form:report/agency:국세청");
   assert.equal((await lookButton.innerText()).replace(/\s*▾\s*/u, ""), "국세청");
 
+  // Keyboard only (R-037): open from the button, move with the arrows, type ahead, Enter picks, Escape gives the focus back.
+  const activeLook = () => page.evaluate(() => {
+    const field = document.querySelector("#hanmark-export-gongmun-look-search");
+    const option = document.getElementById(field?.getAttribute("aria-activedescendant") ?? "");
+    return option ? (option.closest("[data-look]") ?? option.querySelector("[data-look]"))?.getAttribute("data-look") ?? option.textContent.trim() : null;
+  });
+  await lookButton.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await search.evaluate((node) => node === document.activeElement), true, "opening moves the focus to the search field");
+  assert.equal(await activeLook(), "agency:국세청", "the list starts on the chosen look, so Enter keeps it");
+  await page.keyboard.press("ArrowDown");
+  const next = await activeLook();
+  assert.notEqual(next, "agency:국세청");
+  assert.equal(await page.evaluate(() => {
+    const field = document.querySelector("#hanmark-export-gongmun-look-search");
+    const option = document.getElementById(field.getAttribute("aria-activedescendant"));
+    const list = document.querySelector("#hanmark-export-gongmun-look-list").getBoundingClientRect();
+    const box = option.getBoundingClientRect();
+    return box.top >= list.top - 1 && box.bottom <= list.bottom + 1;
+  }), true, "the active row is scrolled into view");
+  await page.keyboard.press("ArrowUp");
+  assert.equal(await activeLook(), "agency:국세청");
+  // Type ahead: letters go to the search field and the first match becomes active.
+  await page.keyboard.type("교육");
+  assert.equal(await search.inputValue(), "교육");
+  assert.equal(await activeLook(), "agency:교육부");
+  await page.keyboard.press("Enter");
+  assert.equal(await activeForm(), "form:report/agency:교육부");
+  assert.equal(await search.isVisible(), false, "picking closes the list");
+  await lookButton.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+  assert.equal(await search.isVisible(), false, "Escape closes the list");
+  assert.equal(await lookButton.evaluate((node) => node === document.activeElement), true, "Escape gives the focus back to the button");
+  assert.equal(await activeForm(), "form:report/agency:교육부", "Escape changes nothing");
+  assert.equal(await page.locator("#stage .modal").count(), 1, "Escape closes the list, not the export window");
+  await lookButton.click();
+  await search.fill("국세");
+  await search.press("Enter");
+  assert.equal(await activeForm(), "form:report/agency:국세청");
   await page.locator("#hanmark-export-gongmun-option-cover").check();
   await page.locator("#hanmark-export-gongmun-option-toc").check();
   assert.equal(await activeForm(), "form:report/agency:국세청;cover=1;toc=1");
