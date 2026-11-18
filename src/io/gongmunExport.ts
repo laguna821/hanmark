@@ -4,26 +4,42 @@ import type { AdapterWarning } from "./markdownAdapter";
 import { readGongmunProperties, type GongmunPropertyIssue } from "./gongmunProperties";
 import { applyTypeFrame, resolveGongmunOptions, withCoverDate } from "./gongmunStyle";
 import {
-  activeGongmunTemplate,
   getTemplateLibrary,
-  gongmunStyleById,
   isGongmunPreset,
   listGongmunStyleChoices,
+  setActiveGongmunFormInMemory,
   setActiveGongmunPresetInMemory,
   setActiveGongmunTemplateInMemory,
-  type GongmunStyleChoice,
   type TemplateLibraryHost
 } from "./templateLibrary";
-import { builtinGongmunStyle } from "./institutionStyles";
-import { safeFileLabel } from "./exportFileNames";
+import {
+  choiceOfPreset,
+  formatGongmunFormId,
+  frameOfPreset,
+  GONGMUN_FRAMES,
+  gongmunFormChoice,
+  LOOK_BASIC,
+  type GongmunFrame
+} from "./gongmunFormId";
+import {
+  gongmunFormFileLabel,
+  gongmunFormName,
+  gongmunFrameDescription,
+  gongmunFrameLabel,
+  gongmunLookAllowed,
+  gongmunLookByName,
+  resolveGongmunForm,
+  withGongmunLook,
+  type ResolvedGongmunForm
+} from "./gongmunForms";
 import type { GongmunFinishSpec } from "./hwpxFinish";
 import type { GongmunOutlineStyle } from "./gongmunOutline";
 import type { GenerateHwpxOptions } from "./kordocEngine";
-import { t, tKey, translate, type Locale, type MessageKey } from "../i18n";
+import { t, tKey, type Locale, type MessageKey } from "../i18n";
 
 export const DEFAULT_GONGMUN_PRESET: GongmunPreset = "report";
 
-/** Kordoc's eight official-document presets, in menu order; `fileLabel` names exported files (R-028). */
+/** Kordoc's official-document presets, in menu order; `fileLabel` is the type's short name. */
 export const GONGMUN_PRESETS: ReadonlyArray<{
   value: GongmunPreset;
   label: MessageKey;
@@ -37,7 +53,8 @@ export const GONGMUN_PRESETS: ReadonlyArray<{
   { value: "minutes", label: "gongmun.preset.minutes", description: "gongmun.presetDesc.minutes", fileLabel: "gongmun.fileName.minutes" },
   { value: "gaejosik", label: "gongmun.preset.gaejosik", description: "gongmun.presetDesc.gaejosik", fileLabel: "gongmun.fileName.gaejosik" },
   { value: "press", label: "gongmun.preset.press", description: "gongmun.presetDesc.press", fileLabel: "gongmun.fileName.press" },
-  { value: "ministry", label: "gongmun.preset.ministry", description: "gongmun.presetDesc.ministry", fileLabel: "gongmun.fileName.ministry" }
+  { value: "ministry", label: "gongmun.preset.ministry", description: "gongmun.presetDesc.ministry", fileLabel: "gongmun.fileName.ministry" },
+  { value: "bangchim", label: "gongmun.preset.bangchim", description: "gongmun.presetDesc.bangchim", fileLabel: "gongmun.fileName.bangchim" }
 ];
 
 export function gongmunPresetLabel(preset: GongmunPreset): string {
@@ -46,118 +63,140 @@ export function gongmunPresetLabel(preset: GongmunPreset): string {
 }
 
 /**
- * One official-document form (R-026): a standard type, a built-in institution form,
- * or the user's own. Choosing a form decides both the document type and the look,
- * so the export window and the preview need a single list instead of a type list
- * plus a style list whose precedence the user could not see.
+ * One official-document form as a list shows it. Since 3.0.0 (R-030) a form is a
+ * pair, a frame (틀: the page structure) and a look (모양: fonts, sizes, markers,
+ * colors), carried as one id "form:<frame>/<look>…" so one choice still decides
+ * both (R-026).
  */
 export interface GongmunFormOption {
-  /** "preset:<type>" for a standard type, else the style id. */
+  /** "form:<frame>/<look>[;option=0|1…]". */
   id: string;
   name: string;
   kind: "standard" | "builtin" | "custom";
-  /** List group: the institution, "standard", or "mine". */
+  /** List group: the frames, the institution, or "mine". */
   group: string;
   preset: GongmunPreset;
   description?: string;
+  frame: GongmunFrame;
+  look: string;
+  /** The look was made for one document type; the frame's switches do not apply. */
+  fixed: boolean;
 }
 
-const FORM_PRESET_PREFIX = "preset:";
-
+/** The form of a standard type in the 기본 look (계획서 = 보고서 with a cover, and so on). */
 export function gongmunFormId(preset: GongmunPreset): string {
-  return `${FORM_PRESET_PREFIX}${preset}`;
+  return formatGongmunFormId(choiceOfPreset(preset));
 }
 
-/** The standard type of a "preset:<type>" form id, else undefined. */
-export function presetOfFormId(id: string): GongmunPreset | undefined {
-  if (!id.startsWith(FORM_PRESET_PREFIX)) return undefined;
-  const preset = id.slice(FORM_PRESET_PREFIX.length);
-  return isGongmunPreset(preset) ? preset : undefined;
+/** The document type a form id makes, old or new; undefined when it is not a form. */
+export function presetOfFormId(host: TemplateLibraryHost, id: string): GongmunPreset | undefined {
+  return resolveGongmunForm(host, id)?.preset;
 }
 
-/** A form picked by id: a standard type has no style; an unknown id resolves to nothing. */
-function resolveGongmunForm(
-  host: TemplateLibraryHost,
-  id: string
-): { style?: GongmunStyleChoice; preset?: GongmunPreset } | undefined {
-  const preset = presetOfFormId(id);
-  if (preset) return { preset };
-  const style = gongmunStyleById(host, id);
-  return style ? { style, preset: style.preset } : undefined;
+function optionOf(host: TemplateLibraryHost, form: ResolvedGongmunForm): GongmunFormOption {
+  const kind = form.style ? (form.style.builtIn ? "builtin" : "custom") : "standard";
+  return {
+    id: form.id,
+    name: gongmunFormName(host, form.id),
+    kind,
+    group:
+      kind === "builtin" ? (form.style?.group ?? "") : kind === "custom" ? t("gongmun.form.group.mine") : t("gongmun.form.group.standard"),
+    preset: form.preset,
+    description:
+      kind === "builtin"
+        ? form.style?.description
+        : kind === "custom"
+          ? t("gongmun.form.customDesc", { preset: gongmunPresetLabel(form.preset) })
+          : gongmunFrameDescription(form.choice.frame),
+    frame: form.choice.frame,
+    look: form.choice.look,
+    fixed: form.fixed
+  };
 }
 
-function presetFileLabel(preset: GongmunPreset, locale: Locale): string {
-  const entry = GONGMUN_PRESETS.find((item) => item.value === preset);
-  return entry ? translate(locale, entry.fileLabel) : preset;
+/** A form by id (3.0.0 ids and the ids 2.7.x stored); undefined when it no longer exists. */
+export function describeGongmunForm(host: TemplateLibraryHost, id: string | null | undefined): GongmunFormOption | undefined {
+  const form = id ? resolveGongmunForm(host, id) : undefined;
+  return form ? optionOf(host, form) : undefined;
+}
+
+export function isGongmunForm(host: TemplateLibraryHost, id: string | null | undefined): boolean {
+  return Boolean(id && resolveGongmunForm(host, id));
+}
+
+/** The canonical 3.0.0 id of a stored id, else undefined (used when old data is loaded). */
+export function canonicalGongmunFormId(host: TemplateLibraryHost, id: unknown): string | undefined {
+  return resolveGongmunForm(host, id)?.id;
+}
+
+/** `틀_모양` for exported file names in the note's output language (R-028, R-030). */
+export function gongmunFileLabel(host: TemplateLibraryHost, formId: string, locale: Locale): string {
+  return gongmunFormFileLabel(host, formId, locale);
 }
 
 /**
- * The form's name in exported file names (R-028), in the note's output language so
- * the same note gets the same name on every computer: the standard type's short
- * name, a built-in form's short name, or the user's own form name (cleaned).
+ * The forms a short list offers (the status bar menu, several forms at once): the
+ * seven frames and the two variants that were separate types in 2.7.x (a report with
+ * a cover, a general document with closing lines), then the institution forms and
+ * the user's forms. With `baseId`, frames keep that form's look where they can use it.
+ * Any other frame-and-look pair comes from the look chooser (describeGongmunForm).
  */
-export function gongmunFileLabel(host: TemplateLibraryHost, formId: string, locale: Locale): string {
-  const preset = presetOfFormId(formId);
-  if (preset) return presetFileLabel(preset, locale);
-  const builtin = builtinGongmunStyle(formId);
-  if (builtin) return translate(locale, builtin.fileLabel);
-  const style = gongmunStyleById(host, formId);
-  if (!style) return "";
-  return safeFileLabel(style.name) || (style.preset ? presetFileLabel(style.preset, locale) : "");
-}
-
-/** Built-in institution forms, then the eight standard types, then the user's forms. */
-export function listGongmunForms(host: TemplateLibraryHost): GongmunFormOption[] {
+export function listGongmunForms(host: TemplateLibraryHost, baseId?: string): GongmunFormOption[] {
+  const base = baseId ? resolveGongmunForm(host, baseId) : undefined;
+  const look = (frame: GongmunFrame): string =>
+    base && !base.fixed && gongmunLookAllowed(host, frame, base.choice.look) ? base.choice.look : LOOK_BASIC;
+  const ids: string[] = [];
+  for (const frame of GONGMUN_FRAMES) {
+    ids.push(formatGongmunFormId(gongmunFormChoice(frame, look(frame))));
+    if (frame === "general") ids.push(formatGongmunFormId(gongmunFormChoice(frame, look(frame), { closing: true })));
+    if (frame === "report") ids.push(formatGongmunFormId(gongmunFormChoice(frame, look(frame), { cover: true })));
+  }
   const fallback = getTemplateLibrary(host).activeGongmunPreset;
-  const choices = listGongmunStyleChoices(host);
-  const builtIn = choices
-    .filter((choice) => choice.builtIn)
-    .map<GongmunFormOption>((choice) => ({
-      id: choice.id,
-      name: choice.name,
-      kind: "builtin",
-      group: choice.group ?? "",
-      preset: choice.preset ?? fallback,
-      description: choice.description
-    }));
-  const standard = GONGMUN_PRESETS.map<GongmunFormOption>((item) => ({
-    id: gongmunFormId(item.value),
-    name: tKey(item.label),
-    kind: "standard",
-    group: t("gongmun.form.group.standard"),
-    preset: item.value,
-    description: tKey(item.description)
-  }));
-  const mine = choices
-    .filter((choice) => !choice.builtIn)
-    .map<GongmunFormOption>((choice) => ({
-      id: choice.id,
-      name: choice.name,
-      kind: "custom",
-      group: t("gongmun.form.group.mine"),
-      preset: choice.preset ?? fallback,
-      description: t("gongmun.form.customDesc", { preset: gongmunPresetLabel(choice.preset ?? fallback) })
-    }));
-  return [...builtIn, ...standard, ...mine];
+  for (const style of listGongmunStyleChoices(host)) {
+    ids.push(formatGongmunFormId(choiceOfPreset(style.preset ?? fallback, style.id)));
+  }
+  const forms: GongmunFormOption[] = [];
+  for (const id of ids) {
+    const form = describeGongmunForm(host, id);
+    if (form && !forms.some((item) => item.id === form.id)) forms.push(form);
+  }
+  return forms;
 }
 
-/** The form an export starts with: the active institution form, else the note's type, else the last type. */
-export function currentGongmunFormId(host: TemplateLibraryHost, notePreset?: GongmunPreset): string {
+/**
+ * The form an export starts with: the active form; when its look does not fix the
+ * document type, the note's 공문_종류 moves it to that frame and the note's
+ * 공문_기관서식 picks the look (when the frame can use it).
+ */
+export function currentGongmunFormId(host: TemplateLibraryHost, notePreset?: GongmunPreset, noteLook?: string): string {
   const library = getTemplateLibrary(host);
-  return library.activeGongmunId || gongmunFormId(notePreset ?? library.activeGongmunPreset);
+  const active = resolveGongmunForm(host, library.activeGongmunForm) ?? resolveGongmunForm(host, gongmunFormId(library.activeGongmunPreset));
+  if (!active) return gongmunFormId(notePreset ?? DEFAULT_GONGMUN_PRESET);
+  if (active.fixed) return active.id;
+  let id = active.id;
+  if (notePreset) {
+    const { frame, options } = frameOfPreset(notePreset);
+    const look = gongmunLookAllowed(host, frame, active.choice.look) ? active.choice.look : LOOK_BASIC;
+    id = formatGongmunFormId(gongmunFormChoice(frame, look, frame === active.choice.frame ? { ...active.choice.options, ...options } : options));
+  }
+  const named = noteLook ? gongmunLookByName(host, noteLook) : undefined;
+  if (named) {
+    const frame = resolveGongmunForm(host, id)?.choice.frame;
+    if (frame && gongmunLookAllowed(host, frame, named)) id = withGongmunLook(host, id, named);
+  }
+  return id;
 }
 
 /** Makes a form the active one (in memory; the caller saves) and returns its document type. */
 export function selectGongmunFormInMemory(host: TemplateLibraryHost, id: string): GongmunPreset {
-  if (id.startsWith(FORM_PRESET_PREFIX)) {
-    const preset = id.slice(FORM_PRESET_PREFIX.length);
-    if (!isGongmunPreset(preset)) throw new Error(t("template.error.notFound"));
-    setActiveGongmunTemplateInMemory(host, "");
-    setActiveGongmunPresetInMemory(host, preset);
-    return preset;
-  }
-  setActiveGongmunTemplateInMemory(host, id);
-  return activeGongmunTemplate(host)?.preset ?? getTemplateLibrary(host).activeGongmunPreset;
+  const form = resolveGongmunForm(host, id);
+  if (!form) throw new Error(t("template.error.notFound"));
+  // The 2.7.x fields stay in step so a downgrade still opens on the same form;
+  // the frame-and-look id is written last because those setters derive one too.
+  setActiveGongmunTemplateInMemory(host, form.style?.id ?? "");
+  if (!form.fixed && isGongmunPreset(form.preset)) setActiveGongmunPresetInMemory(host, form.preset);
+  setActiveGongmunFormInMemory(host, form.id);
+  return form.preset;
 }
 
 export interface GongmunExportPlan {
@@ -174,7 +213,7 @@ export interface GongmunExportPlan {
   quietEngineNotes?: readonly string[];
   /** Heading and list mapping of a built-in institution style. */
   outline?: GongmunOutlineStyle;
-  /** The form the plan was made with ("preset:<type>" or a style id). */
+  /** The form the plan was made with ("form:<frame>/<look>…"). */
   formId: string;
 }
 
@@ -214,13 +253,56 @@ export function notePresetHint(app: App, file: TFile | null | undefined): Gongmu
   return readGongmunProperties(app.metadataCache.getFileCache(file)?.frontmatter).preset;
 }
 
+/** The look a note names in 공문_기관서식, as written (R-030). */
+export function noteLookHint(app: App, file: TFile | null | undefined): string | undefined {
+  if (!file) return undefined;
+  return readGongmunProperties(app.metadataCache.getFileCache(file)?.frontmatter).look;
+}
+
 /**
- * Official-document options for one export: the chosen preset, the note's
- * properties, and the institution style (in that order of precedence).
+ * The frame's switches on top of the note and the style (the window's choice wins).
+ * A switch at its default leaves the note's properties in charge, so the forms that
+ * existed in 2.7.x keep their output. Explicit choices release two of the M1 pins:
+ * a report or plan gets a contents page, and a bullet-style report whose cover is
+ * switched off starts with the title box Kordoc 4.25.0 draws.
+ */
+function applyFrameSwitches(options: GongmunOptions, form: ResolvedGongmunForm): GongmunOptions {
+  if (form.fixed) return options;
+  const next: GongmunOptions = { ...options };
+  const chosen = form.choice.options;
+  switch (form.choice.frame) {
+    case "report":
+      if (chosen.toc) next.toc = true;
+      break;
+    case "gaejosik":
+      if (chosen.cover === false) {
+        next.cover = false;
+        next.bodyTitleBox = true;
+        next.toc = chosen.toc !== false;
+      } else if (chosen.toc === false) {
+        next.toc = false;
+      }
+      break;
+    case "bangchim":
+      if (chosen.cover && (next.cover === undefined || next.cover === false)) next.cover = true;
+      if (chosen.checklist && next.checklist === undefined) next.checklist = true;
+      if (chosen.toc) next.toc = true;
+      break;
+    default:
+      break;
+  }
+  return next;
+}
+
+/**
+ * Official-document options for one export: the chosen form (frame and look), the
+ * note's properties, and the look's style, in that order of precedence.
  *
- * `formId` names the form explicitly (R-028: the preview, a note's remembered form,
- * several forms at once); without it, or when it is no longer a form, the globally
- * active form applies as before.
+ * `formId` names the form explicitly (the export window, the preview, a note's
+ * remembered form, several forms at once); ids stored by 2.7.x are understood.
+ * Without it, or when it is no longer a form, the active form applies: the window's
+ * or the note's document type moves it to that frame and the note's 공문_기관서식
+ * picks its look, unless the active look was made for one document type.
  */
 export function planGongmunExport(
   app: App,
@@ -230,29 +312,48 @@ export function planGongmunExport(
   formId?: string
 ): GongmunExportPlan {
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  const explicit = formId ? resolveGongmunForm(host, formId) : undefined;
-  const style = explicit ? explicit.style : activeGongmunTemplate(host);
-  if (explicit && !explicit.style && explicit.preset) requestedPreset = explicit.preset;
-  const named = readGongmunProperties(frontmatter).preset;
-  // An institution form is made for one document type and always uses it (R-025,
-  // R-026); otherwise the window's choice > the note's 공문_종류 > the last type.
-  const fixed = style?.preset;
-  const preset = fixed ?? requestedPreset ?? named ?? getTemplateLibrary(host).activeGongmunPreset ?? DEFAULT_GONGMUN_PRESET;
+  const noted = readGongmunProperties(frontmatter);
+  const lookWarnings: AdapterWarning[] = [];
+  let form = formId ? resolveGongmunForm(host, formId) : undefined;
+  if (!form) {
+    const startId = currentGongmunFormId(host, requestedPreset ?? noted.preset);
+    let id = startId;
+    const start = resolveGongmunForm(host, startId);
+    if (noted.look && start && !start.fixed) {
+      const named = gongmunLookByName(host, noted.look);
+      if (!named) {
+        lookWarnings.push({ code: "gongmun-property", message: t("gongmun.property.lookUnknown", { name: noted.look }), count: 1 });
+      } else if (!gongmunLookAllowed(host, start.choice.frame, named)) {
+        lookWarnings.push({
+          code: "gongmun-property",
+          message: t("gongmun.property.lookNotAllowed", { look: noted.look, frame: gongmunFrameLabel(start.choice.frame) }),
+          count: 1
+        });
+      } else {
+        id = withGongmunLook(host, startId, named);
+      }
+    }
+    form = resolveGongmunForm(host, id) ?? resolveGongmunForm(host, gongmunFormId(DEFAULT_GONGMUN_PRESET));
+  }
+  if (!form) throw new Error(t("template.error.notFound"));
+  const style = form.style;
+  const preset = form.preset;
   const properties = readGongmunProperties(frontmatter, preset);
   const today = new Date();
-  const frame = applyTypeFrame(resolveGongmunOptions({ preset, style: style?.options, note: properties.options }), {
-    today,
-    org: style?.options.org
-  });
+  const switched = applyFrameSwitches(resolveGongmunOptions({ preset, style: style?.options, note: properties.options }), form);
+  const frame = applyTypeFrame(switched, { today, org: style?.options.org });
   const options = withCoverDate(frame.options, today, style?.coverDate);
-  const warnings = properties.issues.map(propertyWarning);
-  const asked = [requestedPreset, named].find((item) => item !== undefined && item !== fixed);
-  if (style && fixed && asked) {
+  // A measured agency look sits below every explicit option (Kordoc applies it as defaults).
+  if (form.agency) options.agency = form.agency;
+  const warnings = [...properties.issues.map(propertyWarning), ...lookWarnings];
+  // A look made for one document type always makes it (R-025, R-026).
+  const asked = form.fixed ? [requestedPreset, noted.preset].find((item) => item !== undefined && item !== preset) : undefined;
+  if (style && asked) {
     warnings.push({
       code: "gongmun-property",
       message: t("gongmun.property.styleType", {
         style: style.name,
-        preset: gongmunPresetLabel(fixed),
+        preset: gongmunPresetLabel(preset),
         asked: gongmunPresetLabel(asked)
       }),
       count: 1
@@ -271,6 +372,6 @@ export function planGongmunExport(
     finish: style?.finish,
     quietEngineNotes: style?.quietEngineNotes,
     outline,
-    formId: style?.id ?? gongmunFormId(preset)
+    formId: form.id
   };
 }

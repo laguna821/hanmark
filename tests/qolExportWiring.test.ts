@@ -26,7 +26,7 @@ describe("official-document file names and remembered forms (R-028)", () => {
 
   it("remembers the form per note and follows renames and deletions", () => {
     assert.match(main, /rememberedNoteForm\(this\.settings\.gongmunFormByNote, file\.path/u);
-    assert.match(main, /rememberNoteForm\(this\.settings\.gongmunFormByNote, note\.path, id\)/u);
+    assert.match(main, /rememberNoteForm\(this\.settings\.gongmunFormByNote, note\.path, formId\)/u);
     assert.match(main, /this\.app\.vault\.on\("rename", \(file, oldPath\) =>/u);
     assert.match(main, /this\.app\.vault\.on\("delete", \(file\) =>/u);
     assert.match(main, /recordRecentExport\(this\.settings\.recentExports/u);

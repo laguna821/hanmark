@@ -17,6 +17,7 @@
     "check": "npm run lint && npm run check-i18n && npm run test && npm run build && npm run check-bundle && npm run check-community && npm run check-release",
     "test:pdf-render": "node --import tsx scripts/test-editorial-pdf-render.mjs",
     "test:pdf-ui": "node scripts/test-pdf-export-ui.mjs",
+    "test:form-ui": "node scripts/test-gongmun-form-ui.mjs",
     "test:toolbar-ui": "node scripts/test-toolbar-ui.mjs",
     "test:preview-ui": "node scripts/test-preview-ui.mjs"
   },

@@ -207,7 +207,8 @@ export function withCoverDate(options: GongmunOptions, today: Date, format?: Cov
   const preset = normalizeGongmunPreset(options.preset);
   if (!coverIsOn(options, preset)) return options;
   if (typeof options.cover === "object" && options.cover.date) return options;
-  const chosen = format ?? (preset === "report" || preset === "plan" ? "month" : undefined);
+  // The Seoul policy paper's front page has the same month-only default ("2026. 11..") since Kordoc 4.16.
+  const chosen = format ?? (preset === "report" || preset === "plan" || preset === "bangchim" ? "month" : undefined);
   if (!chosen) return options;
   const date = officialDate(today, chosen);
   return { ...options, cover: typeof options.cover === "object" ? { ...options.cover, date } : { date } };

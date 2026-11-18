@@ -16,8 +16,9 @@ import { errorMessage } from "../utils/errors";
 import type { PreparedPdf } from "../io/pdfOutputAdapter";
 import { normalizeEditorialPdfLayout, editorialPdfLayoutChoices, editorialPdfTableWidthChoices, type EditorialPdfLayout } from "../io/editorialPdfLayout";
 import { gongmunPresetLabel, type GongmunFormOption } from "../io/gongmunExport";
-import { fillGongmunFormSelect } from "./gongmunFormSelect";
-import { GONGMUN_PRESET_PROPERTY_KEY } from "../io/gongmunProperties";
+import { gongmunLookByName, gongmunLookName } from "../io/gongmunForms";
+import { renderGongmunFormPicker, type GongmunPickerHost } from "./gongmunFormPicker";
+import { GONGMUN_LOOK_PROPERTY_KEY, GONGMUN_PRESET_PROPERTY_KEY } from "../io/gongmunProperties";
 import { templateDisplayName } from "../io/templateLibrary";
 import { t, tKey, type MessageKey } from "../i18n";
 import { setPhase } from "./motion";
@@ -68,6 +69,12 @@ export interface HanmarkExportActions {
    * types, and the user's own in one list. A form decides both the type and the look.
    */
   gongmunForms?: () => GongmunFormOption[];
+  /** Frame and look picker (R-030): the library the forms come from and the favorites toggle. */
+  gongmunPicker?: () => GongmunPickerHost;
+  /** A form by id, including frame-and-look pairs the short list does not show. */
+  describeGongmunForm?: (id: string) => GongmunFormOption | undefined;
+  /** The look the note names in 공문_기관서식, as written. */
+  noteLookHint?: () => string | undefined;
   /** The form to start with: the active institution form, else the note's type, else the last type. */
   currentGongmunForm?: () => string;
   /** Makes a form active and returns its document type. */
@@ -271,10 +278,14 @@ export class HanmarkExportModal extends Modal {
     this.hwpxVariant = initialVariant;
     const hint = actions.notePresetHint?.();
     this.gongmunForm = actions.currentGongmunForm?.() ?? "";
-    const form = actions.gongmunForms?.().find((item) => item.id === this.gongmunForm);
+    const form = this.describeForm(this.gongmunForm);
     this.gongmunPreset = form?.preset ?? hint ?? "report";
-    this.presetFromNote = form?.kind === "standard" && hint !== undefined && form.preset === hint;
+    this.presetFromNote = form !== undefined && !form.fixed && hint !== undefined && form.preset === hint;
     this.pdfLayout = normalizeEditorialPdfLayout(actions.activePdfLayout?.());
+  }
+
+  private describeForm(id: string): GongmunFormOption | undefined {
+    return this.actions.describeGongmunForm?.(id) ?? this.actions.gongmunForms?.().find((item) => item.id === id);
   }
 
   onOpen(): void {
@@ -447,39 +458,54 @@ export class HanmarkExportModal extends Modal {
   }
 
   private renderGongmunOptions(root: HTMLElement): void {
-    // One list of forms (R-026): choosing a form decides both the type and the look.
-    const forms = this.actions.gongmunForms?.() ?? [];
-    if (forms.length) {
-      const current = forms.find((form) => form.id === this.gongmunForm);
-      if (current) this.gongmunPreset = current.preset;
-      const formRow = root.createDiv({ cls: "hanmark-export-template-row" });
-      const label = formRow.createEl("label", {
-        text: t("gongmun.form.label"),
-        attr: { for: "hanmark-export-gongmun-form" }
-      });
-      label.addClass("hanmark-export-field-label");
-      const select = formRow.createEl("select", {
-        attr: { id: "hanmark-export-gongmun-form" }
-      });
-      fillGongmunFormSelect(select, forms);
-      select.value = current?.id ?? "";
-      select.disabled = this.busy || !this.actions.selectGongmunForm;
-      select.onchange = async () => {
-        try {
-          const preset = await this.actions.selectGongmunForm?.(select.value);
-          this.gongmunForm = select.value;
-          if (preset) this.gongmunPreset = preset;
-          this.presetFromNote = false;
-        } catch (error: unknown) {
-          new Notice(errorMessage(error));
+    // One choice still decides both the type and the look (R-026), now as a pair
+    // (R-030): the frame, the look, and the frame's switches. The window's choice
+    // comes first, then the note's properties, then the look's own style.
+    const picker = this.actions.gongmunPicker?.();
+    if (picker) {
+      const current = this.describeForm(this.gongmunForm);
+      if (current) {
+        this.gongmunPreset = current.preset;
+        this.gongmunForm = current.id;
+      }
+      const formRow = root.createDiv({ cls: "hanmark-export-template-row hanmark-export-form-row" });
+      renderGongmunFormPicker(formRow, {
+        host: picker,
+        formId: this.gongmunForm,
+        idPrefix: "hanmark-export-gongmun",
+        disabled: this.busy || !this.actions.selectGongmunForm,
+        onChange: (id) => {
+          void (async () => {
+            try {
+              const preset = await this.actions.selectGongmunForm?.(id);
+              this.gongmunForm = id;
+              if (preset) this.gongmunPreset = preset;
+              this.presetFromNote = false;
+            } catch (error: unknown) {
+              new Notice(errorMessage(error));
+            }
+            this.render();
+            this.contentEl.querySelector<HTMLElement>("#hanmark-export-gongmun-look")?.focus();
+          })();
         }
-        this.render();
-      };
-      formRow.createEl("small", { text: current?.description ?? t("gongmun.form.help") });
+      });
       const hint = this.actions.notePresetHint?.();
+      const lookHint = this.actions.noteLookHint?.();
+      const hintedLook = lookHint ? gongmunLookByName(picker.library, lookHint) : undefined;
+      if (current && lookHint && hintedLook === current.look) {
+        formRow.createEl("small", { text: t("gongmun.look.fromNote", { key: GONGMUN_LOOK_PROPERTY_KEY }) });
+      } else if (current && lookHint) {
+        formRow.createEl("small", {
+          text: t("gongmun.look.noteDiffers", {
+            key: GONGMUN_LOOK_PROPERTY_KEY,
+            asked: lookHint,
+            look: gongmunLookName(picker.library, current.id)
+          })
+        });
+      }
       if (this.presetFromNote) {
         formRow.createEl("small", { text: t("gongmun.form.fromNote", { key: GONGMUN_PRESET_PROPERTY_KEY }) });
-      } else if (current && current.kind !== "standard" && hint && hint !== current.preset) {
+      } else if (current && current.fixed && hint && hint !== current.preset) {
         formRow.createEl("small", {
           text: t("gongmun.form.noteDiffers", {
             key: GONGMUN_PRESET_PROPERTY_KEY,
@@ -502,7 +528,7 @@ export class HanmarkExportModal extends Modal {
             attr: { type: "button" }
           });
           edit.disabled = this.busy;
-          edit.onclick = () => this.actions.editGongmunForm?.(current.id, current.preset, (id) => this.formChanged(id));
+          edit.onclick = () => this.actions.editGongmunForm?.(current.look, current.preset, (id) => this.formChanged(id));
         }
       }
     }
@@ -575,7 +601,7 @@ export class HanmarkExportModal extends Modal {
 
   /** After the form editor saves (the saved id) or deletes (""), show what is active now. */
   private formChanged(id: string): void {
-    this.gongmunForm = id || this.actions.currentGongmunForm?.() || "";
+    this.gongmunForm = this.describeForm(id)?.id || this.actions.currentGongmunForm?.() || "";
     this.presetFromNote = false;
     this.render();
   }

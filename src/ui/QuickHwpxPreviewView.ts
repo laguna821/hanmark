@@ -11,7 +11,7 @@ import { appendSanitizedSvg, sanitizeSvg } from "./svgSanitize";
 import { prepareExportMarkdown } from "../io/exportPreparation";
 import { createVaultAssemblyHost } from "../io/vaultAssemblyHost";
 import { gongmunGenerateOptions, type GongmunExportPlan, type GongmunFormOption } from "../io/gongmunExport";
-import { fillGongmunFormSelect } from "./gongmunFormSelect";
+import { renderGongmunFormPicker, type GongmunPickerHost } from "./gongmunFormPicker";
 import { flashDone, setPhase } from "./motion";
 import type { EditorActivity } from "./editorActivity";
 import { PreviewNav } from "./previewNav";
@@ -54,6 +54,10 @@ export interface QuickPreviewOptions {
   gongmunPlan?(file: TFile, preset: GongmunPreset, formId?: string): GongmunExportPlan;
   /** Official-document forms for the toolbar: institutions', standard, the user's (R-026). */
   gongmunForms?(): GongmunFormOption[];
+  /** Frame and look picker of the toolbar (R-030). */
+  gongmunPicker?(): GongmunPickerHost;
+  /** A form by id, including frame-and-look pairs the short list does not show. */
+  describeGongmunForm?(id: string): GongmunFormOption | undefined;
   /** The form a note starts with (active institution form, else the note's type, else the last type). */
   currentGongmunForm?(file: TFile): string;
   /** Makes a form active everywhere, remembers it for the note, and returns its document type. */
@@ -107,8 +111,9 @@ interface PaneGeometry {
   viewHeight: number;
 }
 
-/** Toolbar value of quick HWPX; form ids look like "preset:…", "builtin:…", or "gongmun:…". */
+/** Toolbar values of the kind select; form ids look like "form:<frame>/<look>…". */
 const QUICK_VALUE = "quick";
+const GONGMUN_VALUE = "gongmun";
 
 /** A user scroll or click in the preview pauses following the cursor this long (ms). */
 const FOLLOW_PAUSE = 1500;
@@ -261,7 +266,8 @@ export class QuickHwpxPreviewView extends ItemView {
 
   private form(file: TFile | null | undefined): GongmunFormOption | undefined {
     const id = this.formId(file);
-    return id ? this.options.gongmunForms?.().find((item) => item.id === id) : undefined;
+    if (!id) return undefined;
+    return this.options.describeGongmunForm?.(id) ?? this.options.gongmunForms?.().find((item) => item.id === id);
   }
 
   /** The mode with the form shown for this note, so the render and a save use exactly that form. */
@@ -279,17 +285,27 @@ export class QuickHwpxPreviewView extends ItemView {
     toolbar.empty();
     toolbar.createSpan({ cls: "hanmark-hwpx-preview-label", text: t("preview.hwpx.label") });
 
-    // One list: quick HWPX, then every official-document form (R-026).
+    // Quick HWPX or an official document; an official document then shows its
+    // frame, look, and switches right here (R-026, R-030).
     const select = toolbar.createEl("select", {
       cls: "dropdown",
       attr: { "aria-label": t("preview.hwpx.kind") }
     });
-    const general = select.createEl("optgroup", { attr: { label: t("preview.hwpx.quickGroup") } });
-    general.createEl("option", { value: QUICK_VALUE, text: t("preview.hwpx.quick") });
-    fillGongmunFormSelect(select, this.options.gongmunForms?.() ?? []);
+    select.createEl("option", { value: QUICK_VALUE, text: t("preview.hwpx.quick") });
+    select.createEl("option", { value: GONGMUN_VALUE, text: t("preview.hwpx.gongmun") });
     const form = this.mode.kind === "gongmun" ? this.form(file) : undefined;
-    select.value = form?.id ?? QUICK_VALUE;
+    select.value = form ? GONGMUN_VALUE : QUICK_VALUE;
     select.onchange = () => void this.choose(select.value);
+    const picker = this.options.gongmunPicker?.();
+    if (form && picker) {
+      renderGongmunFormPicker(toolbar, {
+        host: picker,
+        formId: form.id,
+        idPrefix: "hanmark-preview-gongmun",
+        compact: true,
+        onChange: (id) => void this.choose(id)
+      });
+    }
 
     const refresh = toolbar.createEl("button", { text: t("preview.hwpx.refresh"), attr: { type: "button" } });
     refresh.onclick = () => this.forceRefresh();
@@ -313,8 +329,11 @@ export class QuickHwpxPreviewView extends ItemView {
       } else {
         const fallback = this.mode.kind === "gongmun" ? this.mode.preset : "report";
         const file = this.sourceView()?.file ?? undefined;
-        const preset = (await this.options.selectGongmunForm?.(value, file)) ?? fallback;
-        this.mode = { kind: "gongmun", preset, formId: value };
+        // "gongmun" switches to official documents on the form the note starts with.
+        const id = value === GONGMUN_VALUE ? (file ? this.options.currentGongmunForm?.(file) : undefined) : value;
+        if (!id) throw new Error(t("preview.quick.openNote"));
+        const preset = (await this.options.selectGongmunForm?.(id, file)) ?? fallback;
+        this.mode = { kind: "gongmun", preset, formId: id };
       }
       await this.options.rememberMode?.(this.mode.kind);
     } catch (error: unknown) {

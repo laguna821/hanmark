@@ -4126,3 +4126,224 @@ body {
     transition: none;
   }
 }
+
+/* Frame and look picker of official documents (R-030): a frame select, a look button
+   with a searchable chooser, and the frame's switches. */
+.hanmark-export-form-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.hanmark-export-form-row > small {
+  grid-column: 1;
+}
+
+.hanmark-form-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: start;
+}
+
+.hanmark-form-picker-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hanmark-form-picker-field select,
+.hanmark-look-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.hanmark-form-picker-look {
+  position: relative;
+}
+
+.hanmark-look-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+
+.hanmark-look-button-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hanmark-look-button-caret {
+  color: var(--text-faint);
+}
+
+.hanmark-look-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  width: max(100%, 280px);
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.hanmark-look-panel.hanmark-is-hidden {
+  display: none;
+}
+
+.hanmark-look-panel.is-right {
+  right: 0;
+  left: auto;
+}
+
+.hanmark-look-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hanmark-look-search {
+  width: 100%;
+}
+
+.hanmark-look-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.hanmark-look-modal .hanmark-look-list {
+  max-height: 56vh;
+}
+
+.hanmark-look-group-title {
+  margin: 8px 4px 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-look-group:first-child .hanmark-look-group-title {
+  margin-top: 2px;
+}
+
+.hanmark-look-option {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+}
+
+.hanmark-look-option.is-active,
+.hanmark-look-option:hover {
+  background: var(--background-modifier-hover);
+}
+
+.hanmark-look-option[aria-selected="true"] .hanmark-look-name {
+  color: var(--text-accent);
+  font-weight: var(--font-semibold);
+}
+
+.hanmark-look-option button {
+  height: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.hanmark-look-pick {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hanmark-look-star {
+  flex: none;
+  padding: 5px 8px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.hanmark-look-star[aria-pressed="true"] {
+  color: var(--text-accent);
+}
+
+.hanmark-look-badge {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.hanmark-look-empty {
+  padding: 10px 8px;
+  color: var(--text-muted);
+}
+
+.hanmark-form-picker-switches {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 4px 16px;
+}
+
+.hanmark-form-picker-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.hanmark-form-picker > small {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+
+/* In the preview toolbar the picker sits on one line and wraps with the toolbar. */
+.hanmark-form-picker.is-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hanmark-form-picker.is-compact .hanmark-form-picker-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.hanmark-form-picker.is-compact .hanmark-form-picker-field select,
+.hanmark-form-picker.is-compact .hanmark-look-button {
+  width: auto;
+  max-width: 220px;
+}
+
+.hanmark-form-picker.is-compact .hanmark-form-picker-switches {
+  gap: 4px 12px;
+}
+
+.hanmark-gongmun-batch-look {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.hanmark-gongmun-batch-look small {
+  color: var(--text-muted);
+}
