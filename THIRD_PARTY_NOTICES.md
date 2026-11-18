@@ -65,6 +65,7 @@ JSZip under the MIT option of its dual license.
 | Package | Version | License | Copyright |
 |---|---|---|---|
 | kordoc | 4.25.0 | MIT | Copyright (c) 2026 chrisryugj |
+| pele | 1.13.0 | MIT | Copyright (c) 2026 kepano |
 | docx-preview | 0.4.0 | Apache-2.0 | Volodymyr Baydalka |
 | @xmldom/xmldom | 0.8.15 | MIT | Copyright 2019 - present Christopher J. Brody and other contributors; Copyright 2012 - 2017 @jindw and other contributors |
 | entities | 4.5.0 | BSD-2-Clause | Copyright (c) Felix Böhm |
@@ -121,6 +122,14 @@ redistributed.
 
 The license texts Kordoc ships for these works are kept unchanged in
 `third-party-licenses/kordoc-4.25.0/`.
+
+#### Pele (diagram engine)
+
+Mermaid code blocks are drawn with **Pele** 1.13.0 — <https://github.com/obsidianmd/pele>
+— Copyright (c) 2026 kepano — MIT License (R-033). The published bundle
+`dist/pele.js` is included unchanged; HanMark calls it offline and writes literal
+colors into the SVG it returns. The license text is kept in
+`third-party-licenses/pele-1.13.0/LICENSE`.
 
 #### hayro (PDF engine, WebAssembly)
 
@@ -279,7 +288,7 @@ HanMark는 내장 Editorial PDF 레이아웃을 위해 Pretendard 400·600 굵�
 ### `main.js`에 포함된 소프트웨어
 
 `main.js`는 esbuild로 묶은 파일 하나입니다. `package-lock.json`이 고정한 판의 npm
-패키지 23개(Kordoc 4.25.0 엔진, R-029)가 들어 있으며, 패키지·판·라이선스·저작권 표시는 영어
+패키지 24개(Kordoc 4.25.0 엔진 R-029, Pele 도식 엔진 R-033)가 들어 있으며, 패키지·판·라이선스·저작권 표시는 영어
 절의 표와 같습니다. JSZip은 이중 라이선스 중 MIT를 따릅니다. Apache-2.0 패키지
 가운데 NOTICE 파일이 있는 것은 Kordoc뿐이며 그 내용을 아래에 옮깁니다.
 
@@ -308,6 +317,13 @@ Kordoc의 선택형 OCR 코드(Pix2Text, PaddleOCR PP-OCRv5)는 이제 번들에
 
 Kordoc이 이 저작물들에 대해 싣는 라이선스 전문은
 `third-party-licenses/kordoc-4.25.0/`에 바꾸지 않고 둡니다.
+
+#### Pele (도식 엔진)
+
+Mermaid 코드 블록은 **Pele** 1.13.0 — <https://github.com/obsidianmd/pele> —
+Copyright (c) 2026 kepano — MIT License로 그립니다(R-033). 배포본 `dist/pele.js`를
+고치지 않고 넣었고, HanMark는 오프라인에서 호출해 돌려받은 SVG에 색을 문자 값으로
+써 넣습니다. 라이선스 전문은 `third-party-licenses/pele-1.13.0/LICENSE`에 있습니다.
 
 #### hayro (PDF 엔진, WebAssembly)
 

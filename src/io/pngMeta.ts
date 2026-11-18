@@ -121,3 +121,35 @@ export function pngDiagramMark(data: Uint8Array): PngDiagramMark | null {
 export function pngDisplayScale(data: Uint8Array): number {
   return pngDiagramMark(data)?.scale ?? 1;
 }
+
+const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** Standard base64 of bytes, without relying on a platform encoder. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let out = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const a = bytes[index];
+    const b = index + 1 < bytes.length ? bytes[index + 1] : 0;
+    const c = index + 2 < bytes.length ? bytes[index + 2] : 0;
+    out += BASE64[a >> 2] + BASE64[((a & 3) << 4) | (b >> 4)];
+    out += index + 1 < bytes.length ? BASE64[((b & 15) << 2) | (c >> 6)] : "=";
+    out += index + 2 < bytes.length ? BASE64[c & 63] : "=";
+  }
+  return out;
+}
+
+/** Bytes of standard base64 text; null when the text is not valid base64. */
+export function base64ToBytes(text: string): Uint8Array | null {
+  if (text.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(text)) return null;
+  const padding = text.endsWith("==") ? 2 : text.endsWith("=") ? 1 : 0;
+  const out = new Uint8Array((text.length / 4) * 3 - padding);
+  let at = 0;
+  for (let index = 0; index < text.length; index += 4) {
+    const values = [0, 1, 2, 3].map((offset) => Math.max(0, BASE64.indexOf(text[index + offset])));
+    const block = (values[0] << 18) | (values[1] << 12) | (values[2] << 6) | values[3];
+    if (at < out.length) out[at++] = block >> 16;
+    if (at < out.length) out[at++] = (block >> 8) & 0xff;
+    if (at < out.length) out[at++] = block & 0xff;
+  }
+  return out;
+}

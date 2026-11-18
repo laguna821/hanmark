@@ -1,7 +1,7 @@
 import { PeleError, detectType, render, type TextMeasurer } from "pele";
 import type { AdapterWarning } from "./markdownAdapter";
 import { isSafeDiagramSvg, literalizeDiagramSvg, type DiagramPalette } from "./diagramSvg";
-import { withPngDisplayScale } from "./pngMeta";
+import { base64ToBytes, bytesToBase64, withPngDisplayScale } from "./pngMeta";
 import { t } from "../i18n";
 
 /**
@@ -10,7 +10,8 @@ import { t } from "../i18n";
  * Editorial PDF and both previews agree on what a diagram is and how it looks.
  *
  * - "hwpx" and "docx": the block becomes a PNG picture reference (a data URL the
- *   existing image pipelines already read) and a centred caption paragraph.
+ *   existing image pipelines already read) and a caption paragraph; the PNG carries a
+ *   mark, so the writers centre both and place the picture at its drawn size.
  * - "markup": the block becomes one token paragraph that carries the SVG; the HTML
  *   and PDF writers replace it by inline SVG (vector, selectable text).
  */
@@ -177,9 +178,7 @@ function escapeMarkdown(text: string): string {
     .replace(/^([-+])(\s)/u, "\\$1$2");
 }
 
-function base64(bytes: Uint8Array): string {
-  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64");
-}
+const base64 = bytesToBase64;
 
 /** Draws one Mermaid source; throws PeleError (or Error) when it cannot be drawn. */
 export function renderDiagram(source: string, environment: DiagramEnvironment, idPrefix: string): RenderedDiagram {
@@ -224,7 +223,9 @@ export function decodeDiagramToken(text: string): RenderedDiagram | null {
   const match = /^HMDIAGRAM\(([A-Za-z0-9+/=]+)\)$/u.exec(text.trim());
   if (!match) return null;
   try {
-    const value = JSON.parse(Buffer.from(match[1], "base64").toString("utf8")) as Partial<RenderedDiagram>;
+    const bytes = base64ToBytes(match[1]);
+    if (!bytes) return null;
+    const value = JSON.parse(new TextDecoder().decode(bytes)) as Partial<RenderedDiagram>;
     if (typeof value.svg !== "string" || !isSafeDiagramSvg(value.svg) || value.svg.includes("var(")) return null;
     const width = Number(value.width);
     const height = Number(value.height);
@@ -318,22 +319,15 @@ export async function renderMermaidDiagrams(
         );
         const alt = cleanLabel(diagram.alt ?? diagram.caption ?? t("diagram.defaultAlt"));
         const image = `![${alt}](data:image/png;base64,${base64(png)})`;
-        const caption = diagram.caption ? escapeHtml(cleanLabel(diagram.caption)) : "";
-        if (target === "hwpx") {
-          // The HWPX engine places a picture only as a paragraph of its own, outside quotes:
-          // a diagram inside a quote or callout is set right after the lines before it.
-          const prefix = block.prefix.includes(">") ? "" : block.prefix;
-          const gap = prefix.trimEnd();
-          output.push(gap, `${prefix}${image}`);
-          if (diagram.caption) output.push(gap, `${prefix}${escapeMarkdown(cleanLabel(diagram.caption))}`);
-          output.push(gap);
-          rendered += 1;
-          continue;
-        } else {
-          output.push(blank, `${block.prefix}<p align="center">${image}</p>`);
-          if (caption) output.push(blank, `${block.prefix}<p align="center">${caption}</p>`);
-        }
-        output.push(blank);
+        // The picture and its caption are plain paragraphs; the PNG's mark tells each writer
+        // to centre them. The HWPX engine places a picture only as a paragraph of its own
+        // outside quotes, so a diagram inside a quote or callout is set right after the
+        // lines before it.
+        const prefix = target === "hwpx" && block.prefix.includes(">") ? "" : block.prefix;
+        const gap = prefix.trimEnd();
+        output.push(gap, `${prefix}${image}`);
+        if (diagram.caption) output.push(gap, `${prefix}${escapeMarkdown(cleanLabel(diagram.caption))}`);
+        output.push(gap);
       }
       rendered += 1;
     } catch (error: unknown) {

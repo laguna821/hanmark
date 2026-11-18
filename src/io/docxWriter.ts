@@ -452,8 +452,8 @@ class DocxBuilder {
       : value;
   }
 
-  /** Set while a paragraph is written when it placed a diagram picture that has a caption. */
-  private diagramPlaced = false;
+  /** Set while a paragraph is written when it placed a diagram picture (with or without a caption under it). */
+  private diagramPlaced: false | "plain" | "captioned" = false;
 
   private image(source: string, rawAlt: string, rels: PartRelationships, format: RunFormat): string {
     const alt = this.plain(rawAlt);
@@ -485,7 +485,7 @@ class DocxBuilder {
     const maxWidth = this.textWidthTwips * EMU_PER_TWIP;
     let width = Math.round(entry.size.width * EMU_PER_PIXEL);
     let height = Math.round(entry.size.height * EMU_PER_PIXEL);
-    if (entry.diagram && entry.captionFollows) this.diagramPlaced = true;
+    if (entry.diagram) this.diagramPlaced = entry.captionFollows ? "captioned" : "plain";
     if (width > maxWidth) {
       height = Math.round((height * maxWidth) / width);
       width = maxWidth;
@@ -628,11 +628,12 @@ class DocxBuilder {
           : context.style === STYLE.body && wasAfterHeading ? STYLE.first : context.style;
         this.diagramPlaced = false;
         const runs = this.inlines(block.inlines, context.rels);
-        afterDiagram = this.diagramPlaced;
+        const placed = this.diagramPlaced as false | "plain" | "captioned";
+        afterDiagram = placed === "captioned";
         output += paragraph(runs, {
           style,
           indent: context.indent,
-          alignment: block.alignment,
+          alignment: placed || caption ? "center" : block.alignment,
           ...(afterDiagram ? { keepNext: true } : {})
         });
       } else if (block.type === "heading") {
