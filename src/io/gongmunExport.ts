@@ -35,6 +35,7 @@ import {
 import type { GongmunFinishSpec } from "./hwpxFinish";
 import type { GongmunOutlineStyle } from "./gongmunOutline";
 import type { GenerateHwpxOptions } from "./kordocEngine";
+import type { SampleLookRecord } from "./sampleLook";
 import { t, tKey, type Locale, type MessageKey } from "../i18n";
 
 export const DEFAULT_GONGMUN_PRESET: GongmunPreset = "report";
@@ -215,6 +216,8 @@ export interface GongmunExportPlan {
   outline?: GongmunOutlineStyle;
   /** The form the plan was made with ("form:<frame>/<look>…"). */
   formId: string;
+  /** A look learned from a sample HWPX (R-036); the document is made from the sample's shapes. */
+  sample?: SampleLookRecord;
 }
 
 /** The note's `title` property, else its file name: the title of a document without `#`. */
@@ -226,10 +229,11 @@ export function noteDocumentTitle(frontmatter: Readonly<Record<string, unknown>>
 /** Generation options of a plan, shared by the export and the preview. */
 export function gongmunGenerateOptions(
   plan: GongmunExportPlan
-): Pick<GenerateHwpxOptions, "gongmun" | "profile" | "gongmunTitle" | "gongmunFinish" | "gongmunOutline" | "quietEngineNotes"> {
+): Pick<GenerateHwpxOptions, "gongmun" | "profile" | "sampleLook" | "gongmunTitle" | "gongmunFinish" | "gongmunOutline" | "quietEngineNotes"> {
   return {
     gongmun: plan.options,
     profile: plan.profile,
+    sampleLook: plan.sample,
     gongmunTitle: plan.title,
     gongmunFinish: plan.finish,
     gongmunOutline: plan.outline,
@@ -367,6 +371,7 @@ export function planGongmunExport(
     preset,
     options,
     profile: style?.tableStyle,
+    sample: style?.sample,
     warnings,
     title: noteDocumentTitle(frontmatter, file),
     finish: style?.finish,

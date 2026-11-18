@@ -25,6 +25,7 @@ import {
   type ExtendedHeadingMarker
 } from "./documentStyle";
 import { finalizeHwpxPackage } from "./hwpxPostProcess";
+import { openSampleLook, type SampleLookRecord } from "./sampleLook";
 import { applyScriptRunsToHwpx, markScriptTags } from "./hwpxScriptRuns";
 import { finishGongmunHwpx, type GongmunFinishSpec } from "./hwpxFinish";
 import { paragraphSignature, prepareGongmunMarkdown, type GongmunOutlineStyle } from "./gongmunOutline";
@@ -75,6 +76,13 @@ export interface GenerateHwpxOptions {
   gongmunOutline?: GongmunOutlineStyle;
   /** Engine notes to leave out of the report (message prefixes). */
   quietEngineNotes?: readonly string[];
+  /**
+   * A look learned from a sample HWPX (R-036). The engine fills the sample's own shapes,
+   * so the official-document options, table look and finishing do not apply to it.
+   */
+  sampleLook?: SampleLookRecord;
+  /** `$…$` becomes a Hangul equation object (R-036); off keeps the text as it is. */
+  inlineMath?: boolean;
 }
 
 export interface GeneratedHwpx {
@@ -221,11 +229,20 @@ async function generateKordocPackage(
   // Kordoc reports what its generator adjusted silently (for example shrinking an
   // over-long official-document heading); HanMark shows these in the report.
   const engineWarnings: string[] = [];
-  const raw = await markdownToHwpx(markdown, {
-    gongmun: pinGongmunDefaults(options.gongmun),
-    profile: options.profile,
-    warnings: engineWarnings
-  });
+  const sample = options.sampleLook ? await openSampleLook(options.sampleLook) : undefined;
+  if (sample) engineWarnings.push(...sample.roleWarnings(markdown));
+  const raw = await markdownToHwpx(
+    markdown,
+    sample
+      ? { template: sample.template, totalRow: "keep", warnings: engineWarnings }
+      : {
+          gongmun: pinGongmunDefaults(options.gongmun),
+          profile: options.profile,
+          // Passed only when asked for, so documents made without it keep their bytes.
+          ...(options.inlineMath ? { inlineMath: true } : {}),
+          warnings: engineWarnings
+        }
+  );
   const hydrated = await hydrateKordocImages(raw, assets);
   return {
     data: hydrated.data,
@@ -238,8 +255,16 @@ async function generateKordocPackage(
 
 export async function generateValidatedHwpxFromAdapted(
   adapted: MarkdownAdapterResult,
-  options: GenerateHwpxOptions = {}
+  requested: GenerateHwpxOptions = {}
 ): Promise<GeneratedHwpx> {
+  // A look learned from a sample is made from the sample's shapes alone (R-036): the
+  // official-document outline, table look, finishing and document style stay out of it.
+  const options: GenerateHwpxOptions = requested.sampleLook
+    ? { ...requested, gongmun: undefined, profile: undefined, gongmunFinish: undefined, gongmunOutline: undefined, documentStyle: undefined }
+    : requested;
+  if (requested.sampleLook && requested.gongmunTitle && !/^\s*#\s/u.test(adapted.markdown)) {
+    adapted = { ...adapted, markdown: `# ${requested.gongmunTitle}\n\n${adapted.markdown}` };
+  }
   // Official documents: consecutive heading levels and a title (R-024).
   const outline = options.gongmun
     ? prepareGongmunMarkdown(adapted.markdown, {
