@@ -17,6 +17,8 @@ import {
 import type { HanmarkExportOutcome } from "./exportTypes";
 import type { PdfOutputAdapter } from "./pdfOutputAdapter";
 import { layoutEditorialPdf } from "./editorialPdfFlow";
+import { decodeDiagramToken, type RenderedDiagram } from "./diagramStage";
+import type { DiagramPalette } from "./diagramSvg";
 import type { EditorialPdfLayout } from "./editorialPdfLayout";
 import {
   resolveOutputLocale,
@@ -838,6 +840,51 @@ function resolveEditorialPdfModeText(
   }
 }
 
+/** Paper palette for diagrams drawn into an Editorial PDF of the given theme (R-033). */
+export function editorialPdfDiagramPaper(snapshot: EditorialPdfThemeSnapshot | undefined): DiagramPalette {
+  const palette = snapshot ? resolveEditorialPdfThemeSnapshot(snapshot).palette : BUILTIN_EDITORIAL_PDF_PALETTE;
+  return {
+    bg: palette.paper,
+    fg: palette.bodyInk,
+    muted: palette.keyMutedInk,
+    line: palette.bodyInk,
+    surface: palette.softTint,
+    surfaceAlt: palette.alternate,
+    border: palette.border,
+    accent: palette.keyInk
+  };
+}
+
+/**
+ * A drawn diagram (R-033): the SVG is placed as markup, so its text stays text in
+ * the PDF. The token was checked as safe drawing markup when it was decoded.
+ */
+function appendDiagram(ownerDocument: Document, parent: HTMLElement, diagram: RenderedDiagram): void {
+  const view = ownerDocument.defaultView;
+  const Parser = view ? (view as unknown as { DOMParser: typeof DOMParser }).DOMParser : DOMParser;
+  const parsed = new Parser().parseFromString(diagram.svg, "image/svg+xml");
+  const drawing = parsed.documentElement;
+  if (drawing.nodeName !== "svg" || parsed.getElementsByTagName("parsererror").length) {
+    const fallback = createHtmlElement(ownerDocument, "p");
+    fallback.textContent = diagram.caption ?? diagram.alt ?? "";
+    parent.appendChild(fallback);
+    return;
+  }
+  const holder = createHtmlElement(ownerDocument, "p");
+  holder.className = "hanmark-pdf-diagram";
+  holder.dataset.naturalWidth = String(diagram.width);
+  holder.dataset.naturalHeight = String(diagram.height);
+  holder.appendChild(ownerDocument.importNode(drawing, true));
+  parent.appendChild(holder);
+  if (diagram.caption) {
+    holder.dataset.caption = "true";
+    const caption = createHtmlElement(ownerDocument, "p");
+    caption.className = "hanmark-pdf-diagram-caption";
+    caption.textContent = diagram.caption;
+    parent.appendChild(caption);
+  }
+}
+
 function prepareEditorialPdfRenderTheme(
   snapshot: EditorialPdfThemeSnapshot | undefined
 ): EditorialPdfRenderTheme | undefined {
@@ -1480,6 +1527,34 @@ export function createEditorialPdfStyles(
     height: auto;
     margin: 0.9em auto;
     object-fit: contain;
+  }
+
+  .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body .hanmark-pdf-diagram {
+    margin: 0.9em 0;
+    text-indent: 0;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body .hanmark-pdf-diagram[data-caption] {
+    margin-bottom: 0.3em;
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body .hanmark-pdf-diagram svg {
+    display: block;
+    max-width: 100%;
+    max-height: 225mm;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body .hanmark-pdf-diagram-caption {
+    margin: 0 0 0.9em;
+    font-size: 8pt;
+    text-align: center;
+    text-indent: 0;
   }
 
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body a {
@@ -2142,6 +2217,12 @@ function appendBlocks(
   for (const block of blocks) {
     switch (block.type) {
       case "paragraph": {
+        const only = block.inlines.length === 1 ? block.inlines[0] : undefined;
+        const diagram = only?.type === "text" ? decodeDiagramToken(only.value) : null;
+        if (diagram) {
+          appendDiagram(ownerDocument, parent, diagram);
+          break;
+        }
         const paragraph = createHtmlElement(ownerDocument, "p");
         if (block.alignment) paragraph.style.textAlign = block.alignment;
         appendInlines(ownerDocument, paragraph, block.inlines, depth + 1);

@@ -38,6 +38,17 @@ export function collectEditorialPdfFlow(body: HTMLElement): FlowUnit[] {
   const highest = Math.min(...levels);
   const units: FlowUnit[] = [];
   const visit = (node: HTMLElement, wrappers: HTMLElement[] = []): void => {
+    // A drawn diagram (R-033) floats like a picture; its SVG stays markup.
+    if (node.tagName === "P" && node.classList.contains("hanmark-pdf-diagram") && node.querySelector("svg")) {
+      const figure = createPdfElement(document, "figure");
+      figure.className = "hanmark-pdf-figure hanmark-pdf-diagram-figure";
+      figure.dataset.naturalWidth = node.dataset.naturalWidth ?? "";
+      figure.dataset.naturalHeight = node.dataset.naturalHeight ?? "";
+      figure.dataset.maxWidth = String(Number(node.dataset.naturalWidth) * 1.25);
+      figure.append(node.querySelector("svg")!.cloneNode(true));
+      units.push({ kind: "figure", node: figure });
+      return;
+    }
     if (node.tagName === "P" && !node.textContent?.trim() && node.querySelector("img")) {
       for (const image of Array.from(node.querySelectorAll("img"))) {
         const figure = createPdfElement(document, "figure");
@@ -166,11 +177,20 @@ class PageComposer {
     if (!(naturalWidth > 0 && naturalHeight > 0)) throw new Error(t("pdfExport.error.imageSize"));
     const target = this.layout.mode === "two-column-a" ? PAGE_WIDTH : this.width;
     const width = Math.min(target, (PAGE_HEIGHT - 2 * FIGURE_GAP) * naturalWidth / naturalHeight);
-    const height = width * naturalHeight / naturalWidth;
+    // A diagram is not enlarged far beyond the size it was drawn for; it is centred in its slot.
+    const cap = Number(node.dataset.maxWidth);
+    const drawn = cap > 0 ? Math.min(width, cap) : width;
+    const height = drawn * naturalHeight / naturalWidth;
     node.style.width = `${width}px`;
     node.style.height = `${height}px`;
     const image = node.querySelector("img");
     if (image) { image.style.width = `${width}px`; image.style.height = `${height}px`; }
+    const drawing = node.querySelector("svg");
+    if (drawing) {
+      drawing.setAttribute("width", String(drawn));
+      drawing.setAttribute("height", String(height));
+      (drawing as unknown as HTMLElement).style.cssText = `display:block;width:${drawn}px;height:${height}px;margin:0 auto;`;
+    }
     return { full: this.layout.mode === "two-column-a", index, column, edge, node, height: height + 2 * FIGURE_GAP };
   }
 

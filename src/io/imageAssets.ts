@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { pngDiagramMark } from "./pngMeta";
 import { resolveOutputLocale, t, tOut, type Locale } from "../i18n";
 import { errorMessage } from "../utils/errors";
 import { transformMarkdownImageTokens } from "./markdownImageTokens";
@@ -41,6 +42,8 @@ export interface ResolvedImageAsset extends ImageReference {
   pixelWidth: number;
   pixelHeight: number;
   displayWidthHu: number;
+  /** Set for a diagram HanMark drew (R-033): centred, with an optional caption paragraph under it. */
+  diagram?: { captionFollows: boolean };
   displayHeightHu: number;
 }
 
@@ -252,7 +255,10 @@ export async function resolveMarkdownImages(
         totalBytes += data.byteLength;
         const ordinal = index + 1;
         const base = `hanmark_image_${String(ordinal).padStart(3, "0")}`;
-        const display = imageDisplaySize(inspected.width, inspected.height, options.maxDisplayWidthHu);
+        // A diagram HanMark drew is placed at its drawn size, not one unit per image pixel (R-033).
+        const mark = pngDiagramMark(data);
+        const scale = mark?.scale ?? 1;
+        const display = imageDisplaySize(inspected.width / scale, inspected.height / scale, options.maxDisplayWidthHu);
         assets.push({
           ...reference,
           safeName: `${base}.${inspected.extension}`,
@@ -262,7 +268,8 @@ export async function resolveMarkdownImages(
           pixelWidth: inspected.width,
           pixelHeight: inspected.height,
           displayWidthHu: display.widthHu,
-          displayHeightHu: display.heightHu
+          displayHeightHu: display.heightHu,
+          ...(mark ? { diagram: { captionFollows: mark.captionFollows } } : {})
         });
         completed++;
         options.onProgress?.({ completed, total: references.length, source: reference.source, status: "embedded" });
@@ -339,6 +346,72 @@ function resizePic(pic: string, width: number, height: number): string {
   return result;
 }
 
+/**
+ * Centres the paragraph of every diagram picture and keeps it on the page of the
+ * caption under it (R-033). A centred copy of the paragraph's own shape is added
+ * to the header, so indentation and spacing stay as the generator set them.
+ */
+export function centerDiagramParagraphs(
+  section: string,
+  header: string,
+  diagramIds: ReadonlyMap<string, boolean>
+): { section: string; header: string } {
+  const shapes = new Map<string, string>();
+  let nextId = Math.max(0, ...Array.from(header.matchAll(/<hh:paraPr\b[^>]*\bid="(\d+)"/g), (match) => Number(match[1]))) + 1;
+  let added = "";
+  const centredShape = (id: string, keepWithNext: boolean): string | null => {
+    const key = `${id}:${keepWithNext ? 1 : 0}`;
+    const known = shapes.get(key);
+    if (known) return known;
+    const shape = new RegExp(`<hh:paraPr\\b[^>]*\\bid="${id}"[\\s\\S]*?</hh:paraPr>`).exec(header)?.[0];
+    if (!shape) return null;
+    const newId = String(nextId++);
+    let copy = shape
+      .replace(/(<hh:paraPr\b[^>]*\bid=")\d+(")/, (_whole, before: string, after: string) => before + newId + after)
+      .replace(/(<hh:align\b[^>]*\bhorizontal=")[^"]*(")/g, (_whole, before: string, after: string) => before + "CENTER" + after);
+    if (keepWithNext) {
+      copy = copy.replace(/(<hh:breakSetting\b[^>]*\bkeepWithNext=")[^"]*(")/g, (_whole, before: string, after: string) => before + "1" + after);
+    }
+    added += copy;
+    shapes.set(key, newId);
+    return newId;
+  };
+  let output = "";
+  let cursor = 0;
+  for (const pic of section.matchAll(/<hp:pic\b[\s\S]*?<\/hp:pic>/g)) {
+    const itemId = /\bbinaryItemIDRef="([^"]+)"/.exec(pic[0])?.[1];
+    if (!itemId || !diagramIds.has(itemId)) continue;
+    const at = pic.index;
+    const open = section.lastIndexOf("<hp:p ", at);
+    if (open < cursor || section.slice(open, at).includes("</hp:p>")) continue;
+    const tagEnd = section.indexOf(">", open);
+    const tag = section.slice(open, tagEnd + 1);
+    const current = /\bparaPrIDRef="(\d+)"/.exec(tag)?.[1];
+    if (!current) continue;
+    const close = section.indexOf("</hp:p>", at) + 7;
+    const next = /^\s*<hp:p\b[^>]*>/.exec(section.slice(close));
+    const nextShape = next ? /\bparaPrIDRef="(\d+)"/.exec(next[0])?.[1] : undefined;
+    const captionFollows = diagramIds.get(itemId) === true && nextShape !== undefined;
+    const centred = centredShape(current, captionFollows);
+    if (!centred) continue;
+    const setShape = (openTag: string, id: string): string =>
+      openTag.replace(/(\bparaPrIDRef=")\d+(")/, (_whole, before: string, after: string) => before + id + after);
+    output += section.slice(cursor, open) + setShape(tag, centred);
+    cursor = tagEnd + 1;
+    const captionShape = captionFollows && next && nextShape ? centredShape(nextShape, false) : null;
+    if (captionShape && next) {
+      output += section.slice(cursor, close) + setShape(next[0], captionShape);
+      cursor = close + next[0].length;
+    }
+  }
+  if (!added) return { section, header };
+  const count = shapes.size;
+  const nextHeader = header
+    .replace(/(<hh:paraProperties\b[^>]*\bitemCnt=")(\d+)(")/, (_whole, before: string, value: string, after: string) => before + String(Number(value) + count) + after)
+    .replace("</hh:paraProperties>", () => added + "</hh:paraProperties>");
+  return { section: output + section.slice(cursor), header: nextHeader };
+}
+
 export async function hydrateKordocImages(
   hwpx: ArrayBuffer,
   assets: ResolvedImageAsset[]
@@ -384,6 +457,14 @@ export async function hydrateKordocImages(
     }
     zip.file(`BinData/${asset.safeName}`, asset.data);
     placedAssets.push(asset);
+  }
+
+  const diagramIds = new Map(placedAssets.filter((asset) => asset.diagram).map((asset) => [asset.itemId, asset.diagram?.captionFollows === true]));
+  const headerFile = zip.file("Contents/header.xml");
+  if (diagramIds.size && headerFile) {
+    const centred = centerDiagramParagraphs(section, await headerFile.async("string"), diagramIds);
+    section = centred.section;
+    zip.file("Contents/header.xml", centred.header);
   }
 
   zip.file("Contents/section0.xml", section);

@@ -20,6 +20,7 @@ import {
 import { HwpSaveReportModal } from "./HwpSaveReportModal";
 import { adaptMarkdownForKordoc } from "./markdownAdapter";
 import { assembleEmbedsSetting, prepareExportMarkdown } from "./exportPreparation";
+import { exportDiagramOptions } from "../ui/diagramEnvironment";
 import { createVaultAssemblyHost } from "./vaultAssemblyHost";
 import {
   generateValidatedHwpxFromAdapted,
@@ -183,7 +184,8 @@ async function generateBody(
   const host = templateHost(plugin);
   const prepared = await prepareExportMarkdown(createVaultAssemblyHost(app), body, file.path, {
     assembleEmbeds: assembleEmbedsSetting(host.settings),
-    outputLanguage: outputLanguage(plugin)
+    outputLanguage: outputLanguage(plugin),
+    diagrams: exportDiagramOptions(host.settings, "hwpx")
   });
   // Official documents: window preset > note properties > institution style (2.7.0 W5).
   const gongmun = options.mode === "gongmun-hwpx"

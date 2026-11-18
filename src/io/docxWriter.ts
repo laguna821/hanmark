@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { pngDiagramMark } from "./pngMeta";
 import {
   parseEditorialBlocks,
   type EditorialAlignment,
@@ -292,7 +293,12 @@ interface MediaEntry {
   name: string;
   data: Uint8Array;
   mime: string;
+  /** Placed size in document pixels (a diagram HanMark drew is placed at its drawn size, R-033). */
   size: ImageSize;
+  /** True for a diagram picture HanMark drew (R-033). */
+  diagram: boolean;
+  /** The paragraph after a diagram picture is its caption. */
+  captionFollows: boolean;
 }
 
 interface ListFrame {
@@ -446,19 +452,26 @@ class DocxBuilder {
       : value;
   }
 
+  /** Set while a paragraph is written when it placed a diagram picture (with or without a caption under it). */
+  private diagramPlaced: false | "plain" | "captioned" = false;
+
   private image(source: string, rawAlt: string, rels: PartRelationships, format: RunFormat): string {
     const alt = this.plain(rawAlt);
     let entry = this.mediaBySource.get(source);
     if (entry === undefined) {
       const decoded = decodeDataUri(source);
       const size = decoded ? rasterImageSize(decoded.data) : null;
+      const mark = decoded ? pngDiagramMark(decoded.data) : null;
+      const scale = mark?.scale ?? 1;
       entry =
         decoded && size && size.width > 0 && size.height > 0
           ? {
               name: `image${this.media.length + 1}.${IMAGE_EXTENSIONS[decoded.mime]}`,
               data: decoded.data,
               mime: decoded.mime,
-              size
+              size: { width: size.width / scale, height: size.height / scale },
+              diagram: mark !== null,
+              captionFollows: mark?.captionFollows === true
             }
           : null;
       if (entry) this.media.push(entry);
@@ -470,8 +483,9 @@ class DocxBuilder {
     }
     const relationId = rels.add(`${REL_BASE}/image`, `media/${entry.name}`, false);
     const maxWidth = this.textWidthTwips * EMU_PER_TWIP;
-    let width = entry.size.width * EMU_PER_PIXEL;
-    let height = entry.size.height * EMU_PER_PIXEL;
+    let width = Math.round(entry.size.width * EMU_PER_PIXEL);
+    let height = Math.round(entry.size.height * EMU_PER_PIXEL);
+    if (entry.diagram) this.diagramPlaced = entry.captionFollows ? "captioned" : "plain";
     if (width > maxWidth) {
       height = Math.round((height * maxWidth) / width);
       width = maxWidth;
@@ -600,15 +614,27 @@ class DocxBuilder {
   blocks(blocks: readonly EditorialBlock[], context: BlockContext): string {
     let output = "";
     let afterHeading = false;
+    let afterDiagram = false;
     for (const block of blocks) {
       const wasAfterHeading = afterHeading;
+      const wasAfterDiagram = afterDiagram;
       afterHeading = false;
+      afterDiagram = false;
       if (block.type === "paragraph") {
-        const style = context.style === STYLE.body && wasAfterHeading ? STYLE.first : context.style;
-        output += paragraph(this.inlines(block.inlines, context.rels), {
+        // The centred paragraph right under a diagram picture is its caption (R-033).
+        const caption = wasAfterDiagram && !block.inlines.some((inline) => inline.type === "image");
+        const style = caption
+          ? WORD_STYLE_ID_MAP["Image Caption"]
+          : context.style === STYLE.body && wasAfterHeading ? STYLE.first : context.style;
+        this.diagramPlaced = false;
+        const runs = this.inlines(block.inlines, context.rels);
+        const placed = this.diagramPlaced as false | "plain" | "captioned";
+        afterDiagram = placed === "captioned";
+        output += paragraph(runs, {
           style,
           indent: context.indent,
-          alignment: block.alignment
+          alignment: placed || caption ? "center" : block.alignment,
+          ...(afterDiagram ? { keepNext: true } : {})
         });
       } else if (block.type === "heading") {
         output += paragraph(this.inlines(block.inlines, context.rels), {

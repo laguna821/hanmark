@@ -8,7 +8,7 @@ import { documentStyleSummary, type DocumentStyleProfile } from "../io/documentS
 import { errorMessage } from "../utils/errors";
 import { t, type LanguagePreference } from "../i18n";
 import { appendSanitizedSvg, sanitizeSvg } from "./svgSanitize";
-import { prepareExportMarkdown } from "../io/exportPreparation";
+import { prepareExportMarkdown, type ExportDiagramOptions } from "../io/exportPreparation";
 import { createVaultAssemblyHost } from "../io/vaultAssemblyHost";
 import { gongmunGenerateOptions, type GongmunExportPlan, type GongmunFormOption } from "../io/gongmunExport";
 import { renderGongmunFormPicker, type GongmunPickerHost } from "./gongmunFormPicker";
@@ -51,6 +51,8 @@ export interface QuickPreviewOptions {
   autoPauseEnabled?(): boolean;
   outputLanguage?(): LanguagePreference;
   assembleEmbeds?(): boolean;
+  /** Diagram drawing for the preview (R-033); undefined keeps Mermaid blocks as code. */
+  diagrams?(): ExportDiagramOptions | undefined;
   gongmunPlan?(file: TFile, preset: GongmunPreset, formId?: string): GongmunExportPlan;
   /** Official-document forms for the toolbar: institutions', standard, the user's (R-026). */
   gongmunForms?(): GongmunFormOption[];
@@ -430,7 +432,8 @@ export class QuickHwpxPreviewView extends ItemView {
     const generation = this.generationOptions(file);
     const prepared = await prepareExportMarkdown(createVaultAssemblyHost(this.app), body, file.path, {
       assembleEmbeds: this.options.assembleEmbeds?.() ?? true,
-      outputLanguage: generation.options.outputLanguage ?? "auto"
+      outputLanguage: generation.options.outputLanguage ?? "auto",
+      diagrams: this.options.diagrams?.()
     });
     if (version !== this.renderVersion || !this.previewEl) return;
     const markdown = prepared.markdown;

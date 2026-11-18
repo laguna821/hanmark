@@ -206,6 +206,35 @@ export class HanmarkSettingTab extends PluginSettingTab {
           void this.changeAssembleEmbeds(enabled);
         });
       });
+    new Setting(container)
+      .setName(t("settings.mermaidDiagrams.name"))
+      .setDesc(t("settings.mermaidDiagrams.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(this.host.settings.mermaidDiagrams).onChange((enabled) => {
+          void this.changeDiagramSetting("mermaidDiagrams", enabled);
+        });
+      });
+    new Setting(container)
+      .setName(t("settings.mermaidPalette.name"))
+      .setDesc(t("settings.mermaidPalette.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(this.host.settings.mermaidPaperPalette).onChange((enabled) => {
+          void this.changeDiagramSetting("mermaidPaperPalette", enabled);
+        });
+      });
+  }
+
+  private async changeDiagramSetting(key: "mermaidDiagrams" | "mermaidPaperPalette", enabled: boolean): Promise<void> {
+    const previous = this.host.settings[key];
+    try {
+      this.host.settings[key] = enabled;
+      await this.host.saveSettings();
+      await this.actions.refreshPreviews();
+    } catch (error: unknown) {
+      this.host.settings[key] = previous;
+      new Notice(t("settings.mermaidDiagrams.saveFailed", { detail: errorMessage(error) }));
+      this.render();
+    }
   }
 
   private async changeAssembleEmbeds(enabled: boolean): Promise<void> {

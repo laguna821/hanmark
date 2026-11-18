@@ -24,7 +24,9 @@ export type AdapterWarningCode =
   | "footnote-undefined"
   | "font-substituted"
   | "font-missing"
-  | "document-style-level-unused";
+  | "document-style-level-unused"
+  | "diagram-kept-as-code"
+  | "diagram-font";
 
 export interface AdapterWarning {
   code: AdapterWarningCode;

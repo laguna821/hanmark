@@ -1,5 +1,6 @@
 import type { AdapterWarning, AdapterWarningCode } from "./markdownAdapter";
 import { assembleNote, type AssemblyHost, type AssemblyIssue, type AssemblyIssueCode } from "./noteAssembly";
+import { renderMermaidDiagrams, type DiagramEnvironment, type DiagramTarget } from "./diagramStage";
 import { resolveOutputLocale, t, type LanguagePreference } from "../i18n";
 
 /**
@@ -10,6 +11,14 @@ export interface ExportPreparationOptions {
   /** Setting `assembleEmbeds` (default on). */
   assembleEmbeds: boolean;
   outputLanguage: LanguagePreference;
+  /** Draw Mermaid blocks as diagrams for this export (R-033); omitted when the user switched it off. */
+  diagrams?: ExportDiagramOptions;
+}
+
+export interface ExportDiagramOptions {
+  target: DiagramTarget;
+  /** Built only when the note has a Mermaid block. */
+  environment: () => Promise<DiagramEnvironment> | DiagramEnvironment;
 }
 
 export interface PreparedExportMarkdown {
@@ -54,17 +63,37 @@ export async function prepareExportMarkdown(
   sourcePath: string,
   options: ExportPreparationOptions
 ): Promise<PreparedExportMarkdown> {
-  if (!options.assembleEmbeds || !host) return { markdown: body, warnings: [] };
-  const locale = resolveOutputLocale(options.outputLanguage, body);
-  const assembled = await assembleNote(host, body, sourcePath, { locale });
-  return { markdown: assembled.markdown, warnings: assemblyWarnings(assembled.issues) };
+  let markdown = body;
+  const warnings: AdapterWarning[] = [];
+  if (options.assembleEmbeds && host) {
+    const locale = resolveOutputLocale(options.outputLanguage, body);
+    const assembled = await assembleNote(host, body, sourcePath, { locale });
+    markdown = assembled.markdown;
+    warnings.push(...assemblyWarnings(assembled.issues));
+  }
+  // Diagrams are drawn after assembly, so Mermaid blocks of embedded notes are drawn too.
+  if (options.diagrams && /^(?:[ \t]*>)*[ \t]*(?:`{3,}|~{3,})[ \t]*mermaid[ \t]*$/imu.test(markdown)) {
+    const drawn = await renderMermaidDiagrams(markdown, options.diagrams.target, await options.diagrams.environment());
+    markdown = drawn.markdown;
+    warnings.push(...drawn.warnings);
+  }
+  return { markdown, warnings };
 }
 
 /** One-line summary for exports that report through a notice (HTML, PDF, DOCX). */
-export function assemblyNotice(warnings: readonly AdapterWarning[]): string | null {
+export function assemblyNotice(all: readonly AdapterWarning[]): string | null {
+  const warnings = all.filter((warning) => !warning.code.startsWith("diagram-"));
   if (!warnings.length) return null;
   const count = warnings.reduce((sum, warning) => sum + warning.count, 0);
   return t("assembly.notice", { count, first: warnings[0].message });
+}
+
+/** One-line summary of diagram messages for exports that report through a notice. */
+export function diagramNotice(all: readonly AdapterWarning[]): string | null {
+  const warnings = all.filter((warning) => warning.code.startsWith("diagram-"));
+  if (!warnings.length) return null;
+  const count = warnings.reduce((sum, warning) => sum + warning.count, 0);
+  return t("diagram.notice", { count, first: warnings[0].message });
 }
 
 /** Reads `assembleEmbeds` from stored settings; unknown or missing means on. */
