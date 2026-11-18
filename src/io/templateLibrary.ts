@@ -1,3 +1,4 @@
+import { normalizeSampleLookRecord, type SampleLookRecord } from "./sampleLook";
 import { normalizeGongmunPreset, type FormatProfile, type GongmunPreset } from "kordoc";
 import {
   normalizeDocumentStyleProfile,
@@ -70,6 +71,8 @@ export interface GongmunTemplateRecord {
   tableStyle?: FormatProfile;
   /** Document type the form makes (R-026); older records without one use the chosen type. */
   preset?: GongmunPreset;
+  /** A look learned from a sample HWPX (R-036): the document is made from the sample's own shapes. */
+  sample?: SampleLookRecord;
   createdAt: string;
   updatedAt: string;
 }
@@ -215,6 +218,7 @@ function normalizedGongmunRecord(value: unknown, fallbackId?: string): GongmunTe
     options: normalizeGongmunStyleOptions(value.options),
     ...(tableStyle ? { tableStyle } : {}),
     ...(isGongmunPreset(value.preset) ? { preset: value.preset } : {}),
+    ...(normalizeSampleLookRecord(value.sample) ? { sample: normalizeSampleLookRecord(value.sample) } : {}),
     createdAt,
     updatedAt
   };
@@ -569,6 +573,8 @@ export interface GongmunStyleChoice {
   builtIn: boolean;
   options: GongmunStyleOptions;
   tableStyle?: FormatProfile;
+  /** A look learned from a sample HWPX (R-036). */
+  sample?: SampleLookRecord;
   /** Group label of a built-in style (for example the university). */
   group?: string;
   description?: string;
@@ -602,6 +608,7 @@ function customChoice(record: GongmunTemplateRecord): GongmunStyleChoice {
   const choice: GongmunStyleChoice = { id: record.id, name: record.name, builtIn: false, options: clone(record.options) };
   if (record.tableStyle) choice.tableStyle = clone(record.tableStyle);
   if (record.preset) choice.preset = record.preset;
+  if (record.sample) choice.sample = record.sample;
   return choice;
 }
 
