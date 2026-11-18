@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  mergeOverlaps,
   CHECK_IGNORE_ALIAS,
   CHECK_IGNORE_KEY,
   DEFAULT_CHECK_FAMILIES,
@@ -55,6 +56,18 @@ const lines = NOTE.split("\n");
 const slice = (finding: CheckFinding): string => lines[finding.line].slice(finding.ch, finding.ch + finding.length);
 
 describe("official-document check ranges (R-035)", () => {
+  it("counts overlapping findings of one rule on a line once, keeping the longest range", () => {
+    const base = { family: "budget" as const, severity: "warning" as const, message: "m", line: 3 };
+    const whole = { ...base, rule: "R1", match: "200달러", ch: 13, length: 5 };
+    const part = { ...base, rule: "R1", match: "달러", ch: 16, length: 2 };
+    const otherRule = { ...base, rule: "R2", match: "달러", ch: 16, length: 2 };
+    const otherLine = { ...part, line: 4 };
+    const apart = { ...base, rule: "R1", match: "원", ch: 30, length: 1 };
+    assert.deepEqual(mergeOverlaps([part, whole, otherRule, otherLine, apart]), [whole, part.rule === "R1" ? otherRule : part, otherLine, apart].sort((a, b) => b.length - a.length || a.line - b.line || a.ch - b.ch));
+    assert.deepEqual(mergeOverlaps([part, whole]), [whole]);
+    assert.deepEqual(mergeOverlaps([whole, { ...whole }]), [whole]);
+  });
+
   it("skips front matter, code, comments and embeds, and cuts tables into cells", () => {
     const { blocks } = buildCheckBlocks(NOTE);
     const texts = blocks.map((block) => block.text);
