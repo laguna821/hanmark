@@ -1050,6 +1050,7 @@ export const en: MessageTable = {
   "diagram.defaultAlt": "Diagram",
   "diagram.warning.keptAsCode": "A Mermaid diagram could not be drawn and stays as code ({type}: {first}): {reason}",
   "diagram.warning.fontFallback": "The diagram font '{wanted}' cannot be used in pictures; {used} was used instead.",
+  "diagram.warning.roleUnmatched": "A diagram's @key, @interp or @aux comment does not name exactly one node, so it was not emphasised: {ids}",
   "diagram.reason.unsupported": "Unsupported diagram type",
   "diagram.reason.syntax": "Syntax error on line {line}",
   "diagram.error.tooLong": "The diagram source is too long",

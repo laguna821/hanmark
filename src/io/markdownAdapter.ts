@@ -27,6 +27,7 @@ export type AdapterWarningCode =
   | "document-style-level-unused"
   | "diagram-kept-as-code"
   | "diagram-font"
+  | "diagram-role"
   | "memo-placed"
   | "memo-unplaced";
 

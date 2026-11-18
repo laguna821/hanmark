@@ -14,6 +14,7 @@ import {
 import {
   BUILTIN_DIAGRAM_PALETTE,
   exportDiagramPalette,
+  applyDiagramRoles,
   isSafeDiagramSvg,
   literalizeDiagramSvg
 } from "../src/io/diagramSvg";
@@ -209,6 +210,65 @@ describe("drawing for each export target (R-033)", () => {
   });
 });
 
+describe("key, interpretation and auxiliary nodes (R-037)", () => {
+  const ROLES = [
+    "flowchart LR",
+    "    %% @key: C",
+    "    %% @interp: A",
+    "    %% @aux: B",
+    "    A[\"AI 수업\"] --> B{\"기여?\"}",
+    "    B --> C([\"인정\"])",
+    "    B -.-> D[(\"보류\")]"
+  ];
+  const svgOf = async (lines: string[]): Promise<{ svg: string; warnings: Array<{ code: string; message: string; count: number }> }> => {
+    const staged = await renderMermaidDiagrams(fence(lines).join("\n"), "markup", ENVIRONMENT);
+    return { svg: decodeDiagramToken(/HMDIAGRAM\([A-Za-z0-9+/=]+\)/u.exec(staged.markdown)![0])!.svg, warnings: staged.warnings };
+  };
+  const node = (svg: string, id: string): string => new RegExp(`<g\\b[^>]*data-id="${id}"[^>]*>.*?</g>`, "su").exec(svg)![0];
+
+  it("draws the accent outline, the dashed outline and the alternate surface on the named nodes only", async () => {
+    const { svg, warnings } = await svgOf(ROLES);
+    const plain = (await svgOf(ROLES.filter((line) => !line.includes("%% @")))).svg;
+    assert.deepEqual(warnings, []);
+    assert.ok(!svg.includes("var(") && isSafeDiagramSvg(svg));
+    const accent = ENVIRONMENT.palette.accent;
+    assert.match(node(svg, "C"), new RegExp(`^<g class="hanmark-diagram-key [^"]*pele-node[^"]*"[^>]*><rect\\b[^>]* stroke="${accent}"[^>]* stroke-width="3"`, "u"));
+    assert.match(node(svg, "A"), /^<g class="hanmark-diagram-interpretation [^>]*><rect\b[^>]* stroke-dasharray="5 3"/u);
+    assert.match(node(svg, "B"), new RegExp(`^<g class="hanmark-diagram-aux [^>]*><polygon\\b[^>]* fill="${ENVIRONMENT.palette.surfaceAlt}"`, "u"));
+    // The labels and the unnamed node are exactly as without annotations.
+    assert.equal(node(svg, "D"), node(plain, "D"));
+    for (const id of ["A", "B", "C"]) {
+      assert.equal(/<text\b.*<\/text>/su.exec(node(svg, id))![0], /<text\b.*<\/text>/su.exec(node(plain, id))![0], id);
+    }
+    // Annotations add no relation: the edges are the same.
+    const edges = (text: string): string[] => text.match(/<g class="pele-edge[^"]*"[\s\S]*?<\/g>/gu) ?? [];
+    assert.deepEqual(edges(svg), edges(plain));
+    assert.equal((await svgOf(ROLES)).svg, svg, "the same bytes twice");
+  });
+
+  it("names ids that are not exactly one node once, with a count, and changes nothing for them", async () => {
+    const lines = ["flowchart LR", "    %% @key: C, Z", "    %% @aux: Y", "    A[\"가\"] --> C[\"나\"]"];
+    const { svg, warnings } = await svgOf(lines);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].code, "diagram-role");
+    assert.equal(warnings[0].count, 2);
+    assert.match(warnings[0].message, /Z, Y$/u);
+    assert.match(node(svg, "C"), / stroke-width="3"/u);
+    // A participant is drawn at the top and the bottom: not one node, so nothing is guessed.
+    const sequence = await svgOf(["sequenceDiagram", "    %% @key: H", "    participant H as 고교", "    participant M as 대학", "    H->>M: 요청"]);
+    assert.equal(sequence.warnings.length, 1);
+    assert.doesNotMatch(sequence.svg, /hanmark-diagram-key/u);
+  });
+
+  it("stays silent on diagram types without node ids and on notes without annotations", async () => {
+    const gantt = ["gantt", "    title 일정", "    dateFormat YYYY-MM-DD", "    section 준비", "    회의 :a1, 2026-11-01, 3d"];
+    const annotated = await svgOf([gantt[0], "    %% @key: a1", ...gantt.slice(1)]);
+    assert.deepEqual(annotated.warnings, []);
+    assert.equal(annotated.svg, (await svgOf(gantt)).svg);
+    const literal = literalizeDiagramSvg('<svg xmlns="http://www.w3.org/2000/svg"><g class="pele-node" data-id="A"><rect fill="var(--pele-surface,#fff)"/></g></svg>', ENVIRONMENT.palette, "sans-serif");
+    assert.deepEqual(applyDiagramRoles(literal, { key: [], interpretation: [], aux: [] }, ENVIRONMENT.palette), { svg: literal, applied: 0, unmatched: [] });
+  });
+});
 describe("diagram colours and safety (R-033)", () => {
   it("replaces every variable, with Pele's own defaults where the palette is silent", () => {
     const svg =

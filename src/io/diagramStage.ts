@@ -1,6 +1,6 @@
 import { PeleError, detectType, render, type TextMeasurer } from "pele";
 import type { AdapterWarning } from "./markdownAdapter";
-import { isSafeDiagramSvg, literalizeDiagramSvg, type DiagramPalette } from "./diagramSvg";
+import { applyDiagramRoles, isSafeDiagramSvg, literalizeDiagramSvg, type DiagramPalette } from "./diagramSvg";
 import { base64ToBytes, bytesToBase64, withPngDisplayScale } from "./pngMeta";
 import { t } from "../i18n";
 
@@ -187,7 +187,13 @@ function escapeMarkdown(text: string): string {
 const base64 = bytesToBase64;
 
 /** Draws one Mermaid source; throws PeleError (or Error) when it cannot be drawn. */
-export function renderDiagram(source: string, environment: DiagramEnvironment, idPrefix: string): RenderedDiagram {
+export function renderDiagram(
+  source: string,
+  environment: DiagramEnvironment,
+  idPrefix: string,
+  /** Receives the ids of `@key`, `@interp`, `@aux` annotations that are not exactly one node. */
+  unmatchedRoles?: string[]
+): RenderedDiagram {
   if (source.length > MAX_SOURCE_LENGTH) throw new Error(t("diagram.error.tooLong"));
   const annotations = readDiagramAnnotations(source);
   const maxWidth = environment.maxWidth ?? DEFAULT_MAX_WIDTH;
@@ -218,7 +224,14 @@ export function renderDiagram(source: string, environment: DiagramEnvironment, i
   const width = Math.round(result.width * fit * 100) / 100;
   const height = Math.round(result.height * fit * 100) / 100;
   const title = escapeHtml(annotations.alt ?? annotations.caption ?? result.type);
-  const svg = literalizeDiagramSvg(result.svg, environment.palette, environment.fontFamily).replace(
+  // `%% @key`, `@interp`, `@aux` (R-037): drawn on the literal SVG, so every writer gets them.
+  const roles = applyDiagramRoles(
+    literalizeDiagramSvg(result.svg, environment.palette, environment.fontFamily),
+    { key: annotations.key, interpretation: annotations.interpretation, aux: annotations.aux },
+    environment.palette
+  );
+  unmatchedRoles?.push(...roles.unmatched);
+  const svg = roles.svg.replace(
     /^<svg\b([^>]*)>/u,
     (_whole, attributes: string) => {
       let kept = attributes.replace(/\s(?:role|aria-roledescription)="[^"]*"/gu, "");
@@ -327,6 +340,7 @@ export async function renderMermaidDiagrams(
   const warnings: AdapterWarning[] = [];
   let rendered = 0;
   let kept = 0;
+  const unmatchedRoles: string[] = [];
   const output: string[] = [];
   let cursor = 0;
   for (const [ordinal, block] of blocks.entries()) {
@@ -335,7 +349,7 @@ export async function renderMermaidDiagrams(
     let type: string | null = null;
     try {
       type = detectType(block.source);
-      const diagram = renderDiagram(block.source, environment, `hmd${ordinal + 1}-`);
+      const diagram = renderDiagram(block.source, environment, `hmd${ordinal + 1}-`, unmatchedRoles);
       const blank = block.prefix.trimEnd();
       if (target === "markup") {
         output.push(blank, `${block.prefix}${encodeDiagramToken(diagram)}`, blank);
@@ -366,6 +380,13 @@ export async function renderMermaidDiagrams(
     }
   }
   output.push(...lines.slice(cursor));
+  if (unmatchedRoles.length) {
+    warnings.push({
+      code: "diagram-role",
+      message: t("diagram.warning.roleUnmatched", { ids: [...new Set(unmatchedRoles)].join(", ") }),
+      count: unmatchedRoles.length
+    });
+  }
   if (rendered && environment.fontNotice) {
     warnings.push({ code: "diagram-font", message: environment.fontNotice, count: 1 });
   }
