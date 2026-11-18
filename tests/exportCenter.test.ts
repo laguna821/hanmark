@@ -31,7 +31,7 @@ describe("HanMark unified export center", () => {
     const { modal } = await exportSources();
     const cards = [
       ["hwpx", "편집 가능한 한글 문서로 내보냅니다."],
-      ["docx", "Word 문서로 내보냅니다. Pandoc이 필요합니다."],
+      ["docx", "Word 문서로 내보냅니다. 설치가 필요 없습니다."],
       ["html", "모바일 브라우저에 적합한 HTML로 내보냅니다."],
       ["pdf", "표지와 브랜드 머리말을 갖춘 Editorial PDF로 저장합니다."]
     ] as const;

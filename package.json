@@ -18,6 +18,7 @@
     "test:pdf-render": "node --import tsx scripts/test-editorial-pdf-render.mjs",
     "test:pdf-ui": "node scripts/test-pdf-export-ui.mjs",
     "test:form-ui": "node scripts/test-gongmun-form-ui.mjs",
+    "test:docx-writer": "node --import tsx scripts/test-docx-writer.mjs",
     "test:toolbar-ui": "node scripts/test-toolbar-ui.mjs",
     "test:preview-ui": "node scripts/test-preview-ui.mjs"
   },

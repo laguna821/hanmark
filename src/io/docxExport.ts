@@ -20,6 +20,11 @@ import type {
   WordTemplateStore
 } from "../legacy-port/wordTemplateStore";
 import type { WordTemplateSpec } from "../legacy-port/wordTypes";
+import type { DocxEngine } from "../legacy-port/settings";
+import { resolveOutputLocale } from "../i18n";
+import { writeDocx, type DocxNotice } from "./docxWriter";
+import { prepareSelfContainedHtmlMarkdown } from "./htmlExportService";
+import type { ImageFailure, ImageLoader } from "./imageAssets";
 
 export interface DocxSource {
   markdown: string;
@@ -32,6 +37,33 @@ export interface PreparedDocx {
   bytes: Uint8Array;
   suggestedName: string;
   template: WordTemplateSpec;
+  /** Engine that made the file. */
+  engine: DocxEngine;
+  /** Things the reader should know about the result (built-in engine only). */
+  warnings: string[];
+}
+
+/** Raised when the user cancels an export at the missing-image question. */
+export class DocxExportCancelled extends Error {
+  constructor() {
+    super("DOCX export cancelled.");
+    this.name = "DocxExportCancelled";
+  }
+}
+
+const DOCX_NOTICE_KEYS = {
+  math: "docx.notice.math",
+  "image-not-embedded": "docx.notice.imageNotEmbedded",
+  "link-not-external": "docx.notice.linkNotExternal",
+  "color-not-applied": "docx.notice.colorNotApplied",
+  "footnote-repeated": "docx.notice.footnoteRepeated",
+  "footnote-missing": "docx.notice.footnoteMissing",
+  "callout-fold": "docx.notice.calloutFold"
+} as const;
+
+/** One sentence per kind of content the built-in writer wrote differently. */
+export function docxNoticeMessages(notices: readonly DocxNotice[]): string[] {
+  return notices.map((notice) => t(DOCX_NOTICE_KEYS[notice.code], { count: notice.count }));
 }
 
 export interface DocxExportResult extends PreparedDocx {
@@ -44,6 +76,15 @@ export interface DocxExportServiceOptions {
   fileGateway: FileGateway;
   templateStore: WordTemplateStore;
   getPandocPath: () => string;
+  /** Which engine makes DOCX files; the built-in writer when omitted. */
+  getEngine?: () => DocxEngine;
+  /** Loader for the note's images (built-in engine); without it images stay as text. */
+  imageLoader?: (sourcePath: string | undefined) => ImageLoader | null;
+  /**
+   * Asked when images could not be embedded during an export from a window
+   * (the same question HTML export asks). Previews continue without asking.
+   */
+  onImageFailures?: (failures: ImageFailure[]) => Promise<"retry" | "continue" | "cancel">;
   /** Language of labels written into the document ("auto" reads the note). */
   getOutputLanguage?: () => LanguagePreference;
   /** Note assembly and other shared export preparation (see exportPreparation.ts). */
@@ -163,7 +204,8 @@ export function createWordTemplateStorage(adapter: DataAdapter): WordTemplateSto
 }
 
 /**
- * Desktop-only orchestration for the optional Pandoc DOCX path.
+ * DOCX export: the built-in writer by default, and desktop-only orchestration
+ * for the optional Pandoc path.
  *
  * The service writes temporary inputs through Obsidian's adapter. Native paths
  * are derived only after a FileSystemAdapter guard, and final output is handed
@@ -175,6 +217,9 @@ export class DocxExportService {
   private readonly fileGateway: FileGateway;
   private readonly templateStore: WordTemplateStore;
   private readonly getPandocPath: () => string;
+  private readonly getEngine: () => DocxEngine;
+  private readonly imageLoader: (sourcePath: string | undefined) => ImageLoader | null;
+  private readonly onImageFailures?: (failures: ImageFailure[]) => Promise<"retry" | "continue" | "cancel">;
   private readonly getOutputLanguage: () => LanguagePreference;
   private readonly prepareMarkdown: (body: string, sourcePath?: string) => Promise<string>;
   private readonly pandocService: PandocDocxService;
@@ -186,6 +231,9 @@ export class DocxExportService {
     this.fileGateway = options.fileGateway;
     this.templateStore = options.templateStore;
     this.getPandocPath = options.getPandocPath;
+    this.getEngine = options.getEngine ?? (() => "builtin");
+    this.imageLoader = options.imageLoader ?? (() => null);
+    this.onImageFailures = options.onImageFailures;
     this.getOutputLanguage = options.getOutputLanguage ?? (() => "auto");
     this.prepareMarkdown = options.prepareMarkdown ?? ((body) => Promise.resolve(body));
     this.pandocService = options.pandocService ?? new PandocDocxService();
@@ -248,10 +296,63 @@ export class DocxExportService {
     }
   }
 
+  /** The engine the next DOCX will be made with. */
+  get engine(): DocxEngine {
+    return this.getEngine();
+  }
+
+  /** Runs `pandoc --version` after an explicit user action; throws when Pandoc cannot run. */
+  async pandocVersionUserInitiated(action: UserInitiatedAction): Promise<string> {
+    return this.pandocService.readVersionUserInitiated(this.getPandocPath(), action);
+  }
+
+  /**
+   * Built-in engine (R-031): the note is parsed into the shared document model and
+   * written as a DOCX package in memory. No external program, no temporary file.
+   */
+  private async buildBuiltInDocx(source: DocxSource, askAboutImages: boolean): Promise<PreparedDocx> {
+    await this.templateStore.ensureDirectories();
+    const template = await this.templateStore.readActiveTemplate();
+    const body = await this.prepareMarkdown(extractEditableBodyStrict(source.markdown), source.sourcePath);
+    const outputLanguage = this.getOutputLanguage();
+    const loader = this.imageLoader(source.sourcePath);
+    let markdown = body;
+    let missing = 0;
+    if (loader) {
+      for (;;) {
+        const prepared = await prepareSelfContainedHtmlMarkdown(body, { loader, outputLanguage });
+        markdown = prepared.markdown;
+        missing = prepared.failures.length;
+        if (!missing || !askAboutImages || !this.onImageFailures) break;
+        const choice = await this.onImageFailures(prepared.failures);
+        if (choice === "cancel") throw new DocxExportCancelled();
+        if (choice === "continue") break;
+      }
+    }
+    const written = await writeDocx(markdown, {
+      template,
+      title: sourceTitle(source),
+      language: resolveOutputLocale(outputLanguage, markdown)
+    });
+    const warnings = docxNoticeMessages(written.notices);
+    if (missing) warnings.push(t("save.note.imagesMissing", { count: missing }));
+    return {
+      bytes: written.bytes,
+      suggestedName: withDocxExtension(sourceTitle(source)),
+      template,
+      engine: "builtin",
+      warnings
+    };
+  }
+
   async buildDocxBytesUserInitiated(
     source: DocxSource,
-    action: UserInitiatedAction
+    action: UserInitiatedAction,
+    options: { askAboutImages?: boolean } = {}
   ): Promise<PreparedDocx> {
+    if (this.getEngine() !== "pandoc") {
+      return this.buildBuiltInDocx(source, options.askAboutImages === true);
+    }
     const adapter = nativeAdapter(this.app);
     await this.assertSupportAssets(adapter);
     await this.templateStore.ensureDirectories();
@@ -290,7 +391,9 @@ export class DocxExportService {
       return {
         bytes,
         suggestedName: withDocxExtension(sourceTitle(source)),
-        template
+        template,
+        engine: "pandoc",
+        warnings: []
       };
     } finally {
       await removeIfPresent(adapter, markdownPath);
@@ -302,7 +405,7 @@ export class DocxExportService {
     source: DocxSource,
     action: UserInitiatedAction
   ): Promise<DocxExportResult> {
-    const prepared = await this.buildDocxBytesUserInitiated(source, action);
+    const prepared = await this.buildDocxBytesUserInitiated(source, action, { askAboutImages: true });
     const saved = source.sourcePath
       ? await this.fileGateway.saveVaultSibling(
           prepared.bytes,

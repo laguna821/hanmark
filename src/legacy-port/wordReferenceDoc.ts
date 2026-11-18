@@ -234,7 +234,56 @@ function serialize(doc: Document): string {
   return new XMLSerializer().serializeToString(doc);
 }
 
-function patchStylesXml(xml: string, template: WordTemplateSpec): string {
+// Child order of CT_Style, CT_PPr and CT_RPr (ECMA-376). Word reads elements in
+// schema order; styles created from a template are sorted so a package built from
+// HanMark's own base (R-031) is as valid as one patched into Pandoc's reference.
+const STYLE_CHILD_ORDER = [
+  "w:name", "w:aliases", "w:basedOn", "w:next", "w:link", "w:autoRedefine", "w:hidden", "w:uiPriority",
+  "w:semiHidden", "w:unhideWhenUsed", "w:qFormat", "w:locked", "w:personal", "w:personalCompose",
+  "w:personalReply", "w:rsid", "w:pPr", "w:rPr", "w:tblPr", "w:trPr", "w:tcPr", "w:tblStylePr"
+];
+const PARAGRAPH_PROPERTY_ORDER = [
+  "w:pStyle", "w:keepNext", "w:keepLines", "w:pageBreakBefore", "w:framePr", "w:widowControl", "w:numPr",
+  "w:suppressLineNumbers", "w:pBdr", "w:shd", "w:tabs", "w:suppressAutoHyphens", "w:kinsoku", "w:wordWrap",
+  "w:overflowPunct", "w:topLinePunct", "w:autoSpaceDE", "w:autoSpaceDN", "w:bidi", "w:adjustRightInd",
+  "w:snapToGrid", "w:spacing", "w:ind", "w:contextualSpacing", "w:mirrorIndents", "w:suppressOverlap", "w:jc",
+  "w:textDirection", "w:textAlignment", "w:textboxTightWrap", "w:outlineLvl", "w:divId", "w:cnfStyle", "w:rPr",
+  "w:sectPr", "w:pPrChange"
+];
+const RUN_PROPERTY_ORDER = [
+  "w:rStyle", "w:rFonts", "w:b", "w:bCs", "w:i", "w:iCs", "w:caps", "w:smallCaps", "w:strike", "w:dstrike",
+  "w:outline", "w:shadow", "w:emboss", "w:imprint", "w:noProof", "w:snapToGrid", "w:vanish", "w:webHidden",
+  "w:color", "w:spacing", "w:w", "w:kern", "w:position", "w:sz", "w:szCs", "w:highlight", "w:u", "w:effect",
+  "w:bdr", "w:shd", "w:fitText", "w:vertAlign", "w:rtl", "w:cs", "w:em", "w:lang", "w:eastAsianLayout",
+  "w:specVanish", "w:oMath"
+];
+
+function sortChildren(parent: Element, order: readonly string[]): void {
+  const children: Element[] = [];
+  for (let node = parent.firstChild; node; node = node.nextSibling) {
+    if (node.nodeType === 1) children.push(node as Element);
+  }
+  const rank = (element: Element): number => {
+    const index = order.indexOf(element.nodeName);
+    return index < 0 ? order.length : index;
+  };
+  const sorted = children
+    .map((element, index) => ({ element, index }))
+    .sort((left, right) => rank(left.element) - rank(right.element) || left.index - right.index);
+  if (sorted.every((item, index) => item.element === children[index])) return;
+  for (const item of sorted) parent.appendChild(item.element);
+}
+
+function sortStyleChildren(style: Element): void {
+  sortChildren(style, STYLE_CHILD_ORDER);
+  const paragraph = findChild(style, "w:pPr");
+  if (paragraph) sortChildren(paragraph, PARAGRAPH_PROPERTY_ORDER);
+  const run = findChild(style, "w:rPr");
+  if (run) sortChildren(run, RUN_PROPERTY_ORDER);
+}
+
+/** Writes every style of the template into a styles.xml (creating missing ones). */
+export function applyWordTemplateStyles(xml: string, template: WordTemplateSpec): string {
   const doc = parseXml(xml, "styles.xml");
   for (const [id, spec] of Object.entries(template.styles) as [WordStyleId, WordStyleSpec][]) {
     const styleId = WORD_STYLE_ID_MAP[id];
@@ -245,11 +294,14 @@ function patchStylesXml(xml: string, template: WordTemplateSpec): string {
     const linkedId = LINKED_CHARACTER_STYLE[id];
     const linked = linkedId ? styleById(doc, linkedId) : null;
     if (linked) updateRunStyle(doc, linked, spec);
+    sortStyleChildren(style);
+    if (linked) sortStyleChildren(linked);
   }
   return serialize(doc);
 }
 
-function patchDocumentXml(xml: string, template: WordTemplateSpec): string {
+/** Writes the template's page size and margins into the section of a document.xml. */
+export function applyWordTemplatePage(xml: string, template: WordTemplateSpec): string {
   const doc = parseXml(xml, "document.xml");
   const body = firstElement(doc, "w:body");
   if (!body) return xml;
@@ -268,7 +320,8 @@ function patchDocumentXml(xml: string, template: WordTemplateSpec): string {
   return serialize(doc);
 }
 
-function patchSettingsXml(xml: string): string {
+/** Sets the language and compatibility mode every HanMark DOCX uses. */
+export function applyWordSettings(xml: string): string {
   const doc = parseXml(xml, "settings.xml");
   const settings = firstElement(doc, "w:settings");
   if (!settings) return xml;
@@ -284,7 +337,8 @@ function patchSettingsXml(xml: string): string {
   return serialize(doc);
 }
 
-function patchFontTableXml(xml: string, template: WordTemplateSpec): string {
+/** Lists the template's font families in a fontTable.xml. */
+export function applyWordTemplateFonts(xml: string, template: WordTemplateSpec): string {
   const doc = parseXml(xml, "fontTable.xml");
   const fonts = firstElement(doc, "w:fonts");
   if (!fonts) return xml;
@@ -322,12 +376,12 @@ export async function buildReferenceDocx(
 ): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(asArrayBuffer(baseReferenceDocx));
   const styles = await zip.file("word/styles.xml")?.async("string");
-  if (styles) zip.file("word/styles.xml", patchStylesXml(styles, template));
+  if (styles) zip.file("word/styles.xml", applyWordTemplateStyles(styles, template));
   const document = await zip.file("word/document.xml")?.async("string");
-  if (document) zip.file("word/document.xml", patchDocumentXml(document, template));
+  if (document) zip.file("word/document.xml", applyWordTemplatePage(document, template));
   const settings = await zip.file("word/settings.xml")?.async("string");
-  if (settings) zip.file("word/settings.xml", patchSettingsXml(settings));
+  if (settings) zip.file("word/settings.xml", applyWordSettings(settings));
   const fontTable = await zip.file("word/fontTable.xml")?.async("string");
-  if (fontTable) zip.file("word/fontTable.xml", patchFontTableXml(fontTable, template));
+  if (fontTable) zip.file("word/fontTable.xml", applyWordTemplateFonts(fontTable, template));
   return zip.generateAsync({ type: "uint8array" });
 }

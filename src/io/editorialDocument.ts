@@ -24,6 +24,8 @@ export type EditorialInline =
       children: EditorialInline[];
       color?: string;
       backgroundColor?: string;
+      /** Footnote number of a reference (only from parseEditorialBlocks). */
+      footnote?: number;
     };
 
 export interface EditorialListItem {
@@ -52,6 +54,8 @@ export type EditorialBlock =
       type: "table";
       header: EditorialInline[][];
       rows: EditorialInline[][][];
+      /** Column alignment from the delimiter row (only from parseEditorialBlocks). */
+      align?: (EditorialAlignment | undefined)[];
     }
   | { type: "quote"; blocks: EditorialBlock[] }
   | {
@@ -138,6 +142,13 @@ const MARKDOWN = new MarkdownIt({
   linkify: false,
   typographer: false
 }).use(footnote);
+/**
+ * Set only while parseEditorialBlocks runs: footnote references keep their number,
+ * tables keep their column alignment, and an image whose source cannot be used
+ * stays in place (with an empty source) so a writer can report it. HTML and Editorial PDF parse without it,
+ * so their document model is unchanged.
+ */
+let structuredMode = false;
 const DEFAULT_MARKDOWN_VALIDATE_LINK = MARKDOWN.validateLink.bind(MARKDOWN);
 
 const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
@@ -814,7 +825,7 @@ function parseInlineTokens(tokens: MarkdownToken[]): EditorialInline[] {
               htmlAttribute(event.attributes, "src")
             );
             const alt = htmlAttribute(event.attributes, "alt");
-            if (src) current().push({ type: "image", src, alt });
+            if (src || structuredMode) current().push({ type: "image", src, alt });
             else appendExtendedText(current(), alt);
           } else {
             openHtmlInlineFrame(frames, event);
@@ -843,7 +854,8 @@ function parseInlineTokens(tokens: MarkdownToken[]): EditorialInline[] {
         current().push({
           type: "styled",
           style: "superscript",
-          children: [{ type: "text", value: String(footnoteNumber(token)) }]
+          children: [{ type: "text", value: String(footnoteNumber(token)) }],
+          ...(structuredMode ? { footnote: footnoteNumber(token) } : {})
         });
         break;
       case "softbreak":
@@ -858,7 +870,7 @@ function parseInlineTokens(tokens: MarkdownToken[]): EditorialInline[] {
       case "image": {
         const src = safeEditorialImageUrl(tokenAttribute(token, "src"));
         const alt = token.content;
-        if (src) current().push({ type: "image", src, alt });
+        if (src || structuredMode) current().push({ type: "image", src, alt });
         else appendExtendedText(current(), alt);
         break;
       }
@@ -940,7 +952,7 @@ function htmlNodesToInlines(
     if (node.tag === "img") {
       const src = safeEditorialImageUrl(htmlAttribute(node.attributes, "src"));
       const alt = htmlAttribute(node.attributes, "alt");
-      if (src) output.push({ type: "image", src, alt });
+      if (src || structuredMode) output.push({ type: "image", src, alt });
       else appendExtendedText(output, alt);
       continue;
     }
@@ -1313,6 +1325,7 @@ function parseMarkdownBlocks(
       const rows: EditorialInline[][][] = [];
       let currentRow: EditorialInline[][] | null = null;
       let inHeader = false;
+      const align: (EditorialAlignment | undefined)[] = [];
       cursor.index += 1;
       while (
         cursor.index < tokens.length &&
@@ -1332,12 +1345,22 @@ function parseMarkdownBlocks(
           currentRow
         ) {
           const inline = tokens[cursor.index + 1];
+          if (structuredMode && inHeader) {
+            const style = tableToken.attrs?.find(([name]) => name === "style")?.[1] ?? "";
+            const value = /text-align:\s*(left|center|right)/.exec(style)?.[1];
+            align.push(value as EditorialAlignment | undefined);
+          }
           currentRow.push(parseInlineTokens(inline?.children ?? []));
         }
         cursor.index += 1;
       }
       if (tokens[cursor.index]?.type === "table_close") cursor.index += 1;
-      blocks.push({ type: "table", header, rows });
+      blocks.push({
+        type: "table",
+        header,
+        rows,
+        ...(structuredMode && align.some(Boolean) ? { align } : {})
+      });
       continue;
     }
     if (token.type === "inline") {
@@ -1422,4 +1445,33 @@ export function parseEditorialDocument(
     ? editorialPlainText(leadingHeading.inlines).trim() || fallbackTitle
     : fallbackTitle;
   return { title, masthead, blocks };
+}
+
+export interface EditorialStructuredBlocks {
+  /** Every block of the note in order, the leading heading included. */
+  blocks: EditorialBlock[];
+  /** Footnote bodies by number (index 0 is note 1). */
+  footnotes: EditorialBlock[][];
+}
+
+/**
+ * The note as blocks for writers that build real document structures (built-in
+ * DOCX, R-031): footnote references carry their number, footnote bodies are
+ * returned apart from the text, tables keep column alignment, and the leading
+ * heading stays in place.
+ */
+export function parseEditorialBlocks(markdown: string): EditorialStructuredBlocks {
+  structuredMode = true;
+  try {
+    const allTokens = MARKDOWN.parse(`${markdown}`, {}) as MarkdownToken[];
+    const footnoteStart = allTokens.findIndex((token) => token.type === "footnote_block_open");
+    const tokens = footnoteStart >= 0 ? allTokens.slice(0, footnoteStart) : allTokens;
+    const blocks = parseMarkdownBlocks(tokens, { index: 0 });
+    const notes = footnoteStart >= 0 ? parseFootnoteBlocks(allTokens, footnoteStart) : [];
+    const list = notes.find((block) => block.type === "list");
+    const footnotes = list?.type === "list" ? list.items.map((item) => item.blocks) : [];
+    return { blocks, footnotes };
+  } finally {
+    structuredMode = false;
+  }
 }

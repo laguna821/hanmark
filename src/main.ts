@@ -13,7 +13,7 @@ import {
 } from "obsidian";
 import { registerEditorCompatibilityCommands } from "./editorCommands";
 import { resolveOutputLocale, resolveUiLocale, setUiLocale, t } from "./i18n";
-import { createWordTemplateStorage, DocxExportService, type DocxSource } from "./io/docxExport";
+import { createWordTemplateStorage, DocxExportCancelled, DocxExportService, type DocxSource } from "./io/docxExport";
 import { unpackBundledAssets } from "./io/assetUnpack";
 import {
   activeDocumentStyle,
@@ -382,6 +382,12 @@ export default class HanmarkPlugin extends Plugin {
       fileGateway: this.gateway,
       templateStore: this.wordTemplateStore,
       getPandocPath: () => this.settings.pandocPath,
+      getEngine: () => this.settings.docxEngine,
+      imageLoader: (sourcePath) => {
+        const file = sourcePath ? this.app.vault.getAbstractFileByPath(sourcePath) : null;
+        return file instanceof TFile ? createObsidianImageLoader(this.app, file) : null;
+      },
+      onImageFailures: (failures) => chooseHtmlImageFailureAction(this.app, failures),
       getOutputLanguage: () => this.settings.outputLanguage,
       prepareMarkdown: async (body, sourcePath) => {
         if (!sourcePath) return body;
@@ -451,6 +457,7 @@ export default class HanmarkPlugin extends Plugin {
             this.settings.editorialPdfThemeLibrary
           ),
         refreshPreviews: () => this.refreshPreviews(),
+      checkPandoc: () => this.docxExporter.pandocVersionUserInitiated(createUserInitiatedAction("modal")),
         refreshPreviewControls: () => this.refreshPreviewControls(),
         refreshStatusBar: () => this.statusBar?.refresh(),
         refreshStartPanels: () => this.startPanels?.sync(),
@@ -1332,7 +1339,10 @@ export default class HanmarkPlugin extends Plugin {
       return null;
     }
     if (mode === "docx") {
-      const progress = new Notice(t("exportFlow.docx.creating"), 0);
+      const progress = new Notice(
+        t(this.docxExporter.engine === "pandoc" ? "exportFlow.docx.creatingPandoc" : "exportFlow.docx.creating"),
+        0
+      );
       try {
         const result = await this.docxExporter.exportUserInitiated(
           source,
@@ -1346,9 +1356,11 @@ export default class HanmarkPlugin extends Plugin {
           status: result.saved.cancelled ? "cancelled" : "saved",
           fileName: result.saved.fileName,
           displayPath: result.saved.displayPath,
-          vaultPath: result.saved.vaultPath
+          vaultPath: result.saved.vaultPath,
+          ...(result.warnings.length ? { warnings: result.warnings } : {})
         };
       } catch (error) {
+        if (error instanceof DocxExportCancelled) return { format: "docx", status: "cancelled" };
         new Notice(t("exportFlow.docx.failed", { detail: errorMessage(error) }), 8_000);
         return null;
       } finally {

@@ -47,6 +47,34 @@ export const en: MessageTable = {
   // Errors from lower layers that reach notices (DOCX, file picker, Word templates, PDF runtime)
   "docx.error.noOutput": "Pandoc did not produce a DOCX file. Check the Pandoc path and version in settings.",
   "docx.error.noReferenceDoc": "Pandoc did not return its default reference.docx. Check the Pandoc path and version in settings.",
+  "docx.notice.math": {
+    one: "{count} equation was kept as text. For equation objects, switch the DOCX engine to Advanced (Pandoc) in settings.",
+    other: "{count} equations were kept as text. For equation objects, switch the DOCX engine to Advanced (Pandoc) in settings."
+  },
+  "docx.notice.imageNotEmbedded": {
+    one: "{count} image could not be embedded and was left as its alternative text.",
+    other: "{count} images could not be embedded and were left as their alternative text."
+  },
+  "docx.notice.linkNotExternal": {
+    one: "{count} link to a place in the note or to another note was kept as plain text.",
+    other: "{count} links to places in the note or to other notes were kept as plain text."
+  },
+  "docx.notice.colorNotApplied": {
+    one: "{count} unknown color value was not applied.",
+    other: "{count} unknown color values were not applied."
+  },
+  "docx.notice.footnoteRepeated": {
+    one: "{count} repeated reference to a footnote was kept as a superscript number.",
+    other: "{count} repeated references to a footnote were kept as superscript numbers."
+  },
+  "docx.notice.footnoteMissing": {
+    one: "{count} footnote does not match a reference in the text.",
+    other: "{count} footnotes do not match a reference in the text."
+  },
+  "docx.notice.calloutFold": {
+    one: "{count} foldable callout is written expanded in Word.",
+    other: "{count} foldable callouts are written expanded in Word."
+  },
   "import.error.tooManySelected": {
     one: "You can choose only 1 file at a time.",
     other: "You can choose up to {count} files at a time."
@@ -378,23 +406,31 @@ export const en: MessageTable = {
   "settings.skin.logoText.desc": "Text color inside the HWP and Word logos",
 
   // Settings — advanced DOCX
-  "settings.docx.summary": "Advanced DOCX and Pandoc settings",
+  "settings.docx.summary": "DOCX settings",
   "settings.docx.desc":
-    "Optional settings for creating DOCX files and for the Windows Word PDF preview. They do not affect HWPX export.",
+    "HanMark writes DOCX files itself, so there is nothing to install. The settings below are optional and do not affect HWPX export.",
+  "settings.docx.engine.name": "DOCX engine",
+  "settings.docx.engine.desc":
+    "The built-in engine needs no installation and makes the same file on Windows and macOS. Advanced (Pandoc) works only when Pandoc is installed and turns equations into Word equation objects.",
+  "settings.docx.engine.builtin": "Built-in (no installation)",
+  "settings.docx.engine.pandoc": "Advanced (Pandoc)",
+  "settings.docx.engine.pandocFound": "Pandoc found: {version}",
+  "settings.docx.engine.pandocMissing": "Pandoc could not run, so the built-in engine stays selected: {detail}",
+  "settings.docx.engine.pandocUnavailable": "Pandoc cannot be checked in this environment.",
   "settings.docx.pandoc.name": "Pandoc executable path",
   "settings.docx.pandoc.desc":
-    "Used only for advanced DOCX export. Enter the command name ({command}) or the full path to the executable.",
+    "Used only when the DOCX engine is Advanced (Pandoc). Enter the command name ({command}) or the full path to the executable.",
   "settings.docx.pandoc.saveFailed": "Could not save the Pandoc path: {detail}",
   "settings.docx.wordTemplate.name": "Word template",
   "settings.docx.wordTemplate.loading": "Loading templates…",
   "settings.docx.wordTemplate.loadFailed": "Could not load the templates: {detail}",
   "settings.docx.wordTemplate.empty": "No Word templates are saved. Create one in the template manager.",
   "settings.docx.wordTemplate.active.name": "Active Word template",
-  "settings.docx.wordTemplate.active.desc": "Applies to advanced DOCX export and the DOCX preview.",
+  "settings.docx.wordTemplate.active.desc": "Applies to DOCX export and the DOCX preview.",
   "settings.docx.wordTemplate.saveFailed": "Could not switch the Word template: {detail}",
   "settings.docx.previewMode.name": "DOCX preview mode",
   "settings.docx.previewMode.desc":
-    "The quick DOCX preview runs Pandoc only when you refresh it or choose this mode. Without Pandoc it switches to a semantic preview that needs no installation. Word PDF runs Microsoft Word on Windows only when you ask for it.",
+    "The quick preview shows the DOCX that was actually made. With the built-in engine it needs no installation; with the Pandoc engine it runs Pandoc only when you refresh it or choose this mode. Word PDF runs Microsoft Word on Windows only when you ask for it.",
   "settings.docx.previewMode.fast": "Quick preview",
   "settings.docx.previewMode.wordPdf": "Windows Word PDF",
   "settings.docx.previewMode.saveFailed": "Could not save the DOCX preview setting: {detail}",
@@ -469,7 +505,7 @@ export const en: MessageTable = {
   "export.pdfReady": "The PDF is ready. Select save to file to store it.",
   "export.formatGroup": "Export format",
   "export.card.hwpx": "Export as an editable Hangul document.",
-  "export.card.docx": "Export as a Word document. Requires Pandoc.",
+  "export.card.docx": "Export as a Word document. Needs no installation.",
   "export.card.html": "Export as HTML that reads well in mobile browsers.",
   "export.card.pdf": "Save as an editorial PDF with a cover and branded headers.",
   "export.hwpx.heading": "HWPX options",
@@ -486,9 +522,9 @@ export const en: MessageTable = {
   "export.docx.heading": "DOCX options",
   "export.docx.currentTemplate": "Current Word template",
   "export.docx.templateLabel": "Word template to apply",
-  "export.docx.note": "Advanced DOCX export uses Pandoc. You can change the Pandoc path in the HanMark settings.",
+  "export.docx.note": "HanMark writes the DOCX itself. For equation objects, you can switch the DOCX engine to Pandoc in the HanMark settings.",
   "export.docx.preview": "DOCX preview",
-  "export.docx.pandocSettings": "Pandoc settings",
+  "export.docx.pandocSettings": "DOCX settings",
   "export.html.desc":
     "Saves the note as a self-contained HTML file with its images. Needs no installation and reads well in mobile browsers.",
   "export.html.themeNote":
@@ -1842,7 +1878,7 @@ export const en: MessageTable = {
   "command.exportDocx": "Export DOCX",
   "command.exportHtml": "Export HTML",
   "command.exportPdf": "Export PDF",
-  "command.docxSettings": "DOCX and Pandoc settings",
+  "command.docxSettings": "DOCX settings",
   "command.toggleDocxPreview": "Open or close the DOCX preview",
   "command.manageWordTemplates": "Manage Word templates",
   "command.toggleToolbar": "Show or hide the toolbar",
@@ -1864,7 +1900,8 @@ export const en: MessageTable = {
 
   // DOCX, HTML, and PDF export (main.ts, htmlExportService.ts)
   "exportFlow.openNote": "Open a Markdown note to export.",
-  "exportFlow.docx.creating": "Creating the DOCX with Pandoc…",
+  "exportFlow.docx.creating": "Creating the DOCX…",
+  "exportFlow.docx.creatingPandoc": "Creating the DOCX with Pandoc…",
   "exportFlow.docx.saved": "DOCX saved: {path}",
   "exportFlow.docx.failed": "DOCX export failed: {detail}",
   "exportFlow.html.openNote": "Open a Markdown note to export as HTML.",
