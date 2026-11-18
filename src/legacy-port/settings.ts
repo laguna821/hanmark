@@ -16,6 +16,18 @@ import {
 } from "../io/editorialPdfTheme";
 
 export type DocxPreviewMode = "fast-docx" | "word-pdf";
+/** DOCX engine: the built-in writer (no installation) or the optional Pandoc path (R-031). */
+export type DocxEngine = "builtin" | "pandoc";
+
+/**
+ * Engine for saved data: an explicit choice wins; data from before 3.0.0 keeps
+ * Pandoc only when the user had pointed HanMark at a Pandoc executable.
+ */
+export function normalizeDocxEngine(value: unknown, pandocPath: unknown): DocxEngine {
+  if (value === "builtin" || value === "pandoc") return value;
+  const path = typeof pandocPath === "string" ? pandocPath.trim() : "";
+  return path && path !== "pandoc" ? "pandoc" : "builtin";
+}
 export type HtmlExportTheme = "achmage-editorial" | "classic";
 export type ImportedImageDestination = "vault" | "cmds-eagle-r2" | "ask";
 export type ToolbarPosition = "top";
@@ -123,6 +135,7 @@ export interface HanmarkSettings extends Record<string, unknown> {
   fontDirectoryPath: string;
   activeWordTemplateId: string;
   docxPreviewMode: DocxPreviewMode;
+  docxEngine: DocxEngine;
   htmlExportTheme: HtmlExportTheme;
   importedImageDestination: ImportedImageDestination;
   /**
@@ -192,6 +205,7 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   fontDirectoryPath: "",
   activeWordTemplateId: "default",
   docxPreviewMode: "fast-docx",
+  docxEngine: "builtin",
   htmlExportTheme: "achmage-editorial",
   importedImageDestination: "vault",
   importedImageFolder: "",
@@ -417,6 +431,7 @@ export function normalizeHanmarkSettings(
     fontDirectoryPath: nonEmptyString(data.fontDirectoryPath, fallbackFontDirectory),
     activeWordTemplateId: nonEmptyString(data.activeWordTemplateId, "default"),
     docxPreviewMode: data.docxPreviewMode === "word-pdf" ? "word-pdf" : "fast-docx",
+    docxEngine: normalizeDocxEngine(data.docxEngine, data.pandocPath),
     htmlExportTheme: normalizeHtmlExportTheme(data.htmlExportTheme),
     importedImageDestination: normalizeImportedImageDestination(
       data.importedImageDestination

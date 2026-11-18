@@ -12,6 +12,7 @@ import {
 } from "../io/documentStyleSettings";
 import { templateDisplayName, type TemplateLibraryHost } from "../io/templateLibrary";
 import type {
+  DocxEngine,
   DocxPreviewMode,
   HanmarkSettings,
   HtmlExportTheme,
@@ -90,6 +91,8 @@ export interface HanmarkSettingTabActions {
   openEditorialPdfThemeManager(): void | Promise<void>;
   activeEditorialPdfThemeSummary(): string;
   refreshPreviews(): void | Promise<void>;
+  /** Runs Pandoc's version check after the user picked the Pandoc DOCX engine. */
+  checkPandoc?(): Promise<string>;
   /** Redraws the previews' navigation rows (the follow setting changed). */
   refreshPreviewControls?(): void;
   /** Redraws the status bar items (their settings changed). */
@@ -704,6 +707,17 @@ export class HanmarkSettingTab extends PluginSettingTab {
     });
 
     new Setting(details)
+      .setName(t("settings.docx.engine.name"))
+      .setDesc(t("settings.docx.engine.desc"))
+      .addDropdown((dropdown) => {
+        dropdown.addOption("builtin", t("settings.docx.engine.builtin"));
+        dropdown.addOption("pandoc", t("settings.docx.engine.pandoc"));
+        dropdown.setValue(this.host.settings.docxEngine).onChange((value) => {
+          void this.changeDocxEngine(value === "pandoc" ? "pandoc" : "builtin", dropdown);
+        });
+      });
+
+    new Setting(details)
       .setName(t("settings.docx.pandoc.name"))
       .setDesc(t("settings.docx.pandoc.desc", { command: "pandoc" }))
       .addText((text) => {
@@ -992,6 +1006,31 @@ export class HanmarkSettingTab extends PluginSettingTab {
       refreshPanel();
     } catch (error) {
       new Notice(t("settings.skin.reset.saveFailed", { detail: errorMessage(error) }));
+    }
+  }
+
+  /**
+   * Pandoc is offered as the engine only when it can actually run: choosing it
+   * checks the configured executable first and keeps the built-in writer otherwise.
+   */
+  private async changeDocxEngine(
+    engine: DocxEngine,
+    dropdown: { setValue(value: string): unknown }
+  ): Promise<void> {
+    const previous = this.host.settings.docxEngine;
+    try {
+      if (engine === "pandoc") {
+        if (!this.actions.checkPandoc) throw new Error(t("settings.docx.engine.pandocUnavailable"));
+        const version = await this.actions.checkPandoc();
+        new Notice(t("settings.docx.engine.pandocFound", { version: version.split(/\r?\n/)[0] }));
+      }
+      this.host.settings.docxEngine = engine;
+      await this.host.saveSettings();
+      await this.actions.refreshPreviews();
+    } catch (error) {
+      this.host.settings.docxEngine = previous;
+      dropdown.setValue(previous);
+      new Notice(t("settings.docx.engine.pandocMissing", { detail: errorMessage(error) }), 8_000);
     }
   }
 
