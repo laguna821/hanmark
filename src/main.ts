@@ -53,6 +53,7 @@ import {
 import { importCloudSettings } from "./io/kordocImport";
 import { isImportableExtension, type ImportInput } from "./io/importRunner";
 import { assemblyNotice, diagramNotice, prepareExportMarkdown } from "./io/exportPreparation";
+import { startupCapabilityNotice } from "./io/engineCapability";
 import { exportDiagramOptions } from "./ui/diagramEnvironment";
 import { exportSwitchValue, hwpxEquationsSetting } from "./io/exportSwitches";
 import type { DiagramPalette } from "./io/diagramSvg";
@@ -375,6 +376,9 @@ export default class HanmarkPlugin extends Plugin {
     await this.loadSettings();
     this.applyUiLanguage();
     await unpackBundledAssets(this);
+    // Old installers (Electron 25 and earlier) cannot run the engines (R-037).
+    const capabilityNotice = startupCapabilityNotice();
+    if (capabilityNotice) new Notice(capabilityNotice, 0);
 
     this.gateway = createFileGateway(this.app, this);
     this.wordFontCatalog = new WordFontCatalog(() => this.settings, this.gateway);

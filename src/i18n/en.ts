@@ -1120,6 +1120,9 @@ export const en: MessageTable = {
   "diagram.reason.syntax": "Syntax error on line {line}",
   "diagram.error.tooLong": "The diagram source is too long",
   "diagram.error.unsafe": "The drawn result cannot be placed in a document",
+  "capability.documents": "This Obsidian installation is too old to run HanMark's document engine (reading and writing HWPX and DOCX). Download the Obsidian installer and install it again; the in-app update does not fix this.",
+  "capability.pdf": "This Obsidian installation is too old to run the PDF reading engine. Download the Obsidian installer and install it again; the in-app update does not fix this.",
+  "capability.diagrams": "This Obsidian installation cannot turn diagrams into pictures. Download the Obsidian installer and install it again.",
   "diagram.error.noRaster": "Diagrams cannot be turned into pictures in this environment",
   "diagram.notice": {
     one: "{count} Mermaid diagram message: {first}",

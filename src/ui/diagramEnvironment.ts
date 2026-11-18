@@ -3,6 +3,7 @@ import type { DiagramEnvironment, DiagramTarget } from "../io/diagramStage";
 import type { ExportDiagramOptions } from "../io/exportPreparation";
 import { BUILTIN_DIAGRAM_PALETTE, exportDiagramPalette, type DiagramPalette } from "../io/diagramSvg";
 import { t } from "../i18n";
+import { assertEngineCapability } from "../io/engineCapability";
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
@@ -209,6 +210,7 @@ async function chooseFont(doc: Document, families: readonly string[]): Promise<F
 
 function rasterizer(doc: Document, background: string, embedCss: string): DiagramEnvironment["rasterize"] {
   return async (svg, width, height, scale) => {
+    assertEngineCapability("diagrams");
     const source = embedCss ? svg.replace(/^<svg\b[^>]*>/u, (open) => `${open}<style>${embedCss}</style>`) : svg;
     const image = createElement(doc, "img");
     image.decoding = "sync";

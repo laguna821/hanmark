@@ -128,3 +128,32 @@
 |---|---|
 | 2026-11-18 | 최초 작성. 번들 문자열 구현, 최소 버전 사실 확인 |
 | 2026-11-18 | "내보낼 때" 스위치, 도식 강조 주석, 인용 밖 도식 알림, 모양 고르기 키보드 검증. DOCX 다듬기와 능력 검사는 M11로 넘김 |
+
+## 부록 A. 동기 WebAssembly 컴파일 한도와 최소 버전 판정 (2026-11-18, M11)
+
+### 확인한 사실
+
+1. Chromium은 메인 스레드의 동기 컴파일(`new WebAssembly.Module`)에 크기 한도를 둔다. 한도는 `third_party/blink/renderer/bindings/core/v8/v8_initializer.cc`의 `kWasmWireBytesLimit`이다. 태그별 소스를 직접 읽었다.
+
+| Chromium | `kWasmWireBytesLimit` | 오류 문구 |
+|---|---|---|
+| 106, 108, 110, 112, 114 | `1 << 12` (4KB) | "…larger than 4KB" |
+| 115, 116, 117, 118, 119, 120, 132 | `1 << 23` (8MB) | "…larger than 8MB" |
+
+2. Kordoc 4.25.0의 XML 파서는 98KB 모듈을 동기로 컴파일한다(`dist/chunk-2DTBVHQD.js`의 `new WebAssembly.Module(...)`). 4KB 한도에서는 `RangeError`가 난다.
+3. 따라서 Chromium 114 이하, 곧 **Electron 25 이하 설치본**에서는 HWPX·DOCX·PPTX·XLSX 읽기와 HWPX 생성이 모두 실패한다. Electron 26(Chromium 116)부터는 된다.
+4. hayro PDF 엔진(4.1MB)은 비동기 `WebAssembly.compile`을 쓰므로 한도와 무관하다. 다만 PDF 경로도 XML 파서 청크를 함께 쓰므로 같은 조건으로 묶었다.
+5. Obsidian 1.8.9 설치본은 Electron 34(Chromium 131~132)라 문제가 없다. 문제가 되는 것은 Electron 25 이하의 옛 설치본에서 앱만 자동 업데이트한 경우다.
+
+### 판정
+
+- `minAppVersion` 1.8.9는 **유지할 수 있다.** 이 값은 앱 버전만 가리고 설치본(Electron)은 가리지 못하므로, 값을 올려도 옛 설치본 문제는 막지 못한다.
+- 대신 실행 중 검사를 넣었다(`src/io/engineCapability.ts`). 4KB보다 큰 빈 모듈(8KB)을 동기 컴파일해 본다.
+  - 플러그인이 켜질 때 한 번 검사하고, 안 되면 닫히지 않는 알림으로 "Obsidian 설치 프로그램을 새로 받아 설치하세요"를 보여 준다.
+  - 문서 가져오기, HWPX 생성, 도식 그림 변환 직전에도 검사해 엔진 예외 대신 같은 안내를 낸다.
+- 릴리스 노트에 "Obsidian 설치본이 2023년 중반 이전 것이면 설치 프로그램을 새로 받아야 한다"는 문장을 넣을 것을 권한다.
+
+### 한계
+
+- 옛 Electron에서 실제로 실행해 보지는 않았다. 근거는 Chromium 소스의 한도 값과, 한도를 흉내 낸 단위 테스트다.
+- 2.7.1(Kordoc 4.15.7, xmldom)은 이 한도와 무관했다. 3.0.0에서 새로 생기는 조건이다.
