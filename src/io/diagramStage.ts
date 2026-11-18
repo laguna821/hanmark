@@ -64,6 +64,12 @@ export interface DiagramStageResult {
 export const DIAGRAM_RASTER_SCALE = 2;
 const DEFAULT_MAX_WIDTH = 600;
 const DEFAULT_FONT_SIZE = 14;
+/**
+ * A diagram wider than the page is drawn in the direction its author wrote and placed
+ * smaller, down to this share of its drawn size (14 px text stays near 7.5 pt). Only
+ * below it may Pele turn the diagram to fit, as it does in a narrow pane.
+ */
+const MIN_DIAGRAM_FIT = 0.7;
 const MAX_SOURCE_LENGTH = 100_000;
 const TOKEN_OPEN = "HMDIAGRAM(";
 const TOKEN_CLOSE = ")";
@@ -184,29 +190,52 @@ const base64 = bytesToBase64;
 export function renderDiagram(source: string, environment: DiagramEnvironment, idPrefix: string): RenderedDiagram {
   if (source.length > MAX_SOURCE_LENGTH) throw new Error(t("diagram.error.tooLong"));
   const annotations = readDiagramAnnotations(source);
-  const result = render(source, {
+  const maxWidth = environment.maxWidth ?? DEFAULT_MAX_WIDTH;
+  const options = {
     ...(environment.measurer ? { measurer: environment.measurer } : {}),
     fontFamily: environment.fontFamily,
     fontFamilyMono: environment.fontFamily,
     fontSize: environment.fontSize ?? DEFAULT_FONT_SIZE,
-    maxWidth: environment.maxWidth ?? DEFAULT_MAX_WIDTH,
+    maxWidth,
     idPrefix,
     links: false,
     images: false,
     maxEdges: 500,
     now: environment.now ?? new Date(new Date().setHours(0, 0, 0, 0))
-  });
+  };
+  // Keep the direction the note shows in a normal pane (a timeline stays horizontal);
+  // a diagram wider than the page is placed smaller instead of being turned.
+  let result = render(source, { ...options, autoDirection: false });
+  let fit = Math.min(1, maxWidth / result.width);
+  if (fit < MIN_DIAGRAM_FIT) {
+    const turned = render(source, options);
+    const turnedFit = Math.min(1, maxWidth / turned.width);
+    if (turnedFit > fit) {
+      result = turned;
+      fit = turnedFit;
+    }
+  }
+  const width = Math.round(result.width * fit * 100) / 100;
+  const height = Math.round(result.height * fit * 100) / 100;
   const title = escapeHtml(annotations.alt ?? annotations.caption ?? result.type);
   const svg = literalizeDiagramSvg(result.svg, environment.palette, environment.fontFamily).replace(
     /^<svg\b([^>]*)>/u,
-    (_whole, attributes: string) =>
-      `<svg${attributes.replace(/\s(?:role|aria-roledescription)="[^"]*"/gu, "")} role="img"><title>${title}</title>`
+    (_whole, attributes: string) => {
+      let kept = attributes.replace(/\s(?:role|aria-roledescription)="[^"]*"/gu, "");
+      if (fit < 1) {
+        // Placed smaller: the viewBox keeps the drawing, width and height give the placed size.
+        if (!/\sviewBox="/u.test(kept)) kept += ` viewBox="0 0 ${result.width} ${result.height}"`;
+        kept = kept.replace(/\swidth="[^"]*"/u, "").replace(/\sheight="[^"]*"/u, "");
+        kept += ` width="${width}" height="${height}"`;
+      }
+      return `<svg${kept} role="img"><title>${title}</title>`;
+    }
   );
   if (svg.includes("var(") || !isSafeDiagramSvg(svg)) throw new Error(t("diagram.error.unsafe"));
   return {
     svg,
-    width: Math.round(result.width * 100) / 100,
-    height: Math.round(result.height * 100) / 100,
+    width,
+    height,
     type: result.type,
     ...(annotations.caption ? { caption: annotations.caption } : {}),
     ...(annotations.alt ? { alt: annotations.alt } : {})

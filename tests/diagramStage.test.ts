@@ -146,6 +146,36 @@ describe("drawing for each export target (R-033)", () => {
     assert.equal(encodeDiagramToken(diagram), token);
   });
 
+  it("keeps a wide timeline in the direction the note shows and places it smaller", async () => {
+    const timeline = [
+      "timeline",
+      "    title 진행 순서",
+      "    section 소개",
+      "        14시 00분 : 동문 6명 소개",
+      "    section 네트워킹",
+      "        15시 10분 : 네트워킹 세션 1",
+      "        16시 00분 : 네트워킹 세션 2",
+      "    section 마무리",
+      "        16시 50분 : 전공설명회"
+    ];
+    const staged = await renderMermaidDiagrams(fence(timeline).join("\n"), "markup", { ...ENVIRONMENT, maxWidth: 600 });
+    const token = /HMDIAGRAM\([A-Za-z0-9+/=]+\)/u.exec(staged.markdown)![0];
+    const diagram = decodeDiagramToken(token)!;
+    // Drawn 800 wide and horizontal by Pele; placed at the page's 600 with the same proportions.
+    assert.ok(diagram.width <= 600 && diagram.width > 590, `placed width ${diagram.width}`);
+    assert.ok(diagram.width > diagram.height * 2, "still horizontal");
+    assert.match(diagram.svg, /^<svg\b[^>]*\sviewBox="0 0 800 [\d.]+"/u);
+    assert.match(diagram.svg, new RegExp(`^<svg\\b[^>]*\\swidth="${diagram.width}" height="${diagram.height}"`, "u"));
+    rasterCalls.length = 0;
+    await renderMermaidDiagrams(fence(timeline).join("\n"), "hwpx", { ...ENVIRONMENT, maxWidth: 600 });
+    assert.deepEqual(rasterCalls, [{ width: diagram.width, height: diagram.height, scale: 2 }]);
+    // Far too wide for the page: Pele may turn it, as it does in a narrow pane.
+    const narrow = await renderMermaidDiagrams(fence(timeline).join("\n"), "markup", { ...ENVIRONMENT, maxWidth: 400 });
+    const turned = decodeDiagramToken(/HMDIAGRAM\([A-Za-z0-9+/=]+\)/u.exec(narrow.markdown)![0])!;
+    assert.ok(turned.width <= 400);
+    assert.ok(turned.height > turned.width * 0.6, "turned to fit");
+  });
+
   it("keeps a block it cannot draw as code and names it once", async () => {
     const broken = [...fence(["nosuchdiagram", "    a --> b"]), "", ...fence(["flowchart LR", "    A[\"열기만"])].join("\n");
     const result = await renderMermaidDiagrams(broken, "markup", ENVIRONMENT);
