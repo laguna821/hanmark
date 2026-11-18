@@ -2,7 +2,7 @@
 
 **A desktop Obsidian plugin that connects durable Markdown notes with editable Korean HWP/HWPX documents.**
 
-HanMark 2.7.0 uses exactly pinned **Kordoc 4.15.7** for import, HWPX generation (quick and official documents), validation, image embedding, document styles, document comparison, form filling, and fast SVG preview. Creating HWPX files, self-contained HTML, and Editorial PDF requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup. Everything runs offline and uses no AI tokens.
+HanMark 3.0.0 uses exactly pinned **Kordoc 4.25.0** for import, HWPX generation (quick and official documents), validation, image embedding, document styles, document comparison, form filling, and fast SVG preview. Creating HWPX files, self-contained HTML, and Editorial PDF requires no Python, pypandoc-hwpx, Pandoc, or executable-path setup. Everything runs offline and uses no AI tokens.
 
 > Keep the source of knowledge in portable Markdown. Produce HWPX, DOCX, HTML, or PDF when an institution requires it.
 
@@ -11,6 +11,10 @@ HanMark 2.7.0 uses exactly pinned **Kordoc 4.15.7** for import, HWPX generation 
 ---
 
 ## English
+
+### New in 3.0.0
+
+Kordoc 4.25.0 with its PDF engine built in; official documents chosen as a frame and a look, with 52 central-agency looks and looks made from your own sample; Mermaid diagrams drawn in HWPX, DOCX, HTML, and PDF; DOCX without Pandoc; HWP to HWPX conversion; PPTX import; and a document checker with marks in the editor. See the [3.0.0 notes](release-notes/3.0.0.md) for what changed and the known limits. The sections below still describe 2.7.0 and 2.6.1 as released.
 
 ### New in 2.7.0
 
@@ -44,7 +48,7 @@ Earlier releases are described in the [changelog](CHANGELOG.md).
 
 ### Core 2.x workflow
 
-- **Kordoc 4.15.7 built in:** imports, generates, validates, compares, and fills documents without external setup.
+- **Kordoc 4.25.0 built in:** imports, generates, validates, compares, and fills documents without external setup.
 - **Images are real document assets:** remote HTTP(S), data-URI, and Vault PNG/JPEG/GIF/BMP images are embedded in HWPX `BinData`. Failed images are reported instead of silently becoming placeholders.
 - **Reusable HWPX templates:** create, import, duplicate, rename, edit, select, and delete any number of templates.
 - **Semantic document styles:** each template combines body and Heading 1–6 typography, paragraph spacing/indentation, page rules, and an optional table profile.
@@ -57,9 +61,9 @@ Earlier releases are described in the [changelog](CHANGELOG.md).
 
 | Format | Output | Engine | External setup |
 | --- | --- | --- | --- |
-| HWPX | Quick HWPX | Kordoc 4.15.7 + selected template | None |
-| HWPX | Korean official document (8 types) | Kordoc 4.15.7 preset + institution style + note properties | None |
-| DOCX | Styled Word document | Pandoc + HanMark Word template | Optional Pandoc only |
+| HWPX | Quick HWPX | Kordoc 4.25.0 + selected template | None |
+| HWPX | Korean official document (7 frames, each with a look) | Kordoc 4.25.0 preset + look (기본, 공통, 52 central agencies, Hallym, your own) + note properties | None |
+| DOCX | Styled Word document | Built-in writer + HanMark Word template (Pandoc as an advanced choice for Word equation objects) | None |
 | HTML | Self-contained Achmage Editorial or Classic HTML | Built-in HanMark writer | None |
 | PDF | A4 Editorial PDF with cover and page furniture | Built-in Chromium print pipeline | None |
 
@@ -112,7 +116,7 @@ For notes imported by an earlier HanMark release, the command-palette-only advan
 - HTML intentionally excludes SVG, WebP, video, iframe, script, event-handler, raw user CSS, external font, and CDN resources. Ordinary links are limited to `http:`, `https:`, and `mailto:`.
 - The generated HTML Content Security Policy is `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`.
 - Editorial PDF uses the desktop Chromium print engine. It is not rendered through a HanMark HWPX template, and final pagination can vary with the selected printer/PDF settings.
-- HanMark 2.7.0 requires Obsidian 1.8.9 or newer and is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
+- HanMark 3.0.0 requires Obsidian 1.8.9 or newer and is desktop-only. Mobile Obsidian is not supported; exported HTML itself is responsive in mobile browsers.
 - Scanned PDFs are not OCRed. Kordoc's optional OCR code is never called, no model is downloaded, and pages without text are reported instead.
 - Password-protected PDFs cannot be imported; password-protected HWPX files can.
 - Form filling works with HWPX forms only. Save an HWP form as HWPX in Hancom Office first.
@@ -147,13 +151,15 @@ in [`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md).
 
 ### Credits
 
-- [chrisryugj/kordoc](https://github.com/chrisryugj/kordoc) 4.15.7 — bundled HWP/HWPX/HWPML/PDF/DOCX/XLSX import, Markdown-to-HWPX (quick and official documents), validation, comparison, form filling, format profiles, and SVG rendering.
+- [chrisryugj/kordoc](https://github.com/chrisryugj/kordoc) 4.25.0 — bundled HWP/HWPX/HWPML/PDF/DOCX/XLSX import, Markdown-to-HWPX (quick and official documents), validation, comparison, form filling, format profiles, and SVG rendering.
 - [rhwp](https://github.com/edwardkim/rhwp) by Edward Kim — the two built-in standard draft letter forms (MIT), bundled through Kordoc.
+- [Pele](https://github.com/obsidianmd/pele) by kepano (MIT) — draws Mermaid diagrams for every export.
+- [hayro](https://github.com/LaurenzV/hayro) (LaurenzV) — the PDF engine Kordoc 4.25.0 embeds as WebAssembly.
 - [markdown-it-footnote](https://github.com/markdown-it/markdown-it-footnote) 4.0.0 — footnotes in HTML and PDF (MIT).
 - [docx-preview](https://github.com/VolodymyrBaydalka/docxjs) 0.4.0 by Volodymyr Baydalka — browser rendering of user-requested DOCX packages; [Apache License 2.0](https://github.com/VolodymyrBaydalka/docxjs/blob/master/LICENSE).
 - [Kami](https://github.com/tw93/kami) by Tw93 — the Achmage Editorial visual language adapts selected document-design principles under the MIT License; no Kami package, font, build script, or content is bundled. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - [Pretendard](https://github.com/orioncactus/pretendard) 400/600 via `@fontsource/pretendard` 5.3.0 — embedded for Editorial PDF under the SIL Open Font License 1.1. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- [Pandoc](https://pandoc.org/) — optional DOCX conversion only.
+- [Pandoc](https://pandoc.org/) — optional advanced DOCX conversion only; DOCX works without it.
 - [msjang/pypandoc-hwpx](https://github.com/msjang/pypandoc-hwpx) — the project that powered HanMark's earlier HWPX workflow.
 
 ---
@@ -162,7 +168,11 @@ in [`docs/cmds-eagle-bridge-v1.md`](docs/cmds-eagle-bridge-v1.md).
 
 **Obsidian Markdown과 편집 가능한 한글 HWP/HWPX를 잇는 데스크톱 플러그인입니다.**
 
-HanMark 2.7.0의 불러오기·HWPX 생성(빠른 HWPX·공문서)·검증·이미지 포함·문서 스타일·문서 비교·양식 채우기·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.15.7**입니다. HWPX·독립형 HTML·Editorial PDF를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다. 모든 변환은 오프라인으로 동작하며 AI 토큰을 쓰지 않습니다.
+HanMark 3.0.0의 불러오기·HWPX 생성(빠른 HWPX·공문서)·검증·이미지 포함·문서 스타일·문서 비교·양식 채우기·빠른 미리보기 엔진은 정확히 고정된 **Kordoc 4.25.0**입니다. HWPX·독립형 HTML·Editorial PDF를 만들 때 Python, pypandoc-hwpx, Pandoc 또는 실행 파일 경로 설정이 필요하지 않습니다. 모든 변환은 오프라인으로 동작하며 AI 토큰을 쓰지 않습니다.
+
+### 3.0.0 핵심 변화
+
+PDF 엔진을 내장한 Kordoc 4.25.0, 틀과 모양으로 고르는 공문서(중앙행정기관 52곳 모양과 내 견본으로 만든 모양), HWPX·DOCX·HTML·PDF에 그림으로 들어가는 Mermaid 도식, Pandoc 없는 DOCX, HWP를 HWPX로 변환, PPTX 불러오기, 편집기 밑줄까지 지원하는 문서 점검이 들어갔습니다. 바뀐 점과 알려진 한계는 [3.0.0 안내](release-notes/3.0.0.md)를 참고하십시오. 아래 절은 2.7.0과 2.6.1 출시 당시의 설명입니다.
 
 ### 2.7.0 핵심 변화
 
@@ -197,7 +207,7 @@ HanMark 2.7.0의 불러오기·HWPX 생성(빠른 HWPX·공문서)·검증·이�
 
 ### 2.x 핵심 기능
 
-- **Kordoc 4.15.7 내장:** 외부 설치 없이 문서를 불러오고, HWPX를 생성·검증하며, 문서를 비교하고 양식을 채웁니다.
+- **Kordoc 4.25.0 내장:** 외부 설치 없이 문서를 불러오고, HWPX를 생성·검증하며, 문서를 비교하고 양식을 채웁니다.
 - **실제 이미지 포함:** 원격 HTTP(S), data URI와 Vault PNG/JPEG/GIF/BMP 이미지를 HWPX `BinData`에 넣습니다. 실패한 이미지는 조용히 사라지지 않습니다.
 - **다중 사용자 템플릿:** 템플릿을 제한 없이 만들고, HWPX에서 가져오고, 복제·이름 변경·편집·선택·삭제할 수 있습니다.
 - **문서 스타일 규칙:** 템플릿 하나에 바탕글·제목 1~6의 글꼴, 문단 간격·들여쓰기, 페이지 규칙과 선택적인 표 스타일을 함께 저장합니다.
@@ -210,9 +220,9 @@ HanMark 2.7.0의 불러오기·HWPX 생성(빠른 HWPX·공문서)·검증·이�
 
 | 형식 | 결과 | 엔진 | 외부 설치 |
 | --- | --- | --- | --- |
-| HWPX | 빠른 HWPX | Kordoc 4.15.7 + 선택 템플릿 | 없음 |
-| HWPX | 한국 공문서 HWPX(8종) | Kordoc 4.15.7 공문서 프리셋 + 기관 서식 + 노트 속성 | 없음 |
-| DOCX | 스타일이 적용된 Word 문서 | Pandoc + HanMark Word 템플릿 | Pandoc만 선택 설치 |
+| HWPX | 빠른 HWPX | Kordoc 4.25.0 + 선택 템플릿 | 없음 |
+| HWPX | 한국 공문서 HWPX(틀 7가지와 모양) | Kordoc 4.25.0 공문서 프리셋 + 모양(기본·공통·중앙행정기관 52곳·한림대·내 양식) + 노트 속성 | 없음 |
+| DOCX | 스타일이 적용된 Word 문서 | 내장 작성기 + HanMark Word 템플릿(수식 개체가 필요하면 고급 Pandoc 선택) | 없음 |
 | HTML | Achmage Editorial 또는 Classic 독립형 HTML | HanMark 내장 변환 | 없음 |
 | PDF | 표지와 페이지 장식을 갖춘 A4 Editorial PDF | 내장 Chromium 인쇄 파이프라인 | 없음 |
 
@@ -265,7 +275,7 @@ HWP, HWPX, HWPML(`.hml`), PDF, DOCX, XLSX, XLS 문서를 일반 Markdown으로 �
 - HTML은 SVG·WebP·동영상·iframe·스크립트·이벤트 핸들러·사용자 원시 CSS·외부 글꼴·CDN 자원을 의도적으로 제외합니다. 일반 링크는 `http:`, `https:`, `mailto:`만 허용합니다.
 - 생성된 HTML의 Content Security Policy는 `default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`입니다.
 - Editorial PDF는 데스크톱 Chromium 인쇄 엔진을 사용합니다. HanMark HWPX 템플릿으로 렌더링하지 않으며 최종 쪽 나눔은 선택한 프린터·PDF 설정에 따라 달라질 수 있습니다.
-- HanMark 2.7.0은 Obsidian 1.8.9 이상이 필요한 데스크톱 전용 플러그인입니다. 모바일 Obsidian은 지원하지 않지만 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
+- HanMark 3.0.0은 Obsidian 1.8.9 이상이 필요한 데스크톱 전용 플러그인입니다. 모바일 Obsidian은 지원하지 않지만 내보낸 HTML 자체는 모바일 브라우저 화면에 반응합니다.
 - 스캔 PDF는 OCR하지 않습니다. Kordoc의 선택형 OCR 코드는 호출하지 않고 모델도 내려받지 않으며, 글자가 없는 쪽은 보고서로 알려 줍니다.
 - 암호가 걸린 PDF는 불러올 수 없습니다. 암호가 걸린 HWPX는 불러올 수 있습니다.
 - 양식 채우기는 HWPX 양식만 지원합니다. HWP 양식은 한컴오피스에서 HWPX로 저장한 뒤 사용하십시오.
@@ -300,13 +310,15 @@ CMDS Eagle와 자격증명을 공유하지 않는 공개 연동 계약은
 
 ### 감사
 
-- [chrisryugj/kordoc](https://github.com/chrisryugj/kordoc) 4.15.7 — 내장 HWP/HWPX/HWPML/PDF/DOCX/XLSX 불러오기, Markdown-to-HWPX(빠른 HWPX·공문서), 검증, 문서 비교, 양식 채우기, 형식 프로필과 SVG 렌더링.
+- [chrisryugj/kordoc](https://github.com/chrisryugj/kordoc) 4.25.0 — 내장 HWP/HWPX/HWPML/PDF/DOCX/XLSX 불러오기, Markdown-to-HWPX(빠른 HWPX·공문서), 검증, 문서 비교, 양식 채우기, 형식 프로필과 SVG 렌더링.
 - Edward Kim의 [rhwp](https://github.com/edwardkim/rhwp) — Kordoc을 통해 포함한 내장 표준 기안문 서식 2종(MIT).
+- kepano의 [Pele](https://github.com/obsidianmd/pele)(MIT) — 모든 내보내기에서 Mermaid 도식을 그립니다.
+- LaurenzV의 [hayro](https://github.com/LaurenzV/hayro) — Kordoc 4.25.0이 WebAssembly로 내장한 PDF 엔진.
 - [markdown-it-footnote](https://github.com/markdown-it/markdown-it-footnote) 4.0.0 — HTML·PDF 각주 표시(MIT).
 - Volodymyr Baydalka의 [docx-preview](https://github.com/VolodymyrBaydalka/docxjs) 0.4.0 — 사용자가 요청한 DOCX 패키지를 Obsidian 안에서 렌더링하며 [Apache License 2.0](https://github.com/VolodymyrBaydalka/docxjs/blob/master/LICENSE)을 따릅니다.
 - Tw93의 [Kami](https://github.com/tw93/kami) — Achmage Editorial의 시각 언어는 MIT License로 공개된 문서 디자인 원칙 일부를 응용했습니다. Kami 패키지·글꼴·빌드 스크립트·콘텐츠는 포함하지 않습니다. 자세한 표기는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 참고하십시오.
 - [Pretendard](https://github.com/orioncactus/pretendard) 400·600 (`@fontsource/pretendard` 5.3.0) — SIL Open Font License 1.1에 따라 Editorial PDF용으로 포함합니다. 자세한 표기는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 참고하십시오.
-- [Pandoc](https://pandoc.org/) — 선택적 DOCX 변환에만 사용.
+- [Pandoc](https://pandoc.org/) — 선택 사항인 고급 DOCX 변환에만 사용합니다. DOCX는 Pandoc 없이도 만들어집니다.
 - [msjang/pypandoc-hwpx](https://github.com/msjang/pypandoc-hwpx) — HanMark 초기 HWPX 경로의 기반이 된 프로젝트.
 
 ## License
