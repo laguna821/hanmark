@@ -953,6 +953,7 @@ export const ko = {
   "diagram.warning.keptAsCode": "Mermaid 도식을 그리지 못해 코드로 두었습니다 ({type}: {first}): {reason}",
   "diagram.warning.fontFallback": "도식 글꼴 '{wanted}'을(를) 그림에 쓸 수 없어 {used}(으)로 그렸습니다.",
   "diagram.warning.roleUnmatched": "도식의 @key·@interp·@aux 주석이 가리키는 노드를 하나로 정할 수 없어 강조하지 않았습니다: {ids}",
+  "diagram.warning.movedOutOfQuote": "인용문·콜아웃 안의 도식은 그 자리에서 인용문 밖에 그림으로 두었습니다. 한글 문서에서는 인용문 안에 그림을 넣을 수 없습니다.",
   "diagram.reason.unsupported": "지원하지 않는 도식 종류",
   "diagram.reason.syntax": "{line}번째 줄 문법 오류",
   "diagram.error.tooLong": "도식 원문이 너무 깁니다",

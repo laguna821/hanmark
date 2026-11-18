@@ -341,6 +341,7 @@ export async function renderMermaidDiagrams(
   let rendered = 0;
   let kept = 0;
   const unmatchedRoles: string[] = [];
+  let movedOut = 0;
   const output: string[] = [];
   let cursor = 0;
   for (const [ordinal, block] of blocks.entries()) {
@@ -365,8 +366,11 @@ export async function renderMermaidDiagrams(
         // The picture and its caption are plain paragraphs; the PNG's mark tells each writer
         // to centre them. The HWPX engine places a picture only as a paragraph of its own
         // outside quotes, so a diagram inside a quote or callout is set right after the
-        // lines before it.
-        const prefix = target === "hwpx" && block.prefix.includes(">") ? "" : block.prefix;
+        // lines before it. Measured with Kordoc 4.25.0 (R-037): a picture inside a quote or
+        // callout is written as its alternative text only, in quick and official documents.
+        const leavesQuote = target === "hwpx" && block.prefix.includes(">");
+        if (leavesQuote) movedOut += 1;
+        const prefix = leavesQuote ? "" : block.prefix;
         const gap = prefix.trimEnd();
         output.push(gap, `${prefix}${image}`);
         if (diagram.caption) output.push(gap, `${prefix}${escapeMarkdown(cleanLabel(diagram.caption))}`);
@@ -380,6 +384,9 @@ export async function renderMermaidDiagrams(
     }
   }
   output.push(...lines.slice(cursor));
+  if (movedOut) {
+    warnings.push({ code: "diagram-moved", message: t("diagram.warning.movedOutOfQuote"), count: movedOut });
+  }
   if (unmatchedRoles.length) {
     warnings.push({
       code: "diagram-role",

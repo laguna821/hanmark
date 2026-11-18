@@ -210,6 +210,41 @@ describe("drawing for each export target (R-033)", () => {
   });
 });
 
+describe("diagrams inside quotes and callouts in HWPX (R-037)", () => {
+  it("leaves the quote at the same position and says so once, with a count; other targets stay in place", async () => {
+    const note = ["> 인용 첫 줄", ">", ...fence(FLOW, "```", "> "), ">", "> 인용 끝 줄", "", "> [!NOTE] 참고", ...fence(FLOW, "```", "> "), "", ...fence(FLOW)].join("\n");
+    const hwpx = await renderMermaidDiagrams(note, "hwpx", ENVIRONMENT);
+    assert.equal(hwpx.rendered, 3);
+    const moved = hwpx.warnings.filter((warning) => warning.code === "diagram-moved");
+    assert.equal(moved.length, 1);
+    assert.equal(moved[0].count, 2);
+    const pictures = hwpx.markdown.split("\n").filter((line) => line.includes("data:image/png"));
+    assert.equal(pictures.length, 3);
+    assert.ok(pictures.every((line) => line.startsWith("![")), "every picture is a paragraph of its own, outside any quote");
+    // The quote's own lines keep their order around the picture.
+    assert.ok(hwpx.markdown.indexOf("> 인용 첫 줄") < hwpx.markdown.indexOf("data:image/png"));
+    assert.ok(hwpx.markdown.indexOf("data:image/png") < hwpx.markdown.indexOf("> 인용 끝 줄"));
+    for (const target of ["docx", "markup"] as const) {
+      const staged = await renderMermaidDiagrams(note, target, ENVIRONMENT);
+      assert.deepEqual(staged.warnings.filter((warning) => warning.code === "diagram-moved"), [], target);
+    }
+    const top = await renderMermaidDiagrams(fence(FLOW).join("\n"), "hwpx", ENVIRONMENT);
+    assert.deepEqual(top.warnings, []);
+  });
+
+  it("records the engine limit: Kordoc writes a picture inside a quote as text", async () => {
+    const { markdownToHwpx } = await import("kordoc");
+    const picture = { "pic.png": png(120, 60) };
+    const count = async (markdown: string): Promise<number> => {
+      const zip = await JSZip.loadAsync(await markdownToHwpx(markdown, { images: picture } as never));
+      return ((await zip.file("Contents/section0.xml")!.async("string")).match(/<hp:pic\b/gu) ?? []).length;
+    };
+    assert.equal(await count("앞\n\n![그림](pic.png)\n\n뒤"), 1);
+    assert.equal(await count("> 인용\n>\n> ![그림](pic.png)\n>\n> 끝"), 0, "if this becomes 1, diagrams can stay inside quotes");
+    assert.equal(await count("> [!NOTE] 참고\n> 본문\n>\n> ![그림](pic.png)"), 0);
+  });
+});
+
 describe("key, interpretation and auxiliary nodes (R-037)", () => {
   const ROLES = [
     "flowchart LR",

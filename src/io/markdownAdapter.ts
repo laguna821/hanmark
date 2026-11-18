@@ -28,6 +28,7 @@ export type AdapterWarningCode =
   | "diagram-kept-as-code"
   | "diagram-font"
   | "diagram-role"
+  | "diagram-moved"
   | "memo-placed"
   | "memo-unplaced";
 
