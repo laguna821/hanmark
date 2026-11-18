@@ -141,6 +141,123 @@ export function literalizeDiagramSvg(svg: string, palette: DiagramPalette, fontF
   return body;
 }
 
+export type DiagramRole = "key" | "interpretation" | "aux";
+
+export interface DiagramRoleResult {
+  svg: string;
+  /** Node groups that got a treatment. */
+  applied: number;
+  /** Ids named by an annotation that are not exactly one node of the diagram. */
+  unmatched: string[];
+}
+
+const ROLE_ORDER: readonly DiagramRole[] = ["key", "interpretation", "aux"];
+const ROLE_SHAPES: Readonly<Record<DiagramRole, ReadonlySet<string>>> = {
+  key: new Set(["rect", "path", "polygon"]),
+  interpretation: new Set(["rect", "polygon"]),
+  aux: new Set(["rect", "polygon"])
+};
+
+function unescapeAttribute(value: string): string {
+  return value.replace(/&quot;/gu, '"').replace(/&lt;/gu, "<").replace(/&gt;/gu, ">").replace(/&amp;/gu, "&");
+}
+
+function setAttribute(tag: string, name: string, value: string): string {
+  const present = new RegExp(`\\s${name}="[^"]*"`, "u");
+  if (present.test(tag)) return tag.replace(present, ` ${name}="${value}"`);
+  return tag.replace(/\s*\/?>$/u, (end) => ` ${name}="${value}"${end.trim()}`);
+}
+
+/** End of the element whose open tag ends at `from` (index just past its close tag); -1 when unbalanced. */
+function elementEnd(svg: string, from: number): number {
+  let depth = 1;
+  const tags = /<(\/?)g\b[^>]*?(\/?)>/gu;
+  tags.lastIndex = from;
+  for (let match = tags.exec(svg); match; match = tags.exec(svg)) {
+    if (match[1]) depth -= 1;
+    else if (!match[2]) depth += 1;
+    if (depth === 0) return match.index + match[0].length;
+  }
+  return -1;
+}
+
+/** Rewrites the shapes that are direct children of one node group. */
+function treatShapes(inner: string, treatments: readonly DiagramRole[], palette: DiagramPalette): string {
+  let depth = 0;
+  return inner.replace(/<(\/?)([A-Za-z][\w:-]*)\b[^>]*?(\/?)>/gu, (tag: string, closing: string, name: string, selfClosing: string) => {
+    if (closing) {
+      depth -= 1;
+      return tag;
+    }
+    const direct = depth === 0;
+    if (!selfClosing) depth += 1;
+    if (!direct) return tag;
+    let next = tag;
+    for (const role of treatments) {
+      if (!ROLE_SHAPES[role].has(name)) continue;
+      if (role === "key") next = setAttribute(setAttribute(next, "stroke", palette.accent), "stroke-width", "3");
+      else if (role === "interpretation") next = setAttribute(next, "stroke-dasharray", "5 3");
+      else next = setAttribute(next, "fill", palette.surfaceAlt);
+    }
+    return next;
+  });
+}
+
+/**
+ * Applies the note's `%% @key`, `@interp` and `@aux` annotations to a literal Pele
+ * SVG (R-037), the way the achmage-pele skill draws them: a key node gets an accent
+ * outline three units wide, an interpretation node a dashed outline, an auxiliary
+ * node the alternate surface. Only node groups (`pele-node` with a `data-id`) can be
+ * named; a diagram type without them is returned untouched and silently. An id that
+ * is not exactly one node is listed in `unmatched` and nothing is guessed.
+ */
+export function applyDiagramRoles(
+  svg: string,
+  roles: Readonly<Record<DiagramRole, readonly string[]>>,
+  palette: DiagramPalette
+): DiagramRoleResult {
+  const nodes: Array<{ id: string; start: number; openEnd: number }> = [];
+  for (const match of svg.matchAll(/<g\b[^>]*>/gu)) {
+    const tag = match[0];
+    if (tag.endsWith("/>")) continue;
+    const classes = /\sclass="([^"]*)"/u.exec(tag)?.[1] ?? "";
+    const id = /\sdata-id="([^"]*)"/u.exec(tag)?.[1];
+    if (id === undefined || !/(?:^|\s)pele-node(?:\s|$)/u.test(classes)) continue;
+    nodes.push({ id: unescapeAttribute(id), start: match.index, openEnd: match.index + tag.length });
+  }
+  if (!nodes.length) return { svg, applied: 0, unmatched: [] };
+  const plan = new Map<number, DiagramRole[]>();
+  const unmatched: string[] = [];
+  for (const role of ROLE_ORDER) {
+    for (const id of new Set(roles[role])) {
+      const found = nodes.filter((node) => node.id === id);
+      if (found.length !== 1) {
+        if (!unmatched.includes(id)) unmatched.push(id);
+        continue;
+      }
+      plan.set(found[0].start, [...(plan.get(found[0].start) ?? []), role]);
+    }
+  }
+  let out = svg;
+  let applied = 0;
+  for (const node of [...nodes].sort((a, b) => b.start - a.start)) {
+    const treatments = plan.get(node.start);
+    if (!treatments) continue;
+    const end = elementEnd(out, node.openEnd);
+    if (end < 0) {
+      if (!unmatched.includes(node.id)) unmatched.push(node.id);
+      continue;
+    }
+    const close = out.lastIndexOf("</g>", end);
+    const open = out
+      .slice(node.start, node.openEnd)
+      .replace(/\sclass="/u, ` class="${treatments.map((role) => `hanmark-diagram-${role}`).join(" ")} `);
+    out = out.slice(0, node.start) + open + treatShapes(out.slice(node.openEnd, close), treatments, palette) + out.slice(close);
+    applied += 1;
+  }
+  return { svg: out, applied, unmatched };
+}
+
 const SAFE_ELEMENTS = new Set([
   "svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan",
   "title", "desc", "defs", "marker", "clipPath", "linearGradient", "radialGradient", "stop", "pattern", "mask"

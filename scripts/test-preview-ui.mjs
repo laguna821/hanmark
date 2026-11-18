@@ -127,7 +127,7 @@ const fixtures = {
   obsidianImageLoader: "export function createObsidianImageLoader() { return async () => null; }",
   documentStyle: "export function documentStyleSummary() { return \"\"; }",
   // The toolbar's frame and look picker (R-030) reads the real form model; only the engine is a stand-in.
-  kordoc: 'export const VERSION = "fixture"; export const AGENCY_COMMON_NAME = "공통"; export const agencyNames = () => []; export const agencyStyle = () => ({}); export const PRESET_ALIAS = {}; export const normalizeGongmunPreset = (value) => value; export const incompatibleGongmunWarnings = () => []; export const measureTextWidth = () => 0; export const simulateWrap = () => ({ lines: 1 });'
+  kordoc: 'export const VERSION = "fixture"; export const AGENCY_COMMON_NAME = "공통"; export const agencyNames = () => []; export const agencyStyle = () => ({}); export const PRESET_ALIAS = {}; export const normalizeGongmunPreset = (value) => value; export const incompatibleGongmunWarnings = () => []; export const measureTextWidth = () => 0; export const simulateWrap = () => ({ lines: 1 }); export const markdownToHwpx = () => { throw new Error("not part of this harness"); }; export const measurePdfLayout = markdownToHwpx; export const applyMeasuredLayout = markdownToHwpx; export const buildAgencyPack = markdownToHwpx; export const loadAgencyPack = markdownToHwpx; export const packTemplate = markdownToHwpx; export const resolvePackKind = markdownToHwpx; export const packRoleWarnings = () => [];'
 };
 
 const bundle = await build({

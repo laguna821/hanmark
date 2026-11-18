@@ -36,7 +36,7 @@ const bundle = await build({
     build.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({
       contents: args.path === "obsidian"
         ? host
-        : 'export const VERSION = "4.15.7"; export const normalizeGongmunPreset = (value) => value; export const incompatibleGongmunWarnings = () => []; export const PRESET_ALIAS = {}; export const measureTextWidth = () => 0; export const simulateWrap = () => ({ lines: 1 }); export const AGENCY_COMMON_NAME = "공통"; export const agencyNames = () => []; export const agencyStyle = () => ({});'
+        : 'export const VERSION = "4.15.7"; export const normalizeGongmunPreset = (value) => value; export const incompatibleGongmunWarnings = () => []; export const PRESET_ALIAS = {}; export const measureTextWidth = () => 0; export const simulateWrap = () => ({ lines: 1 }); export const AGENCY_COMMON_NAME = "공통"; export const agencyNames = () => []; export const agencyStyle = () => ({}); export const markdownToHwpx = () => { throw new Error("not part of this harness"); }; export const measurePdfLayout = markdownToHwpx; export const applyMeasuredLayout = markdownToHwpx; export const buildAgencyPack = markdownToHwpx; export const loadAgencyPack = markdownToHwpx; export const packTemplate = markdownToHwpx; export const resolvePackKind = markdownToHwpx; export const packRoleWarnings = () => [];'
     }));
   } }]
 });

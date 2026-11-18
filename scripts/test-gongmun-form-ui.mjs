@@ -138,6 +138,16 @@ export const incompatibleGongmunWarnings = () => [];
 export const measureTextWidth = () => 0;
 export const simulateWrap = () => ({ lines: 1 });
 export const hwpxToProfile = async () => ({ tables: [] });
+// The sample-look module (R-036) is linked into the windows but not driven here.
+const notInHarness = (name) => () => { throw new Error(name + " is not part of this harness"); };
+export const markdownToHwpx = notInHarness("markdownToHwpx");
+export const measurePdfLayout = notInHarness("measurePdfLayout");
+export const applyMeasuredLayout = notInHarness("applyMeasuredLayout");
+export const buildAgencyPack = notInHarness("buildAgencyPack");
+export const loadAgencyPack = notInHarness("loadAgencyPack");
+export const packTemplate = notInHarness("packTemplate");
+export const packRoleWarnings = () => [];
+export const resolvePackKind = notInHarness("resolvePackKind");
 `;
 
 const fixtures = {
@@ -162,7 +172,8 @@ const bundle = await build({
       "export * as forms from './src/io/gongmunExport';",
       "export * as looks from './src/io/gongmunForms';",
       "export * as ids from './src/io/gongmunFormId';",
-      "export * as library from './src/io/templateLibrary';"
+      "export * as library from './src/io/templateLibrary';",
+      "export * as switches from './src/io/exportSwitches';"
     ].join("\n"),
     resolveDir: process.cwd(),
     loader: "ts"
@@ -204,7 +215,7 @@ try {
   await page.evaluate(() => {
     const { forms, library } = FormUi;
     globalThis.notices = [];
-    globalThis.calls = { exports: [], saves: 0, selected: [] };
+    globalThis.calls = { exports: [], saves: 0, selected: [], switches: [] };
     // One plugin state for the export window, the preview, and "several forms at once".
     globalThis.plugin = { settings: {}, saveSettings: async () => { calls.saves += 1; } };
     globalThis.memory = {};
@@ -226,6 +237,9 @@ try {
       globalThis.modal = new FormUi.HanmarkExportModal({}, {
         activeTemplateId: () => "default", templateChoices: () => [], activeTemplateSummary: () => "",
         selectTemplate: async () => {}, runOther: async () => {}, openPreview: async () => {},
+        openDocxPreview: async () => {},
+        exportSwitch: (id) => FormUi.switches.exportSwitchValue(plugin.settings, id),
+        setExportSwitch: async (id, value) => { plugin.settings[id] = value; await plugin.saveSettings(); calls.switches.push([id, value]); },
         gongmunForms: () => forms.listGongmunForms(plugin),
         gongmunPicker: pickerHost,
         describeGongmunForm: (id) => forms.describeGongmunForm(plugin, id),
@@ -290,7 +304,8 @@ try {
     const overlaps = !(panel.right <= exportButton.left || panel.left >= exportButton.right || panel.bottom <= exportButton.top || panel.top >= exportButton.bottom);
     return { overlaps, inside: panel.top >= modal.top - 1 && panel.bottom <= modal.bottom + 1, up: document.querySelector("#stage .hanmark-look-panel").classList.contains("is-up") };
   });
-  assert.deepEqual(placement, { overlaps: false, inside: true, up: true });
+  // Up or down depends on the room the window has; either way the button stays visible.
+  assert.deepEqual({ overlaps: placement.overlaps, inside: placement.inside }, { overlaps: false, inside: true });
   await page.locator("#stage").screenshot({ path: `${out}/06-chooser-leaves-export-button.png` });
   assert.equal(await page.locator('[data-look="agency:경찰청"] .hanmark-look-badge').innerText(), "표본 적음");
   assert.equal(await page.locator('[data-look="agency:국세청"] .hanmark-look-badge').count(), 0);
@@ -310,6 +325,46 @@ try {
   assert.equal(await activeForm(), "form:report/agency:국세청");
   assert.equal((await lookButton.innerText()).replace(/\s*▾\s*/u, ""), "국세청");
 
+  // Keyboard only (R-037): open from the button, move with the arrows, type ahead, Enter picks, Escape gives the focus back.
+  const activeLook = () => page.evaluate(() => {
+    const field = document.querySelector("#hanmark-export-gongmun-look-search");
+    const option = document.getElementById(field?.getAttribute("aria-activedescendant") ?? "");
+    return option ? (option.closest("[data-look]") ?? option.querySelector("[data-look]"))?.getAttribute("data-look") ?? option.textContent.trim() : null;
+  });
+  await lookButton.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await search.evaluate((node) => node === document.activeElement), true, "opening moves the focus to the search field");
+  assert.equal(await activeLook(), "agency:국세청", "the list starts on the chosen look, so Enter keeps it");
+  await page.keyboard.press("ArrowDown");
+  const next = await activeLook();
+  assert.notEqual(next, "agency:국세청");
+  assert.equal(await page.evaluate(() => {
+    const field = document.querySelector("#hanmark-export-gongmun-look-search");
+    const option = document.getElementById(field.getAttribute("aria-activedescendant"));
+    const list = document.querySelector("#hanmark-export-gongmun-look-list").getBoundingClientRect();
+    const box = option.getBoundingClientRect();
+    return box.top >= list.top - 1 && box.bottom <= list.bottom + 1;
+  }), true, "the active row is scrolled into view");
+  await page.keyboard.press("ArrowUp");
+  assert.equal(await activeLook(), "agency:국세청");
+  // Type ahead: letters go to the search field and the first match becomes active.
+  await page.keyboard.type("교육");
+  assert.equal(await search.inputValue(), "교육");
+  assert.equal(await activeLook(), "agency:교육부");
+  await page.keyboard.press("Enter");
+  assert.equal(await activeForm(), "form:report/agency:교육부");
+  assert.equal(await search.isVisible(), false, "picking closes the list");
+  await lookButton.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+  assert.equal(await search.isVisible(), false, "Escape closes the list");
+  assert.equal(await lookButton.evaluate((node) => node === document.activeElement), true, "Escape gives the focus back to the button");
+  assert.equal(await activeForm(), "form:report/agency:교육부", "Escape changes nothing");
+  assert.equal(await page.locator("#stage .modal").count(), 1, "Escape closes the list, not the export window");
+  await lookButton.click();
+  await search.fill("국세");
+  await search.press("Enter");
+  assert.equal(await activeForm(), "form:report/agency:국세청");
   await page.locator("#hanmark-export-gongmun-option-cover").check();
   await page.locator("#hanmark-export-gongmun-option-toc").check();
   assert.equal(await activeForm(), "form:report/agency:국세청;cover=1;toc=1");
@@ -381,6 +436,46 @@ try {
   await page.evaluate(() => { globalThis.noteLook = "교육부"; modal.close(); openExport(); });
   assert.match(await page.locator("#stage .hanmark-export-form-row").innerText(), /노트의 공문_기관서식는 '교육부'이지만, 지금 고른 모양은 '국세청'입니다/u);
   await page.evaluate(() => { globalThis.noteLook = undefined; modal.close(); });
+
+  // "내보낼 때" switches (R-037): one group per format, each box a stored setting.
+  await page.evaluate(() => openExport());
+  const switchGroup = (format) => page.locator(`#stage [data-hanmark-export-switches="${format}"]`);
+  const switchBox = (format, id) => switchGroup(format).locator(`[data-hanmark-export-switch="${id}"]`);
+  const switchIds = (format) => switchGroup(format).locator("[data-hanmark-export-switch]").evaluateAll((nodes) => nodes.map((node) => node.dataset.hanmarkExportSwitch));
+  assert.equal(await switchGroup("hwpx").locator("legend").innerText(), "내보낼 때");
+  assert.deepEqual(await switchIds("hwpx"), ["mermaidDiagrams", "commentsAsMemos", "hwpxEquations"]);
+  // A profile that never chose: diagrams on, memos and equation objects off.
+  assert.equal(await switchBox("hwpx", "mermaidDiagrams").isChecked(), true);
+  assert.equal(await switchBox("hwpx", "commentsAsMemos").isChecked(), false);
+  assert.equal(await switchBox("hwpx", "hwpxEquations").isChecked(), false);
+  assert.deepEqual(await switchGroup("hwpx").locator("label").allInnerTexts(), ["Mermaid 도식을 그림으로", "주석을 한글 메모로", "수식을 한글 수식 개체로"]);
+  const switchSaves = await page.evaluate(() => calls.saves);
+  await switchBox("hwpx", "commentsAsMemos").check();
+  await switchBox("hwpx", "hwpxEquations").check();
+  await switchBox("hwpx", "mermaidDiagrams").uncheck();
+  assert.equal(await page.evaluate(() => calls.saves), switchSaves + 3, "each switch saves the settings");
+  assert.deepEqual(await page.evaluate(() => [plugin.settings.mermaidDiagrams, plugin.settings.commentsAsMemos, plugin.settings.hwpxEquations]), [false, true, true]);
+  assert.deepEqual(await page.evaluate(() => calls.switches), [["commentsAsMemos", true], ["hwpxEquations", true], ["mermaidDiagrams", false]]);
+  await page.locator("#stage").screenshot({ path: `${out}/09-export-window-switches-hwpx.png` });
+  // The quick variant shows the same group; the other formats show only what applies to them.
+  await page.locator("#stage .hanmark-export-variant-grid button").first().click();
+  assert.deepEqual(await switchIds("hwpx"), ["mermaidDiagrams", "commentsAsMemos", "hwpxEquations"]);
+  assert.equal(await switchBox("hwpx", "hwpxEquations").isChecked(), true);
+  const formatCards = page.locator("#stage .hanmark-export-format-card");
+  await formatCards.nth(1).click();
+  assert.deepEqual(await switchIds("docx"), ["mermaidDiagrams"]);
+  assert.equal(await switchBox("docx", "mermaidDiagrams").isChecked(), false, "the same stored value in every format");
+  await switchBox("docx", "mermaidDiagrams").check();
+  await page.locator("#stage").screenshot({ path: `${out}/10-export-window-switches-docx.png` });
+  await formatCards.nth(2).click();
+  assert.deepEqual(await switchIds("html"), ["mermaidDiagrams"]);
+  assert.equal(await switchBox("html", "mermaidDiagrams").isChecked(), true);
+  // Reopened: the choices come back.
+  await page.evaluate(() => { modal.close(); openExport(); });
+  assert.equal(await switchBox("hwpx", "mermaidDiagrams").isChecked(), true);
+  assert.equal(await switchBox("hwpx", "commentsAsMemos").isChecked(), true);
+  assert.equal(await switchBox("hwpx", "hwpxEquations").isChecked(), true);
+  await page.evaluate(() => { delete plugin.settings.commentsAsMemos; delete plugin.settings.hwpxEquations; delete plugin.settings.mermaidDiagrams; modal.close(); });
 
   // The real HWPX preview toolbar shows the same picker for the note's form.
   await page.evaluate(async () => {

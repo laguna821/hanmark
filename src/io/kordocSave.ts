@@ -20,6 +20,7 @@ import {
 import { HwpSaveReportModal } from "./HwpSaveReportModal";
 import { adaptMarkdownForKordoc } from "./markdownAdapter";
 import { attachMemos, commentsAsMemosSetting, extractMemoMarks } from "./hwpxMemos";
+import { hwpxEquationsSetting } from "./exportSwitches";
 import { assembleEmbedsSetting, prepareExportMarkdown } from "./exportPreparation";
 import { exportDiagramOptions } from "../ui/diagramEnvironment";
 import { createVaultAssemblyHost } from "./vaultAssemblyHost";
@@ -199,6 +200,8 @@ async function generateBody(
   const generated = await generateValidatedHwpxFromAdapted(adapted, {
     profile: gongmun ? gongmun.profile : activeTableProfile(host),
     ...(gongmun ? gongmunGenerateOptions(gongmun) : {}),
+    // "수식을 한글 수식 개체로" (R-037): passed only when on, so other documents keep their bytes.
+    ...(hwpxEquationsSetting(host.settings) ? { inlineMath: true } : {}),
     documentStyle:
       options.mode === "quick-hwpx"
         ? activeDocumentStyle(host)

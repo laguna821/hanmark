@@ -54,6 +54,7 @@ import { importCloudSettings } from "./io/kordocImport";
 import { isImportableExtension, type ImportInput } from "./io/importRunner";
 import { assemblyNotice, diagramNotice, prepareExportMarkdown } from "./io/exportPreparation";
 import { exportDiagramOptions } from "./ui/diagramEnvironment";
+import { exportSwitchValue, hwpxEquationsSetting } from "./io/exportSwitches";
 import type { DiagramPalette } from "./io/diagramSvg";
 import { createVaultAssemblyHost } from "./io/vaultAssemblyHost";
 import {
@@ -737,6 +738,7 @@ export default class HanmarkPlugin extends Plugin {
           outputLanguage: () => this.settings.outputLanguage,
           assembleEmbeds: () => this.settings.assembleEmbeds,
       diagrams: () => exportDiagramOptions(this.settings, "hwpx"),
+          equations: () => hwpxEquationsSetting(this.settings),
           gongmunPlan: (file, preset, formId) => planGongmunExport(this.app, file, this, preset, formId),
           gongmunForms: () => listGongmunForms(this),
           gongmunPicker: () => this.gongmunPickerHost(),
@@ -1062,6 +1064,18 @@ export default class HanmarkPlugin extends Plugin {
           this.refreshPreviews();
         },
         openTemplateManager: () => this.openTemplateManager(),
+        exportSwitch: (id) => exportSwitchValue(this.settings, id),
+        setExportSwitch: async (id, value) => {
+          const before = this.settings[id];
+          this.settings[id] = value;
+          try {
+            await this.saveSettings();
+          } catch (error: unknown) {
+            this.settings[id] = before;
+            throw error;
+          }
+          this.refreshPreviews();
+        },
         exportKordoc: (mode, preset, formId) =>
           this.jobs.run(async () => {
             const note = this.currentMarkdownView()?.file?.path;

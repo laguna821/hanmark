@@ -182,6 +182,8 @@ export interface HanmarkSettings extends Record<string, unknown> {
   assembleEmbeds: boolean;
   /** HWPX export: a highlight followed by a comment becomes a Hangul memo (R-034). */
   commentsAsMemos: boolean;
+  /** HWPX export: `$…$` becomes a Hangul equation object (R-036, R-037). */
+  hwpxEquations: boolean;
   /** Export Mermaid code blocks as drawn diagrams (R-033). */
   mermaidDiagrams: boolean;
   /** Always draw diagrams with the document palette instead of the note's colours (R-033). */
@@ -248,6 +250,7 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   openHangulFilesInHanmark: true,
   assembleEmbeds: true,
   commentsAsMemos: false,
+  hwpxEquations: false,
   mermaidDiagrams: true,
   mermaidPaperPalette: false,
   gongmunCheckFamilies: { ...DEFAULT_CHECK_FAMILIES },
@@ -501,6 +504,7 @@ export function normalizeHanmarkSettings(
         ? data.assembleEmbeds
         : DEFAULT_HANMARK_SETTINGS.assembleEmbeds,
     commentsAsMemos: data.commentsAsMemos === true,
+    hwpxEquations: data.hwpxEquations === true,
     mermaidDiagrams: data.mermaidDiagrams !== false,
     mermaidPaperPalette: data.mermaidPaperPalette === true,
     gongmunCheckFamilies: normalizeCheckFamilies(data.gongmunCheckFamilies),
