@@ -55,10 +55,16 @@ Checked on this PC (Windows, Node 26):
 
 Not checkable here:
 
-- CI uses Node 20; this PC has Node 26. The tests and build scripts were not run on Node 20.
+- CI uses Node 20. On this PC the full suite (609 tests at that point) and the production build with `check-bundle` were also run with Node 20.20.2 and passed; npm 10 (Node 20's) was not used for `npm ci`.
 - macOS and Ubuntu were not run. Tests that compare generated HWPX or DOCX against stored hashes (the 2.7.x form baseline of R-030, determinism tests) were only run on Windows.
 - `test:pdf-ui`, `test:toolbar-ui`, and `test:preview-ui` were changed in 3.0.0 (Kordoc stand-ins for new modules) and were only run with this PC's Chrome, not with Playwright's Chromium. `test:preview-ui` asserts a page count that depends on fonts; it needed a fixture fix once already.
 - `npm ci --omit=optional` leaves out esbuild's platform package; CI gets the binary through esbuild's install script. Local runs here used `--ignore-scripts` and installed `@esbuild/win32-x64` by hand.
+
+## 4a. Order on release day
+
+1. Push the branch `3.0.0` first and wait until "Verify plugin" passes on Windows, macOS and Ubuntu.
+2. Only then push the tag. A failed tag run has to be cleaned up (delete the remote tag, re-tag, push again); a failed branch run costs nothing.
+3. Known local flake: right after `npm ci` on Windows, the first test or build run can stop with `esbuild ... spawn UNKNOWN` ("The service was stopped"). Run it again; it has not recurred on a second run.
 
 ## 5. After publishing
 
