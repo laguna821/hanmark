@@ -877,9 +877,20 @@ export function createEditorialPdfStyles(
       ? ""
       : "\n    min-height: 5.4mm;";
   return `
+/*
+ * Chromium paints the page margin area with the host frame's base
+ * background, not with html/body. Obsidian (Electron) sets that base color
+ * from the active theme, so in dark mode the margins around every body page
+ * came out black. Paint the page boxes themselves with the paper color.
+ */
+@page {
+  background: ${palette.paper};
+}
+
 @page hanmark-cover {
   size: A4 portrait;
   margin: 0;
+  background: ${palette.paper};
 
   @top-left {
     content: none;
@@ -909,6 +920,7 @@ export function createEditorialPdfStyles(
 @page hanmark-body {
   size: A4 portrait;
   margin: 22mm 20mm;
+  background: ${palette.paper};
 
   @top-left {
     content: "${headerLeft}";
@@ -1005,6 +1017,8 @@ export function createEditorialPdfStyles(
   html {
     height: auto;
     overflow: visible;
+    color-scheme: only light;
+    background: ${palette.paper};
   }
 
   html body.${EDITORIAL_PDF_BODY_CLASS} {

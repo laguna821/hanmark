@@ -685,6 +685,16 @@ describe("Achmage Editorial PDF helpers", () => {
     assert.doesNotMatch(css, /!important/u);
   });
 
+  it("paints page margins with the paper color instead of the host window background", () => {
+    const css = createEditorialPdfStyles("Dark host regression");
+    // Electron paints @page margins with the BrowserWindow base color, which
+    // Obsidian derives from the active theme. Every page box must set paper.
+    for (const name of ["", " hanmark-cover", " hanmark-body"]) {
+      const block = new RegExp(`@page${name} \\{\\s*(?:size:[^;]+;\\s*margin:[^;]+;\\s*)?background: #FFFFFF;`, "iu");
+      assert.match(css, block, `@page${name} must paint the paper background`);
+    }
+  });
+
   it("isolates every Editorial PDF color from the active Obsidian theme", () => {
     const css = createEditorialPdfStyles("Theme regression");
     const palette = Array.from(

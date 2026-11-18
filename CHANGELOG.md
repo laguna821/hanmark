@@ -2,6 +2,10 @@
 
 Only versions published as GitHub Releases are listed as releases. The 2.x milestones below preserve the internal development path that was consolidated into the public 2.4.2 release.
 
+## 2.7.1
+
+- Editorial PDF: the paper around the text no longer turns black when Obsidian uses a dark theme. Chromium paints the page margins with the window background, which Obsidian takes from the theme, so the header and footer band of every body page came out dark. Every PDF page box now paints the paper color itself.
+
 ## 2.7.0
 
 - Replaced the pinned engine Kordoc 4.2.5 with Kordoc 4.15.7 and rewrote the build hardening for it (versioned replacement manifest, no COM or filesystem paths, one user-initiated process boundary). Kordoc's optional OCR code is never called and no model is downloaded.

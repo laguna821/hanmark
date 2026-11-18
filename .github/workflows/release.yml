@@ -2,7 +2,7 @@ name: Publish verified plugin
 
 on:
   push:
-    tags: ["2.7.0"]
+    tags: ["2.7.1"]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -80,5 +80,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           release/main.js release/manifest.json release/styles.css
           --verify-tag
-          --title "HanMark 2.7.0 — New Engine, Honest Conversion, and Institution Styles"
-          --notes-file "release-notes/2.7.0.md"
+          --title "HanMark 2.7.1 — Editorial PDF Paper Stays White in Dark Mode"
+          --notes-file "release-notes/2.7.1.md"
