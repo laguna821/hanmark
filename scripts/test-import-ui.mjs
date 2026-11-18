@@ -174,11 +174,11 @@ try {
   assert.match(await page.locator("#stage .modal-content > .setting-item .setting-item-description").first().innerText(), /옵시디언에서 고치기 쉬운 노트/u);
   await advanced.locator("summary").click();
 
-  // Defaults decided on 2026-11-18: Obsidian tables, script tags on, layout tables kept.
+  // Defaults decided on 2026-11-18: Obsidian tables, script tags on, layout tables unwrapped.
   assert.equal(await option("tables").inputValue(), "pipe");
   assert.deepEqual(await option("tables").locator("option").allInnerTexts(), await page.evaluate(() => ["pipe", "mixed", "html"].map((id) => document.querySelector(`[data-hanmark-import-option="tables"] option[value="${id}"]`).textContent)));
   assert.equal(await option("scriptTags").isChecked(), true);
-  assert.equal(await option("flattenLayout").isChecked(), false);
+  assert.equal(await option("flattenLayout").isChecked(), true);
   assert.equal(await option("memos").isChecked(), false);
   assert.equal(await option("imagesInFlow").isChecked(), false);
   // Each choice says what it costs on re-export; none mentions saving into the original.

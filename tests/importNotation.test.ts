@@ -50,14 +50,14 @@ const MERGED_AND_SIMPLE = [
 ].join("\n");
 
 describe("import notation chosen by the user (R-032)", () => {
-  it("defaults to Obsidian tables, script tags on, layout tables kept", () => {
+  it("defaults to Obsidian tables, script tags on, layout tables unwrapped", () => {
     assert.equal(DEFAULT_IMPORT_OPTIONS.tables, "pipe");
     assert.equal(DEFAULT_IMPORT_OPTIONS.scriptTags, true);
-    assert.equal(DEFAULT_IMPORT_OPTIONS.flattenLayout, false);
+    assert.equal(DEFAULT_IMPORT_OPTIONS.flattenLayout, true);
     assert.equal(DEFAULT_IMPORT_OPTIONS.memos, false);
     assert.equal(DEFAULT_IMPORT_OPTIONS.imagesInFlow, false);
     assert.deepEqual(toParseOptions(DEFAULT_IMPORT_OPTIONS), {
-      layoutTables: "keep",
+      layoutTables: "visual",
       scriptTags: true,
       tableFormat: "gfm"
     });
@@ -65,12 +65,12 @@ describe("import notation chosen by the user (R-032)", () => {
 
   it("maps the three table styles and never sends htmlTables with tableFormat gfm", () => {
     assert.deepEqual(toParseOptions({ ...DEFAULT_IMPORT_OPTIONS, tables: "mixed" }), {
-      layoutTables: "keep",
+      layoutTables: "visual",
       scriptTags: true,
       htmlCellLinks: true
     });
     assert.deepEqual(toParseOptions({ ...DEFAULT_IMPORT_OPTIONS, tables: "html" }), {
-      layoutTables: "keep",
+      layoutTables: "visual",
       scriptTags: true,
       htmlTables: true,
       htmlCellLinks: true

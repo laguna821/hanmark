@@ -46,7 +46,7 @@ describe("Kordoc 4.25.0 forced options and behaviour pins (R-029)", () => {
       const sent = kordocParseOptions(whitelisted) as Record<string, unknown>;
       assert.equal(sent.hancomFallback, false, preset);
       assert.equal(sent.ocr, false, preset);
-      assert.equal(sent.layoutTables, "keep", preset);
+      assert.equal(sent.layoutTables, preset === "form" ? "keep" : "visual", preset);
       assert.equal(sent.scriptTags, false, preset);
       for (const key of Object.keys(sent)) {
         assert.ok(

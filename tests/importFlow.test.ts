@@ -86,8 +86,8 @@ async function hwpxInput(name: string, markdown: string): Promise<ImportInput> {
   return { name, bytes: new Uint8Array(data) };
 }
 
-/** What the 3.0.0 defaults send: Obsidian tables, script tags, layout tables kept. */
-const NOTATION = { layoutTables: "keep", scriptTags: true, tableFormat: "gfm" } as const;
+/** What the 3.0.0 defaults send: Obsidian tables, script tags, layout tables unwrapped. */
+const NOTATION = { layoutTables: "visual", scriptTags: true, tableFormat: "gfm" } as const;
 
 describe("import options (2.7.0 W3)", () => {
   it("passes only the chosen notation for the default preset (R-032)", () => {

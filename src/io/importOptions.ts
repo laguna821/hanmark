@@ -58,7 +58,7 @@ export const DEFAULT_IMPORT_OPTIONS: Readonly<ImportOptions> = Object.freeze({
   images: true,
   tables: "pipe",
   scriptTags: true,
-  flattenLayout: false,
+  flattenLayout: true,
   memos: false,
   imagesInFlow: false,
   removeHeaderFooter: false,
