@@ -1165,6 +1165,16 @@ export default class HanmarkPlugin extends Plugin {
         templateHost: this,
         gateway: this.gateway,
         lookPicker: () => this.gongmunPickerHost(),
+        currentNote: () => {
+          const view = this.currentMarkdownView();
+          const file = view?.file;
+          if (!view || !file) return null;
+          return {
+            markdown: extractEditableBodyStrict(view.editor.getValue()),
+            title: file.basename,
+            images: { loader: createObsidianImageLoader(this.app, file), allowFailures: true }
+          };
+        },
         changed: (activeId) => {
           changed(activeId);
           this.refreshPreviews();

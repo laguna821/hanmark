@@ -25,7 +25,10 @@
     "test:hwp-convert": "node --import tsx scripts/test-hwp-convert.mjs",
     "test:hwp-convert-ui": "node scripts/test-hwp-convert-ui.mjs",
     "test:toolbar-ui": "node scripts/test-toolbar-ui.mjs",
-    "test:preview-ui": "node scripts/test-preview-ui.mjs"
+    "test:preview-ui": "node scripts/test-preview-ui.mjs",
+    "test:sample-look-ui": "node --import tsx scripts/test-sample-look-ui.mjs",
+    "test:sample-looks": "node --import tsx scripts/test-sample-looks.ts",
+    "test:pdf-look": "node --import tsx scripts/test-pdf-look.ts"
   },
   "keywords": [
     "hwp",

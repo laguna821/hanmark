@@ -138,16 +138,8 @@ export const incompatibleGongmunWarnings = () => [];
 export const measureTextWidth = () => 0;
 export const simulateWrap = () => ({ lines: 1 });
 export const hwpxToProfile = async () => ({ tables: [] });
-// The sample-look module (R-036) is linked into the windows but not driven here.
-const notInHarness = (name) => () => { throw new Error(name + " is not part of this harness"); };
-export const markdownToHwpx = notInHarness("markdownToHwpx");
-export const measurePdfLayout = notInHarness("measurePdfLayout");
-export const applyMeasuredLayout = notInHarness("applyMeasuredLayout");
-export const buildAgencyPack = notInHarness("buildAgencyPack");
-export const loadAgencyPack = notInHarness("loadAgencyPack");
-export const packTemplate = notInHarness("packTemplate");
-export const packRoleWarnings = () => [];
-export const resolvePackKind = notInHarness("resolvePackKind");
+// Making a look from a sample has its own script with the real engine.
+const sampleLookOnly = (name) => () => { throw new Error("Kordoc " + name + " is covered by test-sample-look-ui.mjs"); }; export const applyMeasuredLayout = sampleLookOnly("applyMeasuredLayout"); export const buildAgencyPack = sampleLookOnly("buildAgencyPack"); export const loadAgencyPack = sampleLookOnly("loadAgencyPack"); export const markdownToHwpx = sampleLookOnly("markdownToHwpx"); export const measurePdfLayout = sampleLookOnly("measurePdfLayout"); export const packRoleWarnings = sampleLookOnly("packRoleWarnings"); export const packTemplate = sampleLookOnly("packTemplate"); export const resolvePackKind = sampleLookOnly("resolvePackKind"); export const renderHwpxToSvg = sampleLookOnly("renderHwpxToSvg");
 `;
 
 const fixtures = {

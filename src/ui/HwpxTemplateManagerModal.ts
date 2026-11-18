@@ -409,16 +409,18 @@ export class HwpxTemplateManagerModal extends Modal {
     if (this.gateway) {
       const add = section.createDiv({ cls: "hanmark-template-add" });
       add.createEl("button", { text: t("gongmun.form.new") }).onclick = () => this.openGongmunStyle(null);
+      add.createEl("button", { text: t("gongmun.sample.title"), attr: { id: "hanmark-form-from-sample" } }).onclick = () => this.openGongmunStyle(null, true);
     }
   }
 
-  private openGongmunStyle(id: string | null): void {
+  private openGongmunStyle(id: string | null, startFromSample = false): void {
     if (!this.gateway) return;
     new GongmunStyleModal(
       this.app,
       {
         templateHost: this.plugin,
         gateway: this.gateway,
+        startFromSample,
         changed: () => {
           this.onChanged();
           this.render();

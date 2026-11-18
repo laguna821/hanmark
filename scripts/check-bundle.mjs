@@ -31,7 +31,10 @@ const hayroWasmData = await readFile(new URL("../src/io/hayroWasmData.ts", impor
 // (docs/research/R-018 and R-029 change logs).
 // R-033: the Pele diagram engine (MIT, 729 KB as published, all diagram types) and the
 // diagram stage add about 763 KB, so Mermaid blocks are drawn in every export offline.
-const maximumBundleBytes = 6_230_000;
+// R-036: making a look from a sample (the measuring of a sample, the window panel and
+// its 64 messages in two languages, and the engine's PDF layout measuring, which is now
+// reachable) adds about 75 KB: 6,188,902 -> 6,264,273 bytes.
+const maximumBundleBytes = 6_450_000;
 const pinnedKordocVersion = packageManifest.dependencies?.kordoc;
 const installedKordoc = JSON.parse(
   await readFile(new URL("../node_modules/kordoc/package.json", import.meta.url), "utf8")
