@@ -15,7 +15,8 @@ import {
   readSampleFacts,
   removeLeftoverText
 } from "../src/io/sampleLook";
-import { measureSample, measuredStyleOptions } from "../src/io/sampleMeasure";
+import { measureSample, measuredStyleOptions, trustedBody } from "../src/io/sampleMeasure";
+import { believablePdfMargins } from "../src/io/sampleLook";
 import { generateValidatedHwpx } from "../src/io/kordocEngine";
 import { gongmunGenerateOptions, planGongmunExport } from "../src/io/gongmunExport";
 import {
@@ -218,7 +219,6 @@ describe("values measured from a sample (R-036)", () => {
     const plugin = host();
     const record = putGongmunTemplateInMemory(plugin, {
       ...newGongmunTemplateRecord(plugin, "안내문 견본", learned.options, "report"),
-      ...(learned.tableStyle ? { tableStyle: learned.tableStyle } : {}),
       sample: learned.sample
     });
     const options = gongmunGenerateOptions(planGongmunExport(APP, FILE, plugin, undefined, record.id));
@@ -302,5 +302,47 @@ describe("equations as Hangul equation objects (R-036)", () => {
     const official = await generateValidatedHwpx(MATH, { inlineMath: true, gongmun: { preset: "report" } });
     const officialSection = await (await JSZip.loadAsync(official.data)).file("Contents/section0.xml")!.async("string");
     assert.equal((officialSection.match(/<hp:equation\b/gu) ?? []).length, 1);
+  });
+});
+
+describe("a look from a report PDF", () => {
+  it("takes side margins only where they can be believed", () => {
+    const frame = { top: 15, bottom: 15, left: 20, right: 20 };
+    // Justified lines reach the right edge: both sides are taken, top and bottom never.
+    assert.deepEqual(believablePdfMargins({ top: 28, bottom: 32.5, left: 22, right: 22.5 }, frame), {
+      margins: { top: 15, bottom: 15, left: 22, right: 22.5 },
+      taken: { left: 22, right: 22.5 }
+    });
+    // Short item lines: the right "margin" is only where text happened to end.
+    assert.deepEqual(believablePdfMargins({ top: 29.5, bottom: 60, left: 22, right: 47.5 }, frame), {
+      margins: { top: 15, bottom: 15, left: 22, right: 20 },
+      taken: { left: 22 }
+    });
+    assert.equal(believablePdfMargins({ top: 20, bottom: 20, left: 82, right: 82 }, frame), undefined);
+    assert.equal(believablePdfMargins(undefined, frame), undefined);
+  });
+});
+
+describe("a sample that is all tables", () => {
+  const margins = { top: 15, bottom: 5, left: 20, right: 20 };
+  it("does not take its one title line as the body shape", () => {
+    const measure = {
+      body: { font: "HY중고딕", pt: 18, bold: true, lineSpacing: 145, count: 1 },
+      levels: {},
+      table: { font: "HY중고딕", pt: 10, headerFill: "#DEF6ED" },
+      marginsMm: margins
+    };
+    assert.equal(trustedBody(measure), undefined);
+    const { options, items } = measuredStyleOptions(measure);
+    assert.equal(options.bodyPt, undefined, "the frame keeps its body size");
+    assert.equal(options.lineSpacing, undefined);
+    assert.equal(options.fonts?.body, "HY중고딕", "the tables' font is the document's font");
+    assert.deepEqual(options.levels?.["0"], { font: "HY중고딕" });
+    assert.deepEqual(items.find((item) => item.part === "body"), { part: "body", source: "table", value: "HY중고딕" });
+    assert.deepEqual(options.margins, margins);
+  });
+  it("keeps a lone body line of body size, and any repeated shape", () => {
+    assert.ok(trustedBody({ body: { font: "휴먼명조", pt: 13, bold: true, lineSpacing: 180, count: 1 }, levels: {}, marginsMm: margins }));
+    assert.ok(trustedBody({ body: { font: "HY헤드라인M", pt: 16, bold: false, count: 4 }, levels: {}, marginsMm: margins }));
   });
 });

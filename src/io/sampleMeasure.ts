@@ -222,12 +222,28 @@ export async function measureSample(hwpx: Uint8Array): Promise<SampleMeasure> {
 /** One line of the summary: a part of the look, where its value came from, and the value. */
 export interface MeasuredItem {
   part: "margins" | "body" | "lineSpacing" | "level0" | "level1" | "level2" | "level3" | "ref" | "tableFont" | "tableHeaderFill";
-  /** "sample": read from the sample; "body": the sample has no such part, the body shape is used; "none": nothing to use, the frame's own shape stays. */
-  source: "sample" | "body" | "none";
+  /**
+   * "sample": read from the sample; "body": the sample has no such part, the body font is used;
+   * "table": the sample has no running text, the font of its tables is used and the frame keeps
+   * its size; "none": nothing to use, the frame's own shape stays.
+   */
+  source: "sample" | "body" | "table" | "none";
   value: string;
 }
 
 const round = (value: number): number => Math.round(value * 10) / 10;
+
+/** Body text of an office document is not larger than this; one lone bigger line is a title. */
+const LONE_BODY_MAX_PT = 15;
+
+/**
+ * The body shape, when it can be believed. A form that is all tables has one line of
+ * running text, its title; taking that as the body would set every paragraph in title size.
+ */
+export function trustedBody(measure: SampleMeasure): MeasuredShape | undefined {
+  const body = measure.body;
+  return body && !(body.count < 2 && body.pt > LONE_BODY_MAX_PT) ? body : undefined;
+}
 
 /**
  * Official-document options that carry the measured values. Levels the sample does
@@ -244,7 +260,9 @@ export function measuredStyleOptions(measure: SampleMeasure): { options: Gongmun
   } else {
     items.push({ part: "margins", source: "none", value: "" });
   }
-  const body = measure.body;
+  const body = trustedBody(measure);
+  // Where there is no running text, the tables' font is the document's font.
+  const font = body?.font ?? measure.table?.font;
   if (body) {
     options.fonts = { ...options.fonts, body: body.font };
     options.bodyPt = round(body.pt);
@@ -255,6 +273,9 @@ export function measuredStyleOptions(measure: SampleMeasure): { options: Gongmun
     } else {
       items.push({ part: "lineSpacing", source: "none", value: "" });
     }
+  } else if (font) {
+    options.fonts = { ...options.fonts, body: font };
+    items.push({ part: "body", source: "table", value: font }, { part: "lineSpacing", source: "none", value: "" });
   } else {
     items.push({ part: "body", source: "none", value: "" }, { part: "lineSpacing", source: "none", value: "" });
   }
@@ -265,10 +286,10 @@ export function measuredStyleOptions(measure: SampleMeasure): { options: Gongmun
     if (level) {
       levels[key] = { font: level.font, pt: round(level.pt), ...(level.bold ? { bold: true } : {}) };
       items.push({ part, source: "sample", value: `${level.marker} ${level.font} ${round(level.pt)}pt` });
-    } else if (body) {
+    } else if (font) {
       // The font only: the frame keeps its own size steps around the body size.
-      levels[key] = { font: body.font };
-      items.push({ part, source: "body", value: body.font });
+      levels[key] = { font };
+      items.push({ part, source: "body", value: font });
     } else {
       items.push({ part, source: "none", value: "" });
     }
@@ -280,8 +301,8 @@ export function measuredStyleOptions(measure: SampleMeasure): { options: Gongmun
     options.fonts = { ...options.fonts, ref: measure.ref.font };
     items.push({ part: "ref", source: "sample", value: `${measure.ref.font} ${round(measure.ref.pt)}pt` });
   } else {
-    items.push({ part: "ref", source: body ? "body" : "none", value: body ? body.font : "" });
-    if (body) options.fonts = { ...options.fonts, ref: body.font };
+    items.push({ part: "ref", source: font ? "body" : "none", value: font ?? "" });
+    if (font) options.fonts = { ...options.fonts, ref: font };
   }
   if (measure.table?.font) {
     options.fonts = { ...options.fonts, table: measure.table.font };

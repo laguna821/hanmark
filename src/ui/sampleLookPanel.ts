@@ -152,7 +152,12 @@ export function renderSampleLookPanel(container: HTMLElement, input: SampleLookP
     not.createEl("strong", { text: t("gongmun.sample.summary.notTaken") });
     const notList = not.createEl("ul", { cls: "hanmark-sample-look-list", attr: { id: "hanmark-sample-not-taken" } });
     for (const item of lacking) {
-      const why = item.source === "body" ? t("gongmun.sample.source.body", { font: item.value }) : t("gongmun.sample.source.none");
+      const why =
+        item.source === "body"
+          ? t("gongmun.sample.source.body", { font: item.value })
+          : item.source === "table"
+            ? t("gongmun.sample.source.table", { font: item.value })
+            : t("gongmun.sample.source.none");
       notList.createEl("li", { text: `${tKey(PART_LABELS[item.part])}: ${why}` });
     }
     if (sample.missing.length) {

@@ -113,6 +113,7 @@ export class GongmunStyleModal extends Modal {
   private sampleBusy = false;
   private sampleMessage: { text: string; error: boolean } | undefined;
   private pdfApplied: string[] | undefined;
+  private cleaned: { key: string; source: string; sample: SampleLookRecord } | undefined;
 
   /**
    * `initialPreset` is the document type a new form starts with (the type chosen in
@@ -412,6 +413,7 @@ export class GongmunStyleModal extends Modal {
           box.checked = this.removeChoices.has(texts[index] ?? "");
         });
         if (all) all.checked = texts.every((item) => this.removeChoices.has(item));
+        this.schedulePreview();
       },
       onExport: () => void this.exportPack(),
       onDetach: () => {
@@ -481,8 +483,7 @@ export class GongmunStyleModal extends Modal {
   /** Puts a learned (or imported) look into the form: the pack, the measured values, the table look. */
   private async applyLearned(imported: ImportedLook, fileName: string, stem: string, sampleBytes: Uint8Array | null): Promise<void> {
     const { learned, shared } = imported;
-    const { tableStyle: _old, ...rest } = this.draft;
-    this.draft = { ...rest, sample: learned.sample, ...(learned.tableStyle ? { tableStyle: learned.tableStyle } : {}) };
+    this.draft = { ...this.draft, sample: learned.sample };
     const options = learned.options as Record<string, unknown>;
     for (const [key, value] of Object.entries(options)) {
       const current = this.raw[key];
@@ -516,7 +517,21 @@ export class GongmunStyleModal extends Modal {
 
   private async learnFromPdf(bytes: Uint8Array): Promise<void> {
     const learned = await learnLookFromPdf(bytes, { preset: this.previewPreset });
-    if (!learned.applied.length) {
+    const taken = learned.taken;
+    const levelNames = ["gongmun.sample.role.L0", "gongmun.sample.role.L1", "gongmun.sample.role.L2", "gongmun.sample.role.L3"] as const;
+    const lines = taken.levels
+      .filter((item) => item.level >= 0 && item.level < levelNames.length)
+      .map((item) => `${t(levelNames[item.level])}: ${[item.font, item.pt ? `${item.pt}pt` : ""].filter(Boolean).join(" ")}`);
+    if (taken.lineSpacing !== undefined) lines.push(`${t("gongmun.sample.part.lineSpacing")}: ${taken.lineSpacing}%`);
+    if (taken.margins) {
+      lines.push(
+        taken.margins.right !== undefined
+          ? t("gongmun.sample.pdf.sides", { left: taken.margins.left, right: taken.margins.right })
+          : t("gongmun.sample.pdf.left", { left: taken.margins.left })
+      );
+    }
+    if (taken.bandColor) lines.push(`${t("gongmun.sample.role.band")}: ${taken.bandColor}`);
+    if (!lines.length) {
       this.sampleMessage = { text: t("gongmun.sample.pdf.none"), error: true };
       return;
     }
@@ -530,7 +545,7 @@ export class GongmunStyleModal extends Modal {
           ? { ...(current as Record<string, unknown>), ...(structuredClone(value) as Record<string, unknown>) }
           : structuredClone(value);
     }
-    this.pdfApplied = learned.applied;
+    this.pdfApplied = lines;
     await this.checkFonts();
     this.sampleMessage = { text: t("gongmun.sample.pdf.applied"), error: false };
   }
@@ -538,7 +553,12 @@ export class GongmunStyleModal extends Modal {
   /** The stored sample with the chosen fixed text removed. */
   private async cleanedSample(): Promise<SampleLookRecord | undefined> {
     const sample = this.draft.sample;
-    return sample && this.removeChoices.size ? removeLeftoverText(sample, [...this.removeChoices]) : sample;
+    if (!sample || !this.removeChoices.size) return sample;
+    const key = `${sample.pack.length}:${sample.use}:${[...this.removeChoices].sort().join("\u0000")}`;
+    if (this.cleaned?.key !== key || this.cleaned.source !== sample.pack) {
+      this.cleaned = { key, source: sample.pack, sample: await removeLeftoverText(sample, [...this.removeChoices]) };
+    }
+    return this.cleaned.sample;
   }
 
   private async exportPack(): Promise<void> {
@@ -573,6 +593,11 @@ export class GongmunStyleModal extends Modal {
       const rendered = await renderHwpxToSvg(bytesAsArrayBuffer(bytes), { reflow: true });
       if (this.samplePaperEl !== target || !target.isConnected) return;
       const svg = appendSanitizedSvg(target, rendered.svg);
+      // The drawing holds every page; show the first one.
+      const page = sample.facts.pageMm;
+      if (rendered.width > 0 && page.width > 0 && page.height > 0) {
+        svg.setAttribute("viewBox", `0 0 ${rendered.width} ${Math.round(((rendered.width * page.height) / page.width) * 100) / 100}`);
+      }
       svg.setAttribute("width", "100%");
       svg.setAttribute("height", "auto");
     } catch (error: unknown) {
@@ -582,8 +607,9 @@ export class GongmunStyleModal extends Modal {
   }
 
   /** Generation options of the draft, the way an export with the saved form would get them. */
-  private previewOptions(): GenerateHwpxOptions {
-    const sample = this.draft.sample;
+  private async previewOptions(): Promise<GenerateHwpxOptions> {
+    // With the fixed text the user chose to remove already gone, as it will be after saving.
+    const sample = await this.cleanedSample();
     if (sample?.use === "template") return { sampleLook: sample };
     const finish = sample ? sampleLookFinish(sample) : undefined;
     return {
@@ -680,7 +706,7 @@ export class GongmunStyleModal extends Modal {
       // With a look from a sample the user's own note is drawn, so the two papers can be compared.
       const note = this.draft.sample ? this.host.currentNote?.() : null;
       const result = await renderQuickHwpxPreview(note?.markdown.trim() ? note.markdown : PREVIEW_SAMPLE, {
-        ...this.previewOptions(),
+        ...(await this.previewOptions()),
         ...(note ? { gongmunTitle: note.title, ...(note.images ? { images: note.images } : {}) } : {})
       });
       if (version !== this.previewVersion || !target.isConnected) return;

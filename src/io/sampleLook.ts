@@ -2,14 +2,12 @@ import JSZip from "jszip";
 import {
   applyMeasuredLayout,
   buildAgencyPack,
-  hwpxToProfile,
   loadAgencyPack,
   markdownToHwpx,
   measurePdfLayout,
   packRoleWarnings,
   packTemplate,
   resolvePackKind,
-  type FormatProfile,
   type GongmunOptions,
   type PdfLayoutSpec
 } from "kordoc";
@@ -60,7 +58,7 @@ export interface SampleLookRecord {
    * - "template": the engine fills the emptied sample, so every shape the sample has is
    *   the sample's own; HanMark's official-document outline and finishing do not run.
    * - "measured": the frame's own structure with the values measured from the sample
-   *   (margins, body and level fonts and sizes, line spacing, table look); outline and
+   *   (margins, body and level fonts and sizes, line spacing, table header fill); outline and
    *   finishing run as for any form.
    */
   use: SampleLookUse;
@@ -239,6 +237,116 @@ async function recordFromPackBytes(bytes: Uint8Array): Promise<SampleLookRecord>
   }
 }
 
+const XML_TOKEN = /<hp:subList\b[^>]*>|<\/hp:subList>|<hp:p\b[^>]*>|<\/hp:p>|<hp:t\b[^>]*\/>|<hp:t\b[^>]*>([\s\S]*?)<\/hp:t>/gu;
+const PLAIN_PARAGRAPH = /^(?:<\/?hp:(?:p|run|t|linesegarray|lineseg|tab|lineBreak|fwSpace|nbSpace)\b[^>]*>|[^<])*$/u;
+/** Text the engine writes into an emptied sample to mark where a part goes. */
+const ENGINE_PLACEHOLDERS = new Set(["문서 제목", "□ 첫째 단계 항목", "○ 둘째 단계 항목", "- 셋째 단계 항목", "· 넷째 단계 항목", "기호 항목", "부호 없는 본문 문단", "참고 문구"]); // i18n-data: placeholder text Kordoc writes into a template
+
+const plainText = (xml: string): string =>
+  xml.replace(/<[^>]+>/gu, "").replace(/&lt;/gu, "<").replace(/&gt;/gu, ">").replace(/&quot;/gu, '"').replace(/&apos;/gu, "'").replace(/&amp;/gu, "&");
+const oneLine = (text: string): string => text.replace(/\s+/gu, " ").trim();
+
+interface TextParagraph {
+  start: number;
+  end: number;
+  /** The paragraph's own text, without the text of tables inside it. */
+  text: string;
+  runs: Array<{ start: number; end: number }>;
+  /** The cell (or the page body) the paragraph sits in. */
+  container: number;
+  nested: boolean;
+}
+
+/** Paragraphs of one section, each with only its own text runs. */
+function textParagraphs(xml: string): TextParagraph[] {
+  const done: TextParagraph[] = [];
+  const open: Array<TextParagraph & { parts: string[] }> = [];
+  const containers: number[] = [0];
+  let serial = 0;
+  for (const match of xml.matchAll(XML_TOKEN)) {
+    const token = match[0];
+    const at = match.index;
+    if (token.startsWith("<hp:subList")) containers.push(++serial);
+    else if (token === "</hp:subList>") { if (containers.length > 1) containers.pop(); }
+    else if (token.startsWith("<hp:p")) {
+      const parent = open[open.length - 1];
+      if (parent) parent.nested = true;
+      open.push({ start: at, end: at, text: "", runs: [], container: containers[containers.length - 1], nested: false, parts: [] });
+    } else if (token === "</hp:p>") {
+      const paragraph = open.pop();
+      if (!paragraph) continue;
+      const { parts, ...rest } = paragraph;
+      done.push({ ...rest, end: at + token.length, text: oneLine(parts.join("")) });
+    } else if (match[1] !== undefined) {
+      const paragraph = open[open.length - 1];
+      if (!paragraph) continue;
+      paragraph.parts.push(plainText(match[1]));
+      const bodyStart = at + token.indexOf(">") + 1;
+      paragraph.runs.push({ start: bodyStart, end: at + token.length - "</hp:t>".length });
+    }
+  }
+  return done;
+}
+
+const lettersIn = (text: string): number => (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
+
+async function sectionXmls(hwpx: Uint8Array): Promise<string[]> {
+  const zip = await JSZip.loadAsync(hwpx);
+  const names = Object.keys(zip.files).filter((name) => /^Contents\/section\d+\.xml$/u.test(name)).sort();
+  return Promise.all(names.map(async (name) => (await zip.file(name)?.async("string")) ?? ""));
+}
+
+/**
+ * Whole paragraphs of the sample that are still in the emptied template: slogans,
+ * letterheads, subtitle lines. The engine lists such text run by run and stops after
+ * a dozen; a reader thinks in lines, and removing must take the whole line.
+ */
+async function fixedParagraphTexts(template: Uint8Array, sample: Uint8Array): Promise<string[]> {
+  const inSample = new Set<string>();
+  for (const xml of await sectionXmls(sample)) for (const paragraph of textParagraphs(xml)) if (paragraph.text) inSample.add(paragraph.text);
+  const found: string[] = [];
+  for (const xml of await sectionXmls(template)) {
+    for (const paragraph of textParagraphs(xml)) {
+      const text = paragraph.text;
+      if (lettersIn(text) < 3 || ENGINE_PLACEHOLDERS.has(text) || !inSample.has(text) || found.includes(text)) continue;
+      found.push(text);
+    }
+  }
+  return found;
+}
+
+/**
+ * Takes fixed lines out of one section. A plain line that is not alone in its cell is
+ * removed whole; any other keeps its paragraph (and what is anchored in it) and loses its text.
+ */
+function withoutParagraphs(xml: string, wanted: ReadonlySet<string>, removed: Set<string>): string {
+  const paragraphs = textParagraphs(xml);
+  const hits = paragraphs.filter((paragraph) => paragraph.text && wanted.has(paragraph.text));
+  if (!hits.length) return xml;
+  const left = new Map<number, number>();
+  for (const paragraph of paragraphs) left.set(paragraph.container, (left.get(paragraph.container) ?? 0) + 1);
+  const cuts: Array<{ start: number; end: number }> = [];
+  for (const paragraph of hits) {
+    removed.add(paragraph.text);
+    const alone = (left.get(paragraph.container) ?? 0) <= 1;
+    if (!paragraph.nested && !alone && PLAIN_PARAGRAPH.test(xml.slice(paragraph.start, paragraph.end))) {
+      left.set(paragraph.container, (left.get(paragraph.container) ?? 0) - 1);
+      cuts.push({ start: paragraph.start, end: paragraph.end });
+    } else {
+      cuts.push(...paragraph.runs);
+    }
+  }
+  cuts.sort((a, b) => b.start - a.start);
+  let out = xml;
+  let limit = Number.POSITIVE_INFINITY;
+  for (const cut of cuts) {
+    if (cut.end > limit) continue;
+    out = out.slice(0, cut.start) + out.slice(cut.end);
+    limit = cut.start;
+  }
+  return out;
+}
+
 /**
  * A HWPX saved by older generators (HanMark 2.7 among them) has no version.xml. The
  * engine copies the sample's package, so a document made from such a sample would fail
@@ -274,7 +382,9 @@ export async function learnLookFromHwpx(sample: Uint8Array, name: string): Promi
     throw new SampleLookError("engine", error instanceof Error ? error.message : String(error));
   }
   const record = await recordFromPackBytes(built.pack);
-  return { ...record, facts };
+  const lines = await fixedParagraphTexts((await openSampleLook(record)).template, sample);
+  const runs = record.leftover.filter((text) => !lines.some((line) => line.includes(oneLine(text))));
+  return { ...record, facts, leftover: [...lines, ...runs].map((text) => text.slice(0, 400)).slice(0, 60) };
 }
 
 /** What learning from one sample gives: the pack, the measured values, and the table look. */
@@ -287,8 +397,6 @@ export interface LearnedLook {
   measure: SampleMeasure;
   /** A trial document made from the sample came out in the sample's own shapes. */
   templateFits: boolean;
-  /** Borders and fills of the sample's tables, by table order (hwpxToProfile). */
-  tableStyle?: FormatProfile;
 }
 
 /** Learns everything HanMark can take from one sample HWPX. */
@@ -296,13 +404,6 @@ export async function learnLook(sample: Uint8Array, name: string): Promise<Learn
   const record = await learnLookFromHwpx(sample, name);
   const measure = await measureSample(sample);
   const measured = measuredStyleOptions(measure);
-  let tableStyle: FormatProfile | undefined;
-  try {
-    const profile = await hwpxToProfile(sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength) as ArrayBuffer);
-    if (profile.tables.length) tableStyle = profile;
-  } catch {
-    tableStyle = undefined;
-  }
   const templateFits =
     suggestedSampleUse(record.roles) === "template" && (await templateKeepsSampleShapes((await openSampleLook(record)).template, measure));
   const headerFill = measure.table?.headerFill;
@@ -311,19 +412,19 @@ export async function learnLook(sample: Uint8Array, name: string): Promise<Learn
     options: measured.options,
     items: measured.items,
     measure,
-    templateFits,
-    ...(tableStyle ? { tableStyle } : {})
+    templateFits
   };
 }
 
 /**
  * Removes chosen fixed text (letterheads, slogans) from the emptied sample inside a
- * look, so a shared pack does not carry it. Text is matched run by run, exactly as
- * the engine listed it.
+ * look, so a shared pack does not carry it. A whole line found at learning time goes
+ * as a line; text the engine listed run by run is matched run by run.
  */
 export async function removeLeftoverText(record: SampleLookRecord, texts: readonly string[]): Promise<SampleLookRecord> {
   const wanted = new Set(texts.map((text) => text.trim()).filter(Boolean));
   if (!wanted.size) return record;
+  const wantedLines = new Set([...wanted].map(oneLine));
   const packBytes = exportSampleLookPack(record);
   await assertSafePack(packBytes);
   const pack = await JSZip.loadAsync(packBytes);
@@ -343,7 +444,11 @@ export async function removeLeftoverText(record: SampleLookRecord, texts: readon
         const item = inner.files[part];
         if (item.dir) continue;
         if (/^Contents\/.+\.xml$/u.test(part)) {
-          const xml = (await item.async("string")).replace(/<hp:t\b([^>]*)>([\s\S]*?)<\/hp:t>/gu, (whole: string, attrs: string, body: string) => {
+          const source = await item.async("string");
+          const lineRemoved = new Set<string>();
+          const withoutLines = /^Contents\/section\d+\.xml$/u.test(part) ? withoutParagraphs(source, wantedLines, lineRemoved) : source;
+          for (const text of wanted) if (lineRemoved.has(oneLine(text))) removed.add(text);
+          const xml = withoutLines.replace(/<hp:t\b([^>]*)>([\s\S]*?)<\/hp:t>/gu, (whole: string, attrs: string, body: string) => {
             const text = decode(body);
             if (!wanted.has(text)) return whole;
             removed.add(text);
@@ -398,7 +503,7 @@ function normalizeMeasuredItems(value: unknown): MeasuredItem[] {
     if (typeof item !== "object" || item === null) continue;
     const data = item as Record<string, unknown>;
     if (typeof data.part !== "string" || !MEASURED_PARTS.includes(data.part)) continue;
-    const source = data.source === "sample" || data.source === "body" ? data.source : "none";
+    const source = data.source === "sample" || data.source === "body" || data.source === "table" ? data.source : "none";
     out.push({ part: data.part as MeasuredItem["part"], source, value: typeof data.value === "string" ? data.value.slice(0, 120) : "" });
   }
   return out;
@@ -565,6 +670,37 @@ export interface PdfLookResult {
   applied: string[];
   warnings: string[];
   spec: PdfLayoutSpec;
+  /** What HanMark put into the options, for the summary. */
+  taken: PdfLookTaken;
+}
+
+export interface PdfLookTaken {
+  levels: Array<{ level: number; font?: string; pt?: number }>;
+  lineSpacing?: number;
+  /** Side margins in mm. The right one only when lines reach the edge. */
+  margins?: { left: number; right?: number };
+  bandColor?: string;
+}
+
+/** How far the measured right margin may be from the left one and still be believed. */
+const PDF_SIDE_TOLERANCE_MM = 5;
+
+type Margins = { top: number; bottom: number; left: number; right: number };
+
+/**
+ * Which margins measured from a PDF can be used. A PDF shows where text lies, not
+ * where the margins are. The left edge of item lines is the left margin; the right
+ * edge is the right margin only when lines run to it (then both sides are about
+ * equal); the top and bottom are never known. So the frame's own margins stay, with
+ * the sides replaced where they can be believed.
+ */
+export function believablePdfMargins(measured: Margins | undefined, frame: Margins): { margins: Margins; taken: { left: number; right?: number } } | undefined {
+  if (!measured || !(measured.left >= 5 && measured.left <= 60)) return undefined;
+  const rightKnown = Math.abs(measured.right - measured.left) <= PDF_SIDE_TOLERANCE_MM;
+  return {
+    margins: { top: frame.top, bottom: frame.bottom, left: measured.left, right: rightKnown ? measured.right : frame.right },
+    taken: { left: measured.left, ...(rightKnown ? { right: measured.right } : {}) }
+  };
 }
 
 /** Measures a report PDF and fills official-document options; nothing of the PDF is kept. */
@@ -577,5 +713,23 @@ export async function learnLookFromPdf(pdf: Uint8Array, base: GongmunOptions): P
     throw new SampleLookError("engine", error instanceof Error ? error.message : String(error));
   }
   const result = applyMeasuredLayout(base, spec);
-  return { options: result.gongmun, applied: result.applied, warnings: [...spec.warnings, ...result.warnings], spec };
+  const options: GongmunOptions = { ...result.gongmun };
+  const taken: PdfLookTaken = { levels: [] };
+  for (const [key, level] of Object.entries(options.levels ?? {})) {
+    if (level && (level.font || level.pt)) taken.levels.push({ level: Number(key), ...(level.font ? { font: level.font } : {}), ...(level.pt ? { pt: level.pt } : {}) });
+  }
+  taken.levels.sort((a, b) => a.level - b.level);
+  if (spec.lineSpacing !== null && options.lineSpacing !== undefined) taken.lineSpacing = options.lineSpacing;
+  if (spec.chapterFill && options.bandColor) taken.bandColor = options.bandColor;
+  delete options.margins;
+  if (spec.edges && result.gongmun.margins) {
+    const frame =
+      base.margins ?? (await readSampleFacts(new Uint8Array(await markdownToHwpx("", { gongmun: { preset: base.preset } })))).marginsMm;
+    const sides = believablePdfMargins(result.gongmun.margins, frame);
+    if (sides) {
+      options.margins = sides.margins;
+      taken.margins = sides.taken;
+    }
+  }
+  return { options, applied: result.applied, warnings: [...spec.warnings, ...result.warnings], spec, taken };
 }

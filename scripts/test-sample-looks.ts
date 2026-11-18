@@ -12,7 +12,7 @@ import type { App, TFile } from "obsidian";
 import { gongmunGenerateOptions, planGongmunExport } from "../src/io/gongmunExport";
 import { newGongmunTemplateRecord, putGongmunTemplateInMemory, type TemplateLibraryHost } from "../src/io/templateLibrary";
 import { learnLook } from "../src/io/sampleLook";
-import { measureSample, type SampleMeasure } from "../src/io/sampleMeasure";
+import { measureSample, trustedBody, type SampleMeasure } from "../src/io/sampleMeasure";
 
 const NOTE = [
   "# 2027학년도 AI 미디어 교육과정 개편 계획", "",
@@ -43,7 +43,7 @@ function contentShapes(measure: SampleMeasure): Array<{ font: string; pt: number
 
 function compare(sample: SampleMeasure, made: SampleMeasure): Record<"margins" | "body" | "lineSpacing" | "tableFill", Check> {
   const shapes = contentShapes(made);
-  const body = sample.body;
+  const body = trustedBody(sample);
   return {
     margins: same(sample.marginsMm, made.marginsMm) ? "일치" : "불일치",
     // The note's content must use the sample's body shape wherever the sample has no level of its own.
@@ -72,7 +72,6 @@ async function main(): Promise<void> {
       const host: TemplateLibraryHost = { settings: {}, saveSettings: async () => {} };
       const record = putGongmunTemplateInMemory(host, {
         ...newGongmunTemplateRecord(host, name, learned.options, "report"),
-        ...(learned.tableStyle ? { tableStyle: learned.tableStyle } : {}),
         sample: learned.sample
       });
       const viaFrame = (): ReturnType<typeof generateValidatedHwpx> =>
@@ -97,9 +96,10 @@ async function main(): Promise<void> {
       await writeFile(`${out}/${safe}.note-in-this-look.svg`, render.svg);
       await writeFile(`${out}/${safe}.note-in-this-look.hwpx`, Buffer.from(chosen.data));
       const levels = (["0", "1", "2", "3"] as const).filter((key) => sample.levels[key]).map((key) => sample.levels[key]!.marker).join(" ") || "없음";
-      const bodyText = sample.body ? `${sample.body.font} ${sample.body.pt}pt` : "";
+      const believed = trustedBody(sample);
+    const bodyText = believed ? `${believed.font} ${believed.pt}pt` : sample.body ? `(제목 한 줄뿐: ${sample.body.font} ${sample.body.pt}pt)` : "";
       rows.push(
-        `| ${name} | ${learned.sample.use === "template" ? "견본 그대로" : "잰 값으로"} | ${after.margins} | ${bodyText}: ${before.body} → ${after.body} | ${sample.body?.lineSpacing ?? ""}%: ${before.lineSpacing} → ${after.lineSpacing} | ${sample.table?.headerFill ?? ""} ${after.tableFill} | ${levels} | ${learned.sample.leftover.length} |`
+        `| ${name} | ${learned.sample.use === "template" ? "견본 그대로" : "잰 값으로"} | ${after.margins} | ${bodyText}: ${before.body} → ${after.body} | ${believed?.lineSpacing ?? ""}%: ${before.lineSpacing} → ${after.lineSpacing} | ${sample.table?.headerFill ?? ""} ${after.tableFill} | ${levels} | ${learned.sample.leftover.length} |`
       );
       console.log(JSON.stringify({ name, use: learned.sample.use, templateFits: learned.templateFits, repeatable, pages: render.pageCount, sampleBody: sample.body, madeBody: madeMeasure.body, madeLevels: Object.fromEntries(Object.entries(madeMeasure.levels).map(([key, shape]) => [key, `${shape.font} ${shape.pt}`])), items: learned.items.map((item) => `${item.part}:${item.source}`).join(" ") }));
     } catch (error: unknown) {

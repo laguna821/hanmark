@@ -8,6 +8,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { markdownToHwpx, renderHwpxToSvg } from "kordoc";
 import { loadHardenedKordocBundle } from "../tests/helpers/hardenedKordocBundle";
+import { believablePdfMargins } from "../src/io/sampleLook";
 
 const NOTE = [
   "# 2027학년도 교육과정 개편 계획", "",
@@ -73,7 +74,8 @@ async function main(): Promise<void> {
   for (const file of extra) made.push({ name: path.basename(file), file });
 
   const bundle = await loadHardenedKordocBundle<{ measure(bytes: Uint8Array, preset: string): Promise<Measured> }>(ENTRY);
-  const rows = ["| PDF | 쪽 | 잰 여백(mm) | 줄간격 | 단계(부호·글꼴·크기) | 장 번호칸 색 | 적용 항목 | 경고 |", "|---|---|---|---|---|---|---|---|"];
+  const rows = ["| PDF | 쪽 | 글이 놓인 범위(mm, 위/아래/왼쪽/오른쪽) | HanMark가 쓰는 여백 | 줄간격 | 단계(부호·글꼴·크기) | 장 번호칸 색 | 경고 |", "|---|---|---|---|---|---|---|---|"];
+  const frame = { top: 0, bottom: 0, left: 0, right: 0 };
   try {
     for (const item of made) {
       const bytes = new Uint8Array(await readFile(item.file));
@@ -81,7 +83,10 @@ async function main(): Promise<void> {
         const result = await bundle.runtime.measure(bytes, "report");
         const edges = result.spec.edges ? `${result.spec.edges.top}/${result.spec.edges.bottom}/${result.spec.edges.left}/${result.spec.edges.right}` : "못 잼";
         const levels = result.spec.levels.map((level) => `${level.marker} ${level.font ?? `(${level.pdfFont})`} ${level.pt}`).join(", ") || "못 잼";
-        rows.push(`| ${item.name} | ${result.spec.pageCount} | ${edges}${item.expected ? ` (만든 값 ${JSON.stringify((item.expected as { margins?: unknown }).margins)})` : ""} | ${result.spec.lineSpacing ?? "못 잼"} | ${levels} | ${result.spec.chapterFill ?? ""} | ${result.applied.length} | ${[...result.spec.warnings, ...result.warnings].join(" / ").slice(0, 160)} |`);
+        const sides = result.spec.edges ? believablePdfMargins((result.gongmun as { margins?: typeof frame }).margins, frame)?.taken : undefined;
+        const used = sides ? `왼쪽 ${sides.left}${sides.right !== undefined ? ` · 오른쪽 ${sides.right}` : " (오른쪽은 틀의 값)"}` : "없음";
+        const expected = (item.expected as { margins?: typeof frame } | undefined)?.margins;
+        rows.push(`| ${item.name} | ${result.spec.pageCount} | ${edges}${expected ? ` (만든 값 ${expected.top}/${expected.bottom}/${expected.left}/${expected.right})` : ""} | ${used} | ${result.spec.lineSpacing ?? "못 잼"} | ${levels} | ${result.spec.chapterFill ?? ""} | ${[...new Set([...result.spec.warnings, ...result.warnings])].join(" / ").slice(0, 120)} |`);
         console.log(JSON.stringify({ name: item.name, applied: result.applied, gongmun: result.gongmun }).slice(0, 900));
       } catch (error: unknown) {
         rows.push(`| ${item.name} | 실패: ${String(error instanceof Error ? error.message : error).slice(0, 120)} | | | | | | |`);
