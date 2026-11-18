@@ -273,7 +273,7 @@ try {
   const fresh = await page.evaluate(() => ImportUi.options.toParseOptions(ImportUi.options.initialImportOptions({ defaultPreset: () => "default" })));
   assert.equal(fresh.tableFormat, "gfm");
   assert.equal(fresh.scriptTags, true);
-  assert.equal(fresh.layoutTables, "keep");
+  assert.equal(fresh.layoutTables, "visual");
   assert.equal("htmlTables" in fresh, false);
 
   console.log("Import UI: defaults, re-export cost texts, preset locks with reasons, the advanced section staying open, remembered options, the job's options, and the report passed.");
