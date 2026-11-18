@@ -14,7 +14,7 @@ import {
   type PdfLayoutSpec
 } from "kordoc";
 import { base64ToBytes, bytesToBase64 } from "./pngMeta";
-import type { GongmunStyleOptions } from "./gongmunStyle";
+import { normalizeGongmunStyleOptions, type GongmunStyleOptions } from "./gongmunStyle";
 import { measureSample, measuredStyleOptions, type MeasuredItem, type MeasuredShape, type SampleMeasure } from "./sampleMeasure";
 
 /**
@@ -66,6 +66,10 @@ export interface SampleLookRecord {
   use: SampleLookUse;
   /** Fill of the sample's table header row; drawn by HanMark's finishing when the look is used by its measured values. */
   headerFill?: string;
+  /** What was read from the sample, part by part, for the summary shown with the look. */
+  measured?: MeasuredItem[];
+  /** A trial document made from the sample kept the sample's shapes (the reason for `use` when it was chosen automatically). */
+  templateFits?: boolean;
 }
 
 export type SampleLookUse = "template" | "measured";
@@ -303,7 +307,7 @@ export async function learnLook(sample: Uint8Array, name: string): Promise<Learn
     suggestedSampleUse(record.roles) === "template" && (await templateKeepsSampleShapes((await openSampleLook(record)).template, measure));
   const headerFill = measure.table?.headerFill;
   return {
-    sample: { ...record, use: templateFits ? "template" : "measured", ...(headerFill ? { headerFill } : {}) },
+    sample: { ...record, use: templateFits ? "template" : "measured", ...(headerFill ? { headerFill } : {}), measured: measured.items, templateFits },
     options: measured.options,
     items: measured.items,
     measure,
@@ -367,6 +371,8 @@ export async function removeLeftoverText(record: SampleLookRecord, texts: readon
     facts: record.facts,
     use: record.use,
     ...(record.headerFill ? { headerFill: record.headerFill } : {}),
+    ...(record.measured ? { measured: record.measured } : {}),
+    ...(record.templateFits !== undefined ? { templateFits: record.templateFits } : {}),
     leftover: record.leftover.filter((text) => !removed.has(text.trim()))
   };
 }
@@ -381,6 +387,119 @@ export function exportSampleLookPack(record: SampleLookRecord): Uint8Array {
   const bytes = base64ToBytes(record.pack);
   if (!bytes) throw new SampleLookError("pack-invalid", "base64");
   return bytes;
+}
+
+const MEASURED_PARTS = ["margins", "body", "lineSpacing", "level0", "level1", "level2", "level3", "ref", "tableFont", "tableHeaderFill"];
+
+function normalizeMeasuredItems(value: unknown): MeasuredItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: MeasuredItem[] = [];
+  for (const item of value.slice(0, 20) as unknown[]) {
+    if (typeof item !== "object" || item === null) continue;
+    const data = item as Record<string, unknown>;
+    if (typeof data.part !== "string" || !MEASURED_PARTS.includes(data.part)) continue;
+    const source = data.source === "sample" || data.source === "body" ? data.source : "none";
+    out.push({ part: data.part as MeasuredItem["part"], source, value: typeof data.value === "string" ? data.value.slice(0, 120) : "" });
+  }
+  return out;
+}
+
+/** What a shared look file carries besides the emptied sample: the values its maker saw and could edit. */
+export interface SharedLookData {
+  name: string;
+  /** Document type the look was made for (a Kordoc preset key). */
+  preset?: string;
+  options: GongmunStyleOptions;
+  use: SampleLookUse;
+  headerFill?: string;
+  measured?: MeasuredItem[];
+}
+
+const SHARED_OPEN = "<!-- hanmark-look:";
+const SHARED_CLOSE = "-->";
+const SHARED_MAX_CHARS = 20_000;
+
+/**
+ * The look as a file for a colleague: the .kpack with HanMark's values written as a
+ * comment at the end of the pack's guide, so Kordoc still reads the pack and HanMark
+ * restores the look exactly. The same look and values give the same bytes.
+ */
+export async function exportSharedLookPack(record: SampleLookRecord, data: SharedLookData): Promise<Uint8Array> {
+  const packBytes = exportSampleLookPack(record);
+  await assertSafePack(packBytes);
+  const pack = await JSZip.loadAsync(packBytes);
+  const fixed = { date: new Date(Date.UTC(1980, 0, 1)) };
+  const out = new JSZip();
+  const payload = bytesToBase64(new TextEncoder().encode(JSON.stringify(data)));
+  for (const name of Object.keys(pack.files)) {
+    const entry = pack.files[name];
+    if (entry.dir) continue;
+    if (name === "guide.md") {
+      const guide = (await entry.async("string")).split(SHARED_OPEN)[0].trimEnd();
+      out.file(name, `${guide}\n\n${SHARED_OPEN}${payload}${SHARED_CLOSE}\n`, fixed);
+    } else {
+      out.file(name, await entry.async("uint8array"), fixed);
+    }
+  }
+  const bytes = await out.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+  await assertSafePack(bytes);
+  return bytes;
+}
+
+export interface ImportedLook {
+  learned: LearnedLook;
+  /** The maker's values, when the file carries them; otherwise the look is measured again from the emptied sample. */
+  shared?: SharedLookData;
+}
+
+/** Reads a shared look file. Everything in it is treated as untrusted input. */
+export async function importSharedLookPack(bytes: Uint8Array): Promise<ImportedLook> {
+  const record = await recordFromPackBytes(bytes);
+  const template = (await openSampleLook(record)).template;
+  const measure = await measureSample(template);
+  const measured = measuredStyleOptions(measure);
+  const templateFits = suggestedSampleUse(record.roles) === "template" && (await templateKeepsSampleShapes(template, measure));
+  const headerFill = measure.table?.headerFill;
+  const learned: LearnedLook = {
+    sample: { ...record, use: templateFits ? "template" : "measured", ...(headerFill ? { headerFill } : {}), measured: measured.items, templateFits },
+    options: measured.options,
+    items: measured.items,
+    measure,
+    templateFits
+  };
+  let shared: SharedLookData | undefined;
+  try {
+    const guide = (await (await JSZip.loadAsync(bytes)).file("guide.md")?.async("string")) ?? "";
+    const start = guide.lastIndexOf(SHARED_OPEN);
+    const end = start < 0 ? -1 : guide.indexOf(SHARED_CLOSE, start);
+    const text = start >= 0 && end > start ? guide.slice(start + SHARED_OPEN.length, end).trim() : "";
+    const decoded = text && text.length <= SHARED_MAX_CHARS ? base64ToBytes(text) : null;
+    if (decoded) {
+      const data = JSON.parse(new TextDecoder().decode(decoded)) as Record<string, unknown>;
+      const items = normalizeMeasuredItems(data.measured);
+      shared = {
+        name: typeof data.name === "string" ? data.name.slice(0, 80) : "",
+        ...(typeof data.preset === "string" ? { preset: data.preset.slice(0, 40) } : {}),
+        options: normalizeGongmunStyleOptions(data.options),
+        use: data.use === "template" ? "template" : "measured",
+        ...(typeof data.headerFill === "string" && /^#[0-9A-Fa-f]{6}$/u.test(data.headerFill) ? { headerFill: data.headerFill.toUpperCase() } : {}),
+        ...(items.length ? { measured: items } : {})
+      };
+    }
+  } catch {
+    shared = undefined;
+  }
+  if (shared) {
+    learned.options = shared.options;
+    learned.sample = {
+      ...learned.sample,
+      use: shared.use,
+      ...(shared.headerFill ? { headerFill: shared.headerFill } : {}),
+      ...(shared.measured ? { measured: shared.measured } : {})
+    };
+    if (shared.measured) learned.items = shared.measured;
+  }
+  return { learned, ...(shared ? { shared } : {}) };
 }
 
 /** A stored record read back from plugin data; undefined when it is not a usable look. */
@@ -416,7 +535,9 @@ export function normalizeSampleLookRecord(value: unknown): SampleLookRecord | un
     },
     sourceSha256: typeof data.sourceSha256 === "string" ? data.sourceSha256.slice(0, 80) : "",
     use: data.use === "measured" || data.use === "template" ? data.use : suggestedSampleUse(strings(data.roles, 40)),
-    ...(typeof data.headerFill === "string" && /^#[0-9A-Fa-f]{6}$/u.test(data.headerFill) ? { headerFill: data.headerFill.toUpperCase() } : {})
+    ...(typeof data.headerFill === "string" && /^#[0-9A-Fa-f]{6}$/u.test(data.headerFill) ? { headerFill: data.headerFill.toUpperCase() } : {}),
+    ...(normalizeMeasuredItems(data.measured).length ? { measured: normalizeMeasuredItems(data.measured) } : {}),
+    ...(typeof data.templateFits === "boolean" ? { templateFits: data.templateFits } : {})
   };
 }
 

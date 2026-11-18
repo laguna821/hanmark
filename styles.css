@@ -1189,6 +1189,122 @@
   width: 4.5em;
 }
 
+/* A look learned from a sample (R-036) */
+.hanmark-sample-look {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.hanmark-sample-look.hanmark-sample-look-start {
+  border-color: var(--interactive-accent);
+}
+
+.hanmark-sample-look h3 {
+  margin: 0 0 4px;
+  font-size: 1em;
+}
+
+.hanmark-sample-look-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.hanmark-sample-look-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.hanmark-sample-look-summary p {
+  margin: 0;
+}
+
+.hanmark-sample-look-use {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hanmark-sample-look-list {
+  margin: 4px 0 0;
+  padding-left: 1.3em;
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+}
+
+.hanmark-sample-look-check {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.hanmark-sample-look-leftover .hanmark-sample-look-list {
+  max-height: 9em;
+  overflow-y: auto;
+  padding-left: 0;
+  list-style: none;
+}
+
+.hanmark-sample-look-error {
+  color: var(--text-error);
+}
+
+.hanmark-sample-look-note,
+.hanmark-sample-look-busy,
+.hanmark-sample-look-from {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.modal.hanmark-has-sample-look {
+  width: min(1480px, 96vw);
+}
+
+.hanmark-has-sample-look .hanmark-gongmun-style-layout {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+}
+
+.hanmark-sample-look-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.hanmark-sample-look-caption {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+/* The sample is tall (every page); its first page fills the box. */
+.hanmark-sample-look-first-page {
+  aspect-ratio: 210 / 297;
+  overflow: hidden;
+}
+
+.hanmark-sample-vault-list {
+  display: grid;
+  gap: 2px;
+  max-height: 50vh;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.hanmark-sample-vault-item {
+  justify-content: flex-start;
+  height: auto;
+  padding: 6px 8px;
+  text-align: left;
+  white-space: normal;
+}
+
 .hanmark-gongmun-style-preview {
   position: sticky;
   top: 0;

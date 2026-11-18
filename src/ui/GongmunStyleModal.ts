@@ -1,5 +1,5 @@
-import { Modal, Notice, Setting, type App } from "obsidian";
-import { hwpxToProfile, type GongmunPreset } from "kordoc";
+import { Modal, Notice, Platform, Setting, type App, type TFile } from "obsidian";
+import { hwpxToProfile, renderHwpxToSvg, type GongmunPreset } from "kordoc";
 import {
   normalizeGongmunStyleOptions,
   resolveGongmunOptions,
@@ -10,7 +10,9 @@ import {
   listGongmunTemplates,
   newGongmunTemplateRecord,
   putGongmunTemplateInMemory,
+  sampleLookFinish,
   setActiveGongmunTemplateInMemory,
+  isGongmunPreset,
   type GongmunTemplateRecord,
   type TemplateLibraryHost
 } from "../io/templateLibrary";
@@ -19,7 +21,23 @@ import { GONGMUN_FRAMES, agencyLook, agencyOfLook, frameOfPreset, LOOK_BASIC, pr
 import { AGENCY_FRAMES, gongmunFrameDescription, gongmunFrameLabel, isKnownAgency } from "../io/gongmunForms";
 import { GongmunLookModal } from "./GongmunLookModal";
 import type { GongmunPickerHost } from "./gongmunFormPicker";
-import { renderQuickHwpxPreview } from "../io/kordocEngine";
+import { renderQuickHwpxPreview, type GenerateHwpxOptions } from "../io/kordocEngine";
+import {
+  SAMPLE_MAX_BYTES,
+  SAMPLE_PACK_MAX_BYTES,
+  SampleLookError,
+  exportSharedLookPack,
+  importSharedLookPack,
+  learnLook,
+  learnLookFromPdf,
+  openSampleLook,
+  removeLeftoverText,
+  type ImportedLook,
+  type SampleLookRecord
+} from "../io/sampleLook";
+import { missingFontFamilies, type MissingFont } from "../io/fontResolver";
+import { safeFileLabel } from "../io/exportFileNames";
+import { renderSampleLookPanel, VaultFilePickModal, type SampleSource } from "./sampleLookPanel";
 import { bytesAsArrayBuffer, type FileGateway } from "../io/fileGateway";
 import { appendSanitizedSvg } from "./svgSanitize";
 import { confirmAction } from "./dialogs";
@@ -55,6 +73,10 @@ export interface GongmunStyleModalHost {
   changed(activeId: string): void;
   /** The look chooser's host (favorites, recent looks); without it a form starts from 기본 only. */
   lookPicker?: () => GongmunPickerHost;
+  /** The note the user is working on, drawn in the preview instead of the stock sample (R-036). */
+  currentNote?: () => { markdown: string; title: string; images?: GenerateHwpxOptions["images"] } | null;
+  /** Opens with "make my look from a sample" brought into view. */
+  startFromSample?: boolean;
 }
 
 type TriState = "" | "on" | "off";
@@ -82,6 +104,15 @@ export class GongmunStyleModal extends Modal {
   private previewEl: HTMLElement | null = null;
   private previewTimer: number | null = null;
   private previewVersion = 0;
+  // A look learned from a sample (R-036). The sample's bytes stay in memory for this window only.
+  private sampleName: string | undefined;
+  private sampleBytes: Uint8Array | null = null;
+  private samplePaperEl: HTMLElement | null = null;
+  private missingFonts: MissingFont[] = [];
+  private removeChoices = new Set<string>();
+  private sampleBusy = false;
+  private sampleMessage: { text: string; error: boolean } | undefined;
+  private pdfApplied: string[] | undefined;
 
   /**
    * `initialPreset` is the document type a new form starts with (the type chosen in
@@ -197,10 +228,13 @@ export class GongmunStyleModal extends Modal {
 
   private render(): void {
     const { contentEl } = this;
+    const scrolled = contentEl.querySelector(".hanmark-gongmun-style-form")?.scrollTop ?? 0;
     contentEl.empty();
+    this.modalEl.toggleClass("hanmark-has-sample-look", !!this.draft.sample);
     const layout = contentEl.createDiv({ cls: "hanmark-gongmun-style-layout" });
     const form = layout.createDiv({ cls: "hanmark-gongmun-style-form" });
     const previewColumn = layout.createDiv({ cls: "hanmark-gongmun-style-preview" });
+    this.renderSamplePanel(form);
 
     new Setting(form).setName(t("gongmun.style.name")).addText((input) => {
       input.setValue(this.draft.name).onChange((value) => {
@@ -323,7 +357,20 @@ export class GongmunStyleModal extends Modal {
       .setName(t("gongmun.style.preview.name"))
       .setDesc(t("gongmun.style.preview.of", { frame: gongmunFrameLabel(this.frame()), look: this.draft.name.trim() || t("template.gongmunDefaultName") }))
       .setHeading();
-    this.previewEl = previewColumn.createDiv({ cls: "hanmark-gongmun-style-paper" });
+    if (this.draft.sample) {
+      // Side by side: the sample's first page, and the note made in the look.
+      const compare = previewColumn.createDiv({ cls: "hanmark-sample-look-compare" });
+      const left = compare.createDiv();
+      left.createEl("p", { cls: "hanmark-sample-look-caption", text: t("gongmun.sample.preview.sample") });
+      this.samplePaperEl = left.createDiv({ cls: "hanmark-gongmun-style-paper hanmark-sample-look-first-page", attr: { id: "hanmark-sample-paper" } });
+      const right = compare.createDiv();
+      right.createEl("p", { cls: "hanmark-sample-look-caption", text: t("gongmun.sample.preview.note") });
+      this.previewEl = right.createDiv({ cls: "hanmark-gongmun-style-paper", attr: { id: "hanmark-sample-note-paper" } });
+      void this.renderSamplePaper();
+    } else {
+      this.samplePaperEl = null;
+      this.previewEl = previewColumn.createDiv({ cls: "hanmark-gongmun-style-paper" });
+    }
 
     const actions = contentEl.createDiv({ cls: "hanmark-dialog-actions" });
     if (!this.isNew) {
@@ -335,7 +382,215 @@ export class GongmunStyleModal extends Modal {
     const save = actions.createEl("button", { text: t("gongmun.style.save") });
     save.classList.add("mod-cta");
     save.onclick = () => void this.save();
+    form.scrollTop = scrolled;
     this.schedulePreview(0);
+  }
+
+  private renderSamplePanel(form: HTMLElement): void {
+    const holder = form.createDiv();
+    renderSampleLookPanel(holder, {
+      sample: this.draft.sample,
+      sampleName: this.sampleName,
+      missingFonts: this.missingFonts,
+      removeChoices: this.removeChoices,
+      busy: this.sampleBusy,
+      message: this.sampleMessage,
+      pdfApplied: this.pdfApplied,
+      onPick: (source) => void this.pickSample(source),
+      onUse: (use) => {
+        if (!this.draft.sample) return;
+        this.draft = { ...this.draft, sample: { ...this.draft.sample, use } };
+        this.render();
+      },
+      onLeftover: (text, remove) => {
+        if (remove) this.removeChoices.add(text);
+        else this.removeChoices.delete(text);
+        const all = this.contentEl.querySelector<HTMLInputElement>("#hanmark-sample-leftover-all");
+        const boxes = Array.from(this.contentEl.querySelectorAll<HTMLInputElement>("#hanmark-sample-leftover input"));
+        const texts = this.draft.sample?.leftover ?? [];
+        boxes.forEach((box, index) => {
+          box.checked = this.removeChoices.has(texts[index] ?? "");
+        });
+        if (all) all.checked = texts.every((item) => this.removeChoices.has(item));
+      },
+      onExport: () => void this.exportPack(),
+      onDetach: () => {
+        const { sample: _removed, ...rest } = this.draft;
+        this.draft = rest;
+        this.sampleBytes = null;
+        this.sampleName = undefined;
+        this.missingFonts = [];
+        this.removeChoices = new Set();
+        this.sampleMessage = undefined;
+        this.pdfApplied = undefined;
+        this.render();
+      }
+    });
+    if (this.host.startFromSample && !this.draft.sample) holder.addClass("hanmark-sample-look-start");
+  }
+
+  private sampleError(error: unknown): string {
+    if (error instanceof SampleLookError) {
+      if (error.code === "too-large") return t("gongmun.sample.error.tooLarge", { limit: SAMPLE_MAX_BYTES / 1024 / 1024 });
+      if (error.code === "not-hwpx") return t("gongmun.sample.error.notHwpx");
+      if (error.code === "pack-too-large") return t("gongmun.sample.error.packTooLarge", { limit: SAMPLE_PACK_MAX_BYTES / 1024 / 1024 });
+      if (error.code === "pack-invalid") return t("gongmun.sample.error.packInvalid");
+    }
+    return t("gongmun.sample.error.engine", { detail: errorMessage(error) });
+  }
+
+  private async pickSample(source: SampleSource): Promise<void> {
+    if (this.sampleBusy) return;
+    let bytes: Uint8Array;
+    let name: string;
+    try {
+      if (source === "vault") {
+        const file = await new Promise<TFile | null>((resolve) => new VaultFilePickModal(this.app, ["hwpx"], resolve).open());
+        if (!file) return;
+        bytes = new Uint8Array(await this.app.vault.readBinary(file));
+        name = file.name;
+      } else {
+        const extension = source === "pdf" ? "pdf" : source === "pack" ? "kpack" : "hwpx";
+        const [picked] = await this.host.gateway.pickFiles({ extensions: [extension], multiple: false });
+        if (!picked) return;
+        bytes = picked.bytes;
+        name = picked.name;
+      }
+    } catch (error: unknown) {
+      this.sampleMessage = { text: this.sampleError(error), error: true };
+      this.render();
+      return;
+    }
+    this.sampleBusy = true;
+    this.sampleMessage = undefined;
+    this.pdfApplied = undefined;
+    this.render();
+    try {
+      const stem = name.replace(/\.[^.]+$/u, "");
+      if (source === "pdf") await this.learnFromPdf(bytes);
+      else if (source === "pack") await this.applyLearned(await importSharedLookPack(bytes), name, stem, null);
+      else await this.applyLearned({ learned: await learnLook(bytes, stem) }, name, stem, bytes);
+    } catch (error: unknown) {
+      this.sampleMessage = { text: this.sampleError(error), error: true };
+    } finally {
+      this.sampleBusy = false;
+      if (this.contentEl.isConnected) this.render();
+    }
+  }
+
+  /** Puts a learned (or imported) look into the form: the pack, the measured values, the table look. */
+  private async applyLearned(imported: ImportedLook, fileName: string, stem: string, sampleBytes: Uint8Array | null): Promise<void> {
+    const { learned, shared } = imported;
+    const { tableStyle: _old, ...rest } = this.draft;
+    this.draft = { ...rest, sample: learned.sample, ...(learned.tableStyle ? { tableStyle: learned.tableStyle } : {}) };
+    const options = learned.options as Record<string, unknown>;
+    for (const [key, value] of Object.entries(options)) {
+      const current = this.raw[key];
+      this.raw[key] =
+        typeof value === "object" && value !== null && !Array.isArray(value) && typeof current === "object" && current !== null
+          ? { ...(current as Record<string, unknown>), ...structuredClone(value) }
+          : structuredClone(value);
+    }
+    if (shared?.preset && isGongmunPreset(shared.preset)) this.previewPreset = shared.preset;
+    const unnamed = !this.draft.name.trim() || this.draft.name.startsWith(t("template.gongmunDefaultName"));
+    if (this.isNew && unnamed) this.draft = { ...this.draft, name: (shared?.name || stem).slice(0, 60) };
+    this.sampleName = fileName;
+    this.sampleBytes = sampleBytes;
+    // Text longer than a mark is likely a letterhead or a piece of the original: removed unless the user keeps it.
+    this.removeChoices = new Set(learned.sample.leftover.filter((text) => text.trim().length > 1));
+    await this.checkFonts();
+    this.sampleMessage = { text: shared || sampleBytes === null ? t("gongmun.sample.imported", { name: fileName }) : t("gongmun.sample.learned"), error: false };
+  }
+
+  private async checkFonts(): Promise<void> {
+    const sample = this.draft.sample;
+    const options = this.options();
+    const families = [
+      ...Object.values(options.fonts ?? {}),
+      ...Object.values(options.levels ?? {}).map((level) => level?.font),
+      ...(sample?.use === "template" ? sample.facts.fonts : [])
+    ].filter((family): family is string => typeof family === "string" && !!family);
+    const platform = Platform.isWin ? "win32" : Platform.isMacOS ? "darwin" : "linux";
+    this.missingFonts = await missingFontFamilies(families, { platform });
+  }
+
+  private async learnFromPdf(bytes: Uint8Array): Promise<void> {
+    const learned = await learnLookFromPdf(bytes, { preset: this.previewPreset });
+    if (!learned.applied.length) {
+      this.sampleMessage = { text: t("gongmun.sample.pdf.none"), error: true };
+      return;
+    }
+    const measured = learned.options as Record<string, unknown>;
+    for (const key of ["levels", "bullet2", "fonts", "lineSpacing", "margins", "bandColor"]) {
+      const value = measured[key];
+      if (value === undefined) continue;
+      const current = this.raw[key];
+      this.raw[key] =
+        typeof value === "object" && value !== null && typeof current === "object" && current !== null
+          ? { ...(current as Record<string, unknown>), ...(structuredClone(value) as Record<string, unknown>) }
+          : structuredClone(value);
+    }
+    this.pdfApplied = learned.applied;
+    await this.checkFonts();
+    this.sampleMessage = { text: t("gongmun.sample.pdf.applied"), error: false };
+  }
+
+  /** The stored sample with the chosen fixed text removed. */
+  private async cleanedSample(): Promise<SampleLookRecord | undefined> {
+    const sample = this.draft.sample;
+    return sample && this.removeChoices.size ? removeLeftoverText(sample, [...this.removeChoices]) : sample;
+  }
+
+  private async exportPack(): Promise<void> {
+    try {
+      const sample = await this.cleanedSample();
+      if (!sample) return;
+      const name = this.draft.name.trim() || t("template.gongmunDefaultName");
+      const bytes = await exportSharedLookPack(sample, {
+        name,
+        preset: this.previewPreset,
+        options: this.savedOptions(),
+        use: sample.use,
+        ...(sample.headerFill ? { headerFill: sample.headerFill } : {}),
+        ...(sample.measured ? { measured: sample.measured } : {})
+      });
+      const saved = await this.host.gateway.saveFile(bytes, `${safeFileLabel(name) || "look"}.kpack`);
+      if (!saved.cancelled) new Notice(t("gongmun.sample.exported", { file: saved.fileName }));
+    } catch (error: unknown) {
+      this.sampleMessage = { text: this.sampleError(error), error: true };
+      this.render();
+    }
+  }
+
+  /** The first page of the sample (or of the emptied sample kept in the look). */
+  private async renderSamplePaper(): Promise<void> {
+    const target = this.samplePaperEl;
+    const sample = this.draft.sample;
+    if (!target || !sample) return;
+    target.empty();
+    try {
+      const bytes = this.sampleBytes ?? (await openSampleLook(sample)).template;
+      const rendered = await renderHwpxToSvg(bytesAsArrayBuffer(bytes), { reflow: true });
+      if (this.samplePaperEl !== target || !target.isConnected) return;
+      const svg = appendSanitizedSvg(target, rendered.svg);
+      svg.setAttribute("width", "100%");
+      svg.setAttribute("height", "auto");
+    } catch (error: unknown) {
+      if (this.samplePaperEl !== target || !target.isConnected) return;
+      target.createEl("p", { cls: "hanmark-preview-error", text: t("gongmun.style.preview.failed", { detail: errorMessage(error) }) });
+    }
+  }
+
+  /** Generation options of the draft, the way an export with the saved form would get them. */
+  private previewOptions(): GenerateHwpxOptions {
+    const sample = this.draft.sample;
+    if (sample?.use === "template") return { sampleLook: sample };
+    const finish = sample ? sampleLookFinish(sample) : undefined;
+    return {
+      gongmun: resolveGongmunOptions({ preset: this.previewPreset, style: this.savedOptions() }),
+      profile: this.draft.tableStyle,
+      ...(finish ? { gongmunFinish: finish } : {})
+    };
   }
 
   private frame(): GongmunFrame {
@@ -422,9 +677,11 @@ export class GongmunStyleModal extends Modal {
     target.empty();
     target.createEl("p", { cls: "setting-item-description", text: t("gongmun.style.preview.loading") });
     try {
-      const result = await renderQuickHwpxPreview(PREVIEW_SAMPLE, {
-        gongmun: resolveGongmunOptions({ preset: this.previewPreset, style: this.savedOptions() }),
-        profile: this.draft.tableStyle
+      // With a look from a sample the user's own note is drawn, so the two papers can be compared.
+      const note = this.draft.sample ? this.host.currentNote?.() : null;
+      const result = await renderQuickHwpxPreview(note?.markdown.trim() ? note.markdown : PREVIEW_SAMPLE, {
+        ...this.previewOptions(),
+        ...(note ? { gongmunTitle: note.title, ...(note.images ? { images: note.images } : {}) } : {})
       });
       if (version !== this.previewVersion || !target.isConnected) return;
       target.empty();
@@ -454,7 +711,9 @@ export class GongmunStyleModal extends Modal {
     const host = this.host.templateHost;
     const previous = structuredClone(host.settings.hanmarkTemplateLibrary);
     try {
-      const saved = putGongmunTemplateInMemory(host, { ...this.draft, preset: this.previewPreset, options: this.savedOptions() });
+      const sample = await this.cleanedSample();
+      const { sample: _draftSample, ...draft } = this.draft;
+      const saved = putGongmunTemplateInMemory(host, { ...draft, ...(sample ? { sample } : {}), preset: this.previewPreset, options: this.savedOptions() });
       if (this.isNew) setActiveGongmunTemplateInMemory(host, saved.id);
       await host.saveSettings();
       new Notice(t("gongmun.style.saved", { name: saved.name }));

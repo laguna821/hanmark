@@ -610,6 +610,12 @@ function readableOn(fill: string): string {
   return (r * 299 + g * 587 + b * 114) / 1000 < 140 ? "#FFFFFF" : "#000000";
 }
 
+/** Finishing of a look learned from a sample: its table header fill, when the look is used by measured values. */
+export function sampleLookFinish(sample: SampleLookRecord): GongmunFinishSpec | undefined {
+  const fill = sample.use === "measured" ? sample.headerFill : undefined;
+  return fill ? { tableHeader: { fill, textColor: readableOn(fill) } } : undefined;
+}
+
 function customChoice(record: GongmunTemplateRecord): GongmunStyleChoice {
   const choice: GongmunStyleChoice = { id: record.id, name: record.name, builtIn: false, options: clone(record.options) };
   if (record.tableStyle) choice.tableStyle = clone(record.tableStyle);
@@ -617,8 +623,8 @@ function customChoice(record: GongmunTemplateRecord): GongmunStyleChoice {
   if (record.sample) {
     choice.sample = record.sample;
     // Used by its measured values, the look draws the sample's table header fill through the finishing (R-036).
-    const fill = record.sample.use === "measured" ? record.sample.headerFill : undefined;
-    if (fill) choice.finish = { tableHeader: { fill, textColor: readableOn(fill) } };
+    const finish = sampleLookFinish(record.sample);
+    if (finish) choice.finish = finish;
   }
   return choice;
 }

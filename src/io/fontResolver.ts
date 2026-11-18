@@ -141,6 +141,28 @@ export async function resolveDocumentStyleFonts(
   return { profile, substitutions: [...substitutions.values()], missing: [...missing.values()] };
 }
 
+/** Fonts of a list that this machine does not have (with what previews fall back to). */
+export async function missingFontFamilies(families: readonly string[], options: FontResolverOptions = {}): Promise<MissingFont[]> {
+  const platform = options.platform ?? "linux";
+  const available = options.available ?? browserFontAvailable;
+  const missing: MissingFont[] = [];
+  const seen = new Set<string>();
+  for (const raw of families) {
+    const family = raw.trim();
+    if (!family || seen.has(family)) continue;
+    seen.add(family);
+    let satisfied = false;
+    for (const candidate of ALIASES[family] ?? [family]) {
+      if (await Promise.resolve(available(candidate)).catch(() => false)) {
+        satisfied = true;
+        break;
+      }
+    }
+    if (!satisfied) missing.push({ family, roles: [], previewFallback: fallbackFont(family, platform) });
+  }
+  return missing;
+}
+
 export function fontSubstitutionSummary(substitutions: FontSubstitution[]): string[] {
   return substitutions.map((item) => `${item.requested} → ${item.replacement}`);
 }
