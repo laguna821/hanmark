@@ -4,6 +4,7 @@ import { persistImportedImages, type PersistedCloudImage } from "./importImages"
 import type { ImportCloudSettings } from "./kordocImport";
 import { bytesAsArrayBuffer, splitFilename } from "./fileGateway";
 import { describeImportFailure, describeImportWarning } from "./messageCatalog";
+import { inlineImportedMemos } from "./hwpxMemos";
 import { kordocParseOptions, toParseOptions, type ImportOptions } from "./importOptions";
 import { errorMessage } from "../utils/errors";
 import { t } from "../i18n";
@@ -180,10 +181,12 @@ export async function importOne(
     const folder = job.folderFor(input);
     await ensureFolder(app, folder);
     const relative = uniqueNotePath(app, folder, safeNoteBase(input.name), reserved);
+    // Memos the engine listed at the end move to their text as highlight + comment (R-034).
+    const memoNote = job.options.memos ? inlineImportedMemos(result.markdown, result.memos).markdown : result.markdown;
     const persisted = await persistImportedImages(
       app,
       relative,
-      result.markdown.trim(),
+      memoNote.trim(),
       result.images,
       { destination: job.imageDestination, localFolder: job.cloudSettings.localFolder }
     );

@@ -15,7 +15,9 @@ export interface HanmarkDocumentViewActions {
   convertToNote(file: TFile): void | Promise<void>;
   /** Old–new comparison with this document preselected as the current version. */
   compare?(file: TFile): void;
-  /** Form note from this HWPX form (HWPX only). */
+  /** HWPX copy of this HWP document, next to it (HWP only). */
+  convertToHwpx?(file: TFile): void | Promise<void>;
+  /** Form note from this HWPX or HWP 5.x form. */
   formNote?(file: TFile): void | Promise<void>;
   /** Present only on desktop, where the operating system can open the file. */
   openWithDefaultApp?(file: TFile): Promise<void>;
@@ -68,7 +70,13 @@ export class HanmarkDocumentView extends FileView {
     if (this.actions.compare) {
       toolbar.createEl("button", { text: t("viewer.compare") }).onclick = () => this.actions.compare?.(file);
     }
-    if (this.actions.formNote && file.extension.toLowerCase() === "hwpx") {
+    if (this.actions.convertToHwpx && file.extension.toLowerCase() === "hwp") {
+      const toHwpx = toolbar.createEl("button", { text: t("viewer.convertToHwpx"), attr: { "data-hanmark-action": "convert-to-hwpx" } });
+      toHwpx.onclick = () => {
+        void Promise.resolve(this.actions.convertToHwpx?.(file)).catch((error: unknown) => new Notice(errorMessage(error)));
+      };
+    }
+    if (this.actions.formNote) {
       toolbar.createEl("button", { text: t("viewer.formNote") }).onclick = () => {
         void Promise.resolve(this.actions.formNote?.(file)).catch((error: unknown) => new Notice(errorMessage(error)));
       };

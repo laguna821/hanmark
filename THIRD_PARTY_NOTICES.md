@@ -164,8 +164,11 @@ crate (Apache-2.0).
 
 #### Test fixture (not part of `main.js`)
 
-- `tests/fixtures/password/HWP5-password-123456.hwpx` — an rhwp sample (MIT) used
+- `tests/fixtures/password/HWP5-password-123456.hwpx` and
+  `tests/fixtures/password/HWP3-password-123456.hwp` — rhwp samples (MIT) used
   through Kordoc's test assets; see the README in that folder.
+- `tests/fixtures/hwp5/textbox-nested.hwp` — a synthetic HWP 5.x document from the
+  Kordoc repository's test assets (MIT, chrisryugj); see the README in that folder.
 
 #### MIT License
 
@@ -353,8 +356,11 @@ Kordoc이 만든 그대로 `third-party-licenses/kordoc-4.25.0/hayro-pdf.txt`에
 
 #### 시험 자료 (`main.js`에 들어가지 않음)
 
-- `tests/fixtures/password/HWP5-password-123456.hwpx` — Kordoc 시험 자산으로 쓰인
+- `tests/fixtures/password/HWP5-password-123456.hwpx`,
+  `tests/fixtures/password/HWP3-password-123456.hwp` — Kordoc 시험 자산으로 쓰인
   rhwp 예제(MIT). 해당 폴더의 README를 보세요.
+- `tests/fixtures/hwp5/textbox-nested.hwp` — Kordoc 저장소 시험 자산의 합성 HWP 5.x
+  문서(MIT, chrisryugj). 해당 폴더의 README를 보세요.
 
 MIT·BSD 2-Clause(entities)·zlib(pako)·ISC(inherits) 라이선스 전문은 영어 절에
 원문 그대로 실었습니다.

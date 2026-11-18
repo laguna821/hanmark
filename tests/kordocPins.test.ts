@@ -76,7 +76,7 @@ describe("Kordoc 4.25.0 forced options and behaviour pins (R-029)", () => {
     }
     assert.deepEqual(
       calls.map((file) => file.replaceAll("\\", "/")).sort(),
-      ["src/io/documentDiff.ts", "src/io/formFill.ts", "src/io/importRunner.ts"]
+      ["src/io/documentDiff.ts", "src/io/formFill.ts", "src/io/hwpConvert.ts", "src/io/hwpxMemos.ts", "src/io/importRunner.ts"]
     );
   });
 

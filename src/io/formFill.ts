@@ -11,6 +11,7 @@ import {
 } from "kordoc";
 import { bytesAsArrayBuffer } from "./fileGateway";
 import { finalizeHwpxPackage } from "./hwpxPostProcess";
+import { formTemplateHwpx } from "./hwpConvert";
 import { sha256Bytes } from "./hash";
 import { kordocParseOptions } from "./importOptions";
 import { tOut, translate, type Locale, type MessageKey } from "../i18n";
@@ -24,10 +25,12 @@ import { tOut, translate, type Locale, type MessageKey } from "../i18n";
  */
 export const FORM_LINK_KEY = "hanmark-form";
 export const FORM_HASH_KEY = "hanmark-form-hash";
+/** Written only for HWP 5.x forms ("hwp"); HWPX form notes stay as they were. */
+export const FORM_FORMAT_KEY = "hanmark-form-format";
 export const BUILTIN_FORM_PREFIX = "builtin:";
 
 /** Obsidian's own properties never become form values. */
-const RESERVED_KEYS = new Set([FORM_LINK_KEY, FORM_HASH_KEY, "tags", "tag", "aliases", "alias", "cssclasses", "cssclass", "publish", "position"]);
+const RESERVED_KEYS = new Set([FORM_LINK_KEY, FORM_HASH_KEY, FORM_FORMAT_KEY, "tags", "tag", "aliases", "alias", "cssclasses", "cssclass", "publish", "position"]);
 
 export interface FormFieldSpec {
   /** Property name = the field's click-here name or table label. */
@@ -123,7 +126,9 @@ export function headerRowColumns(table: IRTable): Array<{ name: string; rows: nu
  * declared names), then table fields and inline "label: ____" fields that no
  * earlier field already covers.
  */
-export async function readFormFields(bytes: Uint8Array): Promise<FormFieldSpec[]> {
+export async function readFormFields(source: Uint8Array): Promise<FormFieldSpec[]> {
+  // An HWP 5.x form is read through its formatting-preserving HWPX conversion (R-034).
+  const bytes = (await formTemplateHwpx(source)).hwpx;
   const fields: FormFieldSpec[] = [];
   const seen = new Set<string>();
   const add = (field: FormFieldSpec): void => {
@@ -181,7 +186,8 @@ export function formNoteProperties(
   fields: readonly FormFieldSpec[],
   link: string,
   hash: string,
-  existing: Readonly<Record<string, unknown>> = {}
+  existing: Readonly<Record<string, unknown>> = {},
+  format?: "hwpx" | "hwp"
 ): { properties: Record<string, unknown>; added: string[] } {
   const properties: Record<string, unknown> = {};
   const added: string[] = [];
@@ -192,6 +198,7 @@ export function formNoteProperties(
   }
   properties[FORM_LINK_KEY] = link;
   properties[FORM_HASH_KEY] = hash;
+  if (format === "hwp") properties[FORM_FORMAT_KEY] = "hwp";
   return { properties, added };
 }
 
@@ -253,7 +260,9 @@ export interface FilledForm {
 }
 
 /** Fill a copy of the form, verify it, and package it deterministically. */
-export async function fillFormHwpx(template: Uint8Array, values: Record<string, FillValue>): Promise<FilledForm> {
+export async function fillFormHwpx(source: Uint8Array, values: Record<string, FillValue>): Promise<FilledForm> {
+  // HWP 5.x forms are filled in their HWPX conversion; the result is always HWPX.
+  const template = (await formTemplateHwpx(source)).hwpx;
   const result = await fillHwpx(copyBuffer(template), values);
   const validation = await validateHwpx(result.buffer);
   if (!validation.ok) {
