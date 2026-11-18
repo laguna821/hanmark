@@ -40,22 +40,28 @@ test("unified export modal keeps format-specific options and one active footer",
   assert.doesNotMatch(source, /text: "템플릿 관리"/u);
 });
 
-test("official documents are chosen from one form list in the export window and the preview (R-026)", async () => {
+test("official documents are chosen as a frame and a look in the export window and the preview (R-026, R-030)", async () => {
   const modal = await readFile("src/ui/HanmarkExportModal.ts", "utf8");
-  // One select holds the institutions' forms, the eight standard types, and the user's forms.
-  assert.match(modal, /attr: \{ id: "hanmark-export-gongmun-form" \}/u);
-  assert.match(modal, /fillGongmunFormSelect\(select, forms\);/u);
-  assert.match(modal, /this\.actions\.selectGongmunForm\?\.\(select\.value\)/u);
-  assert.doesNotMatch(modal, /hanmark-export-gongmun-preset|hanmark-export-gongmun-style/u);
-  // The chosen form's description, and where the choice came from.
-  assert.match(modal, /current\?\.description \?\? t\("gongmun\.form\.help"\)/u);
+  // One shared picker: the frame select, the searchable look chooser, and the frame's switches.
+  assert.match(modal, /renderGongmunFormPicker\(formRow, \{/u);
+  assert.match(modal, /idPrefix: "hanmark-export-gongmun"/u);
+  assert.match(modal, /await this\.actions\.selectGongmunForm\?\.\(id\)/u);
+  assert.doesNotMatch(modal, /fillGongmunFormSelect|hanmark-export-gongmun-preset|hanmark-export-gongmun-style/u);
+  // Where the choice came from: the note's type and the note's look.
   assert.match(modal, /t\("gongmun\.form\.fromNote"/u);
   assert.match(modal, /t\("gongmun\.form\.noteDiffers"/u);
+  assert.match(modal, /t\("gongmun\.look\.fromNote"/u);
+  assert.match(modal, /t\("gongmun\.look\.noteDiffers"/u);
+  const picker = await readFile("src/ui/gongmunFormPicker.ts", "utf8");
+  assert.match(picker, /form\?\.description \?\? t\("gongmun\.frame\.help"\)/u);
+  assert.match(picker, /role: "combobox"/u);
+  assert.match(picker, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp"/u);
 
   const preview = await readFile("src/ui/QuickHwpxPreviewView.ts", "utf8");
-  // The preview switches between quick HWPX and every form, refreshes, and saves.
-  assert.match(preview, /general\.createEl\("option", \{ value: QUICK_VALUE, text: t\("preview\.hwpx\.quick"\) \}\);/u);
-  assert.match(preview, /fillGongmunFormSelect\(select, this\.options\.gongmunForms\?\.\(\) \?\? \[\]\);/u);
+  // The preview switches between quick HWPX and official documents, shows the same picker, refreshes, and saves.
+  assert.match(preview, /select\.createEl\("option", \{ value: QUICK_VALUE, text: t\("preview\.hwpx\.quick"\) \}\);/u);
+  assert.match(preview, /renderGongmunFormPicker\(toolbar, \{/u);
+  assert.match(preview, /idPrefix: "hanmark-preview-gongmun"/u);
   assert.match(preview, /t\("preview\.hwpx\.save"\)/u);
   assert.match(preview, /await this\.options\.exportHwpx\?\.\(this\.effectiveMode\(file\)\);/u);
   assert.match(preview, /await this\.options\.rememberMode\?\.\(this\.mode\.kind\);/u);

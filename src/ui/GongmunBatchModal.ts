@@ -12,6 +12,10 @@ import { setPhase } from "./motion";
  */
 export interface GongmunBatchHost {
   forms: GongmunFormOption[];
+  /** The short list again with the frames in another look (R-030). */
+  listForms?: (look: string) => GongmunFormOption[];
+  /** Opens the look chooser; `pick` gets the chosen look id and its name. */
+  chooseLook?: (current: string, pick: (look: string, name: string) => void) => void;
   /** The form the note starts with; checked first. */
   currentFormId?: string;
   noteName: string;
@@ -34,9 +38,14 @@ export class GongmunBatchModal extends Modal {
   private readonly rows = new Map<string, HTMLElement>();
   private progressEl: HTMLElement | null = null;
   private entries: Array<BatchEntry<GongmunFormOption, HanmarkExportOutcome>> = [];
+  private forms: GongmunFormOption[];
+  /** Look the frames are made in ("basic" until the user picks one). */
+  private look = "basic";
+  private lookName = "";
 
   constructor(app: App, private readonly host: GongmunBatchHost) {
     super(app);
+    this.forms = host.forms;
     const first = host.forms.find((form) => form.id === host.currentFormId) ?? host.forms[0];
     this.checked = new Set(first ? [first.id] : []);
   }
@@ -65,10 +74,34 @@ export class GongmunBatchModal extends Modal {
       return;
     }
     contentEl.createEl("p", { cls: "setting-item-description", text: t("gongmun.batch.desc") });
+    const chooseLook = this.host.chooseLook;
+    const listForms = this.host.listForms;
+    if (chooseLook && listForms) {
+      const lookRow = contentEl.createDiv({ cls: "hanmark-gongmun-batch-look" });
+      const button = lookRow.createEl("button", {
+        text: t("gongmun.batch.look", { name: this.lookName || t("gongmun.look.basic") }),
+        attr: { type: "button", id: "hanmark-batch-look" }
+      });
+      button.disabled = this.stage === "running";
+      button.onclick = () =>
+        chooseLook(this.look, (look, name) => {
+          // Checked rows stay checked by position: the list keeps its order when the look changes.
+          const checkedAt = this.forms.map((form) => this.checked.has(form.id));
+          this.look = look;
+          this.lookName = name;
+          this.forms = listForms(look);
+          this.checked.clear();
+          this.forms.forEach((form, index) => {
+            if (checkedAt[index]) this.checked.add(form.id);
+          });
+          this.render();
+        });
+      lookRow.createEl("small", { text: t("gongmun.batch.lookHelp") });
+    }
     const list = contentEl.createDiv({ cls: "hanmark-gongmun-batch-list" });
     this.rows.clear();
     let group: string | null = null;
-    for (const form of this.host.forms) {
+    for (const form of this.forms) {
       if (form.group !== group) {
         group = form.group;
         list.createDiv({ cls: "hanmark-gongmun-batch-group", text: form.group });
@@ -101,7 +134,7 @@ export class GongmunBatchModal extends Modal {
     }
     const all = actions.createEl("button", { text: t("gongmun.batch.all") });
     all.onclick = () => {
-      for (const form of this.host.forms) this.checked.add(form.id);
+      for (const form of this.forms) this.checked.add(form.id);
       this.render();
     };
     const none = actions.createEl("button", { text: t("gongmun.batch.none") });
@@ -117,7 +150,7 @@ export class GongmunBatchModal extends Modal {
   }
 
   private async start(): Promise<void> {
-    const forms = this.host.forms.filter((form) => this.checked.has(form.id));
+    const forms = this.forms.filter((form) => this.checked.has(form.id));
     if (!forms.length) return;
     this.stage = "running";
     this.stopRequested = false;

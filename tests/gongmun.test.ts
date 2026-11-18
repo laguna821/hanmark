@@ -89,7 +89,7 @@ describe("official-document note properties (2.7.0 W5)", () => {
     }
     assert.ok(gongmunPropertyKeysFor("official").includes("공문_수신"));
     assert.ok(!gongmunPropertyKeysFor("report").includes("공문_수신"));
-    assert.equal(GONGMUN_PRESETS.length, 8);
+    assert.equal(GONGMUN_PRESETS.length, 9);
   });
 });
 
@@ -152,10 +152,10 @@ describe("institution style and option precedence", () => {
   });
 });
 
-describe("template library schema 2", () => {
+describe("template library schema 3", () => {
   it("migrates schema 1 losslessly and keeps institution styles and font rules", () => {
     const v1 = normalizeTemplateLibrary({ schemaVersion: 1, activeId: "builtin:korean-communication", customTemplates: {} });
-    assert.equal(v1.schemaVersion, 2);
+    assert.equal(v1.schemaVersion, 3);
     assert.equal(v1.activeId, "builtin:korean-communication");
     assert.deepEqual(v1.gongmunTemplates, {});
     assert.equal(v1.activeGongmunId, "");

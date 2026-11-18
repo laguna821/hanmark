@@ -140,18 +140,31 @@ import { StartPanels } from "./ui/startPanel";
 import { GongmunStyleModal } from "./ui/GongmunStyleModal";
 import {
   currentGongmunFormId,
+  describeGongmunForm,
+  isGongmunForm,
   listGongmunForms,
+  noteLookHint,
   notePresetHint,
   planGongmunExport,
   selectGongmunFormInMemory
 } from "./io/gongmunExport";
+import { LOOK_BASIC, agencyOfLook, formatGongmunFormId, gongmunFormChoice } from "./io/gongmunFormId";
+import { withGongmunLook } from "./io/gongmunForms";
+import { migrateGongmunFormMemory } from "./io/gongmunFormMigration";
+import { GongmunLookModal } from "./ui/GongmunLookModal";
+import type { GongmunPickerHost } from "./ui/gongmunFormPicker";
 import {
   GONGMUN_PRESET_KOREAN_NAMES,
   GONGMUN_PRESET_PROPERTY_KEY,
   GONGMUN_PROPERTIES,
   gongmunPropertyKeysFor
 } from "./io/gongmunProperties";
-import { templateDisplayName, templateFontSubstitutions } from "./io/templateLibrary";
+import {
+  recordGongmunLookUseInMemory,
+  templateDisplayName,
+  templateFontSubstitutions,
+  toggleGongmunLookFavoriteInMemory
+} from "./io/templateLibrary";
 import type { GongmunPreset } from "kordoc";
 import type { HwpxExportVariant } from "./io/exportTypes";
 import {
@@ -650,8 +663,11 @@ export default class HanmarkPlugin extends Plugin {
       settings: migrationInput
     });
     this.settings = normalizeHanmarkSettings(migrationInput, runtimePlatform());
+    const forms = migrateGongmunFormMemory(this, this.settings.gongmunFormByNote);
+    this.settings.gongmunFormByNote = forms.memory;
     if (
       migrated ||
+      forms.changed ||
       migrationInput.settingsVersion !== this.settings.settingsVersion
     ) {
       await this.saveData(this.settings);
@@ -673,6 +689,8 @@ export default class HanmarkPlugin extends Plugin {
           assembleEmbeds: () => this.settings.assembleEmbeds,
           gongmunPlan: (file, preset, formId) => planGongmunExport(this.app, file, this, preset, formId),
           gongmunForms: () => listGongmunForms(this),
+          gongmunPicker: () => this.gongmunPickerHost(),
+          describeGongmunForm: (id) => describeGongmunForm(this, id),
           currentGongmunForm: (file) => this.currentGongmunForm(file),
           selectGongmunForm: (id, file) => this.selectGongmunForm(id, file),
           rememberMode: (kind) => this.rememberPreviewMode(kind),
@@ -1039,6 +1057,9 @@ export default class HanmarkPlugin extends Plugin {
         },
         revealOutput: (outcome) => this.revealExportOutput(outcome),
         gongmunForms: () => listGongmunForms(this),
+        gongmunPicker: () => this.gongmunPickerHost(),
+        describeGongmunForm: (id) => describeGongmunForm(this, id),
+        noteLookHint: () => noteLookHint(this.app, this.currentMarkdownView()?.file),
         currentGongmunForm: () => this.currentGongmunForm(this.currentMarkdownView()?.file),
         selectGongmunForm: (id) => this.selectGongmunForm(id),
         editGongmunForm: (id, preset, changed) => this.openGongmunStyle(id, changed, preset),
@@ -1077,11 +1098,22 @@ export default class HanmarkPlugin extends Plugin {
    */
   private currentGongmunForm(file: TFile | null | undefined): string {
     if (file) {
-      const forms = new Set(listGongmunForms(this).map((form) => form.id));
-      const remembered = rememberedNoteForm(this.settings.gongmunFormByNote, file.path, (id) => forms.has(id));
-      if (remembered) return remembered;
+      const remembered = rememberedNoteForm(this.settings.gongmunFormByNote, file.path, (id) => isGongmunForm(this, id));
+      const form = remembered ? describeGongmunForm(this, remembered) : undefined;
+      if (form) return form.id;
     }
-    return currentGongmunFormId(this, notePresetHint(this.app, file));
+    return currentGongmunFormId(this, notePresetHint(this.app, file), noteLookHint(this.app, file));
+  }
+
+  /** The frame and look picker's host (R-030): this plugin's library, and favorites that save. */
+  private gongmunPickerHost(): GongmunPickerHost {
+    return {
+      library: this,
+      toggleFavorite: async (look) => {
+        toggleGongmunLookFavoriteInMemory(this, look);
+        await this.saveSettings();
+      }
+    };
   }
 
   /**
@@ -1091,7 +1123,8 @@ export default class HanmarkPlugin extends Plugin {
   private async selectGongmunForm(id: string, file?: TFile | null): Promise<GongmunPreset> {
     const preset = selectGongmunFormInMemory(this, id);
     const note = file ?? this.currentMarkdownView()?.file;
-    if (note) this.settings.gongmunFormByNote = rememberNoteForm(this.settings.gongmunFormByNote, note.path, id);
+    const formId = describeGongmunForm(this, id)?.id ?? id;
+    if (note) this.settings.gongmunFormByNote = rememberNoteForm(this.settings.gongmunFormByNote, note.path, formId);
     await this.saveSettings();
     this.refreshPreviews();
     this.statusBar?.refresh(false);
@@ -1115,10 +1148,12 @@ export default class HanmarkPlugin extends Plugin {
       });
       changed = true;
     }
-    if (formId && notePath) {
-      this.settings.gongmunFormByNote = rememberNoteForm(this.settings.gongmunFormByNote, notePath, formId);
+    const exported = formId ? describeGongmunForm(this, formId) : undefined;
+    if (exported && notePath) {
+      this.settings.gongmunFormByNote = rememberNoteForm(this.settings.gongmunFormByNote, notePath, exported.id);
       changed = true;
     }
+    if (exported && recordGongmunLookUseInMemory(this, exported.look)) changed = true;
     if (changed) {
       await this.saveSettings();
       this.startPanels?.sync();
@@ -1134,6 +1169,9 @@ export default class HanmarkPlugin extends Plugin {
     if (!snapshot) return;
     new GongmunBatchModal(this.app, {
       forms: listGongmunForms(this),
+      listForms: (look) => listGongmunForms(this, formatGongmunFormId(gongmunFormChoice("report", look))),
+      chooseLook: (current, pick) =>
+        new GongmunLookModal(this.app, { host: this.gongmunPickerHost(), frame: "report", current, pick }).open(),
       currentFormId: this.currentGongmunForm(snapshot.file),
       noteName: snapshot.file.basename,
       run: async (forms, hooks) => {
@@ -1149,6 +1187,7 @@ export default class HanmarkPlugin extends Plugin {
               const path = entry.result?.vaultPath;
               if (entry.status === "saved" && path) {
                 this.settings.recentExports = recordRecentExport(this.settings.recentExports, { path, format: "hwpx", at: Date.now() });
+                if (entry.form.look !== LOOK_BASIC) recordGongmunLookUseInMemory(this, entry.form.look);
               }
             }
           })
@@ -1207,7 +1246,7 @@ export default class HanmarkPlugin extends Plugin {
   private rememberedPreviewMode(): QuickPreviewMode {
     if (this.settings.hwpxPreviewMode !== "gongmun") return { kind: "quick" };
     const id = this.currentGongmunForm(this.currentMarkdownView()?.file);
-    const preset = listGongmunForms(this).find((form) => form.id === id)?.preset ?? "report";
+    const preset = describeGongmunForm(this, id)?.preset ?? "report";
     return { kind: "gongmun", preset, formId: id };
   }
 
@@ -1235,7 +1274,13 @@ export default class HanmarkPlugin extends Plugin {
       }
       for (const spec of GONGMUN_PROPERTIES) {
         if (!keys.has(spec.key) || spec.key in frontmatter || spec.alias in frontmatter) continue;
-        frontmatter[spec.key] = spec.kind === "list" ? [] : "";
+        // 공문_기관서식 starts with the agency look chosen for this note, when there is one (R-030).
+        frontmatter[spec.key] =
+          spec.kind === "list" || spec.kind === "people"
+            ? []
+            : spec.kind === "look"
+              ? (agencyOfLook(describeGongmunForm(this, this.currentGongmunForm(file))?.look ?? "") ?? "")
+              : "";
         added += 1;
       }
     });
@@ -1584,7 +1629,18 @@ export default class HanmarkPlugin extends Plugin {
       currentView: () => this.currentMarkdownView(),
       showCount: () => this.settings.statusCharCount,
       showForm: () => this.settings.statusGongmunForm,
-      forms: () => listGongmunForms(this),
+      forms: (base) => listGongmunForms(this, base),
+      describeForm: (id) => describeGongmunForm(this, id),
+      chooseLook: (file) => {
+        const form = describeGongmunForm(this, this.currentGongmunForm(file));
+        if (!form) return;
+        new GongmunLookModal(this.app, {
+          host: this.gongmunPickerHost(),
+          frame: form.frame,
+          current: form.look,
+          pick: (look) => void this.selectGongmunForm(withGongmunLook(this, form.id, look), file)
+        }).open();
+      },
       formFor: (file) => this.statusFormFor(file),
       selectForm: async (id, file) => {
         await this.selectGongmunForm(id, file);
@@ -1635,8 +1691,7 @@ export default class HanmarkPlugin extends Plugin {
    * form remembered for it, a document-type property, or a preview showing a form.
    */
   private statusFormFor(file: TFile): string | null {
-    const known = new Set(listGongmunForms(this).map((form) => form.id));
-    const remembered = rememberedNoteForm(this.settings.gongmunFormByNote, file.path, (id) => known.has(id));
+    const remembered = rememberedNoteForm(this.settings.gongmunFormByNote, file.path, (id) => isGongmunForm(this, id));
     const previewing = this.app.workspace
       .getLeavesOfType(QUICK_HWPX_PREVIEW_VIEW)
       .some((leaf) => leaf.view instanceof QuickHwpxPreviewView && leaf.view.showsForm());

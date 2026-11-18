@@ -1,0 +1,46 @@
+{
+  "commit": "fa108aa",
+  "day": "2026-11-18T03:00:00.000Z",
+  "forms": {
+    "preset:official": {
+      "section": "456d3425a238cea6b2b6ed76a882cdaeafcad9d9030766d3b8ab72a3e110e17f",
+      "header": "3836f241c403dcea56b0b3e59e50ce74bcfe04ee963e2cd3ad4695e72d4bcb90"
+    },
+    "preset:report": {
+      "section": "94bebd5ac80394c04968ca8789a63d2285881739cc2fa2db832d8d10cf3ed3eb",
+      "header": "61110207cc4b50d6d3c92cde95ea0ef4181f478de3483f8bea3b6942e05ed1f0"
+    },
+    "preset:plan": {
+      "section": "94bebd5ac80394c04968ca8789a63d2285881739cc2fa2db832d8d10cf3ed3eb",
+      "header": "61110207cc4b50d6d3c92cde95ea0ef4181f478de3483f8bea3b6942e05ed1f0"
+    },
+    "preset:notice": {
+      "section": "17c0ba2d377625db1337cd71480c1da6f49dc684eb2845a49d186a472491ddd8",
+      "header": "0b0198c32feb20e1420f1ce9f45f05f6b1c595ea4418bb1f04dfe65f7513aa46"
+    },
+    "preset:minutes": {
+      "section": "88f92cef4555c6e1955a8b71339dbd946235d54b0d91bb2af57c3e9ad945c7e3",
+      "header": "6f0630c1d1c1a46a5b15de939a1921c1c778f50272946a3bb81006f002807bd7"
+    },
+    "preset:gaejosik": {
+      "section": "cc0ea9e15a76895da1343cdbab1dffb5f49d4c6ad8b35ef8b5e09fe7a170178c",
+      "header": "9afb9ec4333b83ff275efb9e69d1281c326774bb0668c120c7494b56b4073e2d"
+    },
+    "preset:press": {
+      "section": "146c229b3aa5e7f21154c1b31d79f8487e78ffe758434bf127d229e16402feb9",
+      "header": "7eca2e68e41c54794b1ef1a4e5b4253f8cacfcef974a7975d939e0bf62d9eff0"
+    },
+    "preset:ministry": {
+      "section": "78cf740b95bf0bac9d0adaab0c4270d3b5425783e51c7ba2d953d9587b664fd7",
+      "header": "f5f64619b8268dd068e9acc2a5ed3f0b4e7239061ee5b952ee8bf707dfe7299b"
+    },
+    "builtin:hallym-ilsong": {
+      "section": "0225f7547faa575c03ab9f41768ddbd5b00664043f8a1d2ec11700f278962c52",
+      "header": "12596a6c3917bac4bc6fb076eebb69878fa6865e12d040f1169e2b1172adfc7e"
+    },
+    "builtin:hallym-aicr": {
+      "section": "9dd5c9a8b3b697e46812492c79de61c84fe5ec307b9a9eb26308bbfc8ed87c04",
+      "header": "455d364d9e3d311e514d9a2b5580ce8317d5f2156418d7d6f2e7a43853b0424e"
+    }
+  }
+}

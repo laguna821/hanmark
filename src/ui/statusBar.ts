@@ -15,7 +15,12 @@ export interface StatusBarHost {
   currentView: () => MarkdownView | null;
   showCount: () => boolean;
   showForm: () => boolean;
-  forms: () => GongmunFormOption[];
+  /** The short list of forms; with `base`, frames keep that form's look where they can (R-030). */
+  forms: (base?: string) => GongmunFormOption[];
+  /** A form by id, including frame-and-look pairs the short list does not show. */
+  describeForm?: (id: string) => GongmunFormOption | undefined;
+  /** Opens the look chooser for the note's form. */
+  chooseLook?: (file: TFile) => void;
   /** The form shown for the note, or null when the note has no official-document context. */
   formFor: (file: TFile) => string | null;
   selectForm: (id: string, file: TFile) => Promise<void>;
@@ -87,7 +92,7 @@ export class HanmarkStatusBar {
 
   private renderForm(file: TFile | null): void {
     const id = file && this.host.showForm() ? this.host.formFor(file) : null;
-    const form = id ? this.host.forms().find((item) => item.id === id) : undefined;
+    const form = id ? (this.host.describeForm?.(id) ?? this.host.forms().find((item) => item.id === id)) : undefined;
     this.formFile = form && file ? file : null;
     this.formEl.toggleClass("hanmark-is-hidden", !form);
     if (form) this.formEl.setText(t("status.form.label", { name: form.name }));
@@ -99,7 +104,7 @@ export class HanmarkStatusBar {
     const current = this.host.formFor(file);
     const menu = new Menu();
     let group: string | null = null;
-    for (const form of this.host.forms()) {
+    for (const form of this.host.forms(current ?? undefined)) {
       if (form.group !== group) {
         group = form.group;
         menu.addItem((item) => item.setTitle(form.group).setIsLabel(true));
@@ -112,6 +117,11 @@ export class HanmarkStatusBar {
             void this.host.selectForm(form.id, file).then(() => this.refresh(false));
           })
       );
+    }
+    const chooseLook = this.host.chooseLook;
+    if (chooseLook) {
+      menu.addSeparator();
+      menu.addItem((item) => item.setTitle(t("status.form.chooseLook")).onClick(() => chooseLook(file)));
     }
     if (event) {
       menu.showAtMouseEvent(event);

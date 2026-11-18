@@ -1,0 +1,399 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { build } from "esbuild";
+import { chromium } from "playwright";
+
+// The real export window, the real HWPX preview toolbar, and the real frame and look
+// picker (R-030) in Chromium with styles.css. Only Obsidian's host primitives, the
+// preview's render call, and Kordoc are replaced; Kordoc's agency list, sample sizes,
+// and preset aliases are read from the installed engine first, so the chooser shows
+// the engine's 52 agencies. Screenshots land in test-artifacts/gongmun-form-ui (or
+// HANMARK_FORM_UI_OUTPUT) for review.
+const out = process.env.HANMARK_FORM_UI_OUTPUT || "test-artifacts/gongmun-form-ui";
+mkdirSync(out, { recursive: true });
+mkdirSync("test-artifacts/gongmun-form-ui", { recursive: true });
+
+writeFileSync(
+  "test-artifacts/gongmun-form-ui/engine-fixture.ts",
+  `import { writeFileSync } from "node:fs";
+import { AGENCY_COMMON_NAME, agencyNames, agencyStyle, PRESET_ALIAS, VERSION } from "kordoc";
+const docs: Record<string, number | null> = {};
+for (const name of agencyNames()) {
+  const count = (agencyStyle(name) as { report?: { docs?: number } }).report?.docs;
+  docs[name] = typeof count === "number" ? count : null;
+}
+writeFileSync(process.argv[2], JSON.stringify({ common: AGENCY_COMMON_NAME, names: agencyNames(), docs, alias: PRESET_ALIAS, version: VERSION }));
+`
+);
+execFileSync(process.execPath, ["--import", "tsx", "test-artifacts/gongmun-form-ui/engine-fixture.ts", "test-artifacts/gongmun-form-ui/engine.json"], { stdio: "inherit" });
+const engine = JSON.parse(readFileSync("test-artifacts/gongmun-form-ui/engine.json", "utf8"));
+assert.equal(engine.names.filter((name) => name !== engine.common).length, 52, "Kordoc lists 52 central agencies");
+
+const host = `
+const proto = HTMLElement.prototype;
+proto.createEl = function(tag, options = {}) {
+  const node = this.ownerDocument.createElement(tag);
+  if (typeof options === "string") options = { cls: options };
+  if (options.text) node.textContent = options.text;
+  if (options.cls) node.className = Array.isArray(options.cls) ? options.cls.join(" ") : options.cls;
+  for (const [key, value] of Object.entries(options.attr || {})) node.setAttribute(key, String(value));
+  for (const key of ["type", "value", "href"]) if (options[key] !== undefined) node.setAttribute(key, options[key]);
+  this.append(node); return node;
+};
+proto.createDiv = function(options) { return this.createEl("div", options); };
+proto.createSpan = function(options) { return this.createEl("span", options); };
+proto.empty = function() { this.replaceChildren(); };
+proto.setText = function(text) { this.textContent = text; };
+Element.prototype.addClass = function(...values) { this.classList.add(...values); };
+Element.prototype.removeClass = function(...values) { this.classList.remove(...values); };
+Element.prototype.toggleClass = function(value, on) { this.classList.toggle(value, on); };
+Object.defineProperty(Node.prototype, "doc", { get() { return this.ownerDocument || this; } });
+Object.defineProperty(Node.prototype, "win", { get() { return (this.ownerDocument || this).defaultView; } });
+globalThis.createDiv = (options) => document.createElement("div").createDiv(options);
+globalThis.createSpan = (options) => document.createElement("div").createSpan(options);
+export function setIcon() {}
+export class Modal {
+  constructor(app) {
+    this.app = app;
+    this.modalEl = document.createElement("div"); this.modalEl.className = "modal";
+    this.titleEl = this.modalEl.createDiv({ cls: "modal-title" });
+    this.contentEl = this.modalEl.createDiv({ cls: "modal-content" });
+  }
+  open() { (document.getElementById("stage") || document.body).append(this.modalEl); this.onOpen?.(); }
+  close() { this.onClose?.(); this.modalEl.remove(); }
+}
+export class ItemView {
+  constructor(leaf) {
+    this.leaf = leaf; this.app = leaf.app;
+    this.containerEl = document.createElement("div");
+    this.containerEl.className = "workspace-leaf-content";
+    this.containerEl.createDiv({ cls: "view-header" });
+    this.contentEl = this.containerEl.createDiv({ cls: "view-content" });
+  }
+  registerEvent() {}
+  registerDomEvent(target, type, callback, options) { target.addEventListener(type, callback, options); }
+  register() {}
+  getState() { return {}; }
+  async setState() {}
+}
+export class MarkdownView {}
+export class WorkspaceLeaf {}
+export class Menu {}
+export class Notice { constructor(message) { (globalThis.notices ||= []).push(String(message)); } }
+export const Platform = { isWin: true, isMacOS: false, isDesktopApp: true };
+`;
+
+const kordoc = `
+const engine = ${JSON.stringify(engine)};
+export const VERSION = engine.version;
+export const AGENCY_COMMON_NAME = engine.common;
+export const PRESET_ALIAS = engine.alias;
+export const agencyNames = () => [...engine.names];
+export const agencyStyle = (name) => {
+  if (!(name in engine.docs)) throw new Error("agency: " + name);
+  return engine.docs[name] === null ? {} : { report: { docs: engine.docs[name] } };
+};
+export const normalizeGongmunPreset = (value) => engine.alias[String(value ?? "").trim()] ?? "official";
+export const incompatibleGongmunWarnings = () => [];
+export const measureTextWidth = () => 0;
+export const simulateWrap = () => ({ lines: 1 });
+`;
+
+const fixtures = {
+  kordocEngine: `export async function renderQuickHwpxPreview() {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 595 842" width="595pt" height="842pt"><g data-page="1"><rect width="595" height="842" fill="#fff"/></g></svg>';
+    return { render: { svg, warnings: [], pageCount: 1, width: 595, height: 842 }, warnings: [], imageCount: 0, embeddedImageCount: 0, embeddedImageOccurrences: 0, imageFailures: [] };
+  }`,
+  exportPreparation: "export async function prepareExportMarkdown(host, body) { return { markdown: body, warnings: [] }; }",
+  vaultAssemblyHost: "export function createVaultAssemblyHost() { return {}; }",
+  obsidianImageLoader: "export function createObsidianImageLoader() { return async () => null; }"
+};
+
+const bundle = await build({
+  stdin: {
+    contents: [
+      "export { HanmarkExportModal } from './src/ui/HanmarkExportModal';",
+      "export { QuickHwpxPreviewView } from './src/ui/QuickHwpxPreviewView';",
+      "export { GongmunBatchModal } from './src/ui/GongmunBatchModal';",
+      "export { GongmunLookModal } from './src/ui/GongmunLookModal';",
+      "export * as forms from './src/io/gongmunExport';",
+      "export * as looks from './src/io/gongmunForms';",
+      "export * as ids from './src/io/gongmunFormId';",
+      "export * as library from './src/io/templateLibrary';"
+    ].join("\n"),
+    resolveDir: process.cwd(),
+    loader: "ts"
+  },
+  bundle: true,
+  write: false,
+  format: "iife",
+  globalName: "FormUi",
+  plugins: [{
+    name: "host-fixture",
+    setup(build) {
+      build.onResolve({ filter: /^(obsidian|kordoc)$/ }, (args) => ({ path: args.path, namespace: "fixture" }));
+      build.onResolve({ filter: /\/io\/(kordocEngine|exportPreparation|vaultAssemblyHost|obsidianImageLoader)$/ }, (args) => ({
+        path: args.path.split("/").pop(),
+        namespace: "fixture"
+      }));
+      build.onLoad({ filter: /.*/, namespace: "fixture" }, (args) => ({
+        contents: args.path === "obsidian" ? host : args.path === "kordoc" ? kordoc : fixtures[args.path],
+        loader: "js"
+      }));
+    }
+  }]
+});
+
+const css = readFileSync("styles.css", "utf8");
+const browser = await chromium.launch({ executablePath: process.env.HANMARK_BROWSER_EXECUTABLE || undefined, headless: true });
+try {
+  const page = await browser.newPage({ viewport: { width: 900, height: 1100 }, deviceScaleFactor: 2 });
+  await page.setContent(`<!doctype html><html><head><meta charset="utf-8"></head><body class="theme-light">
+    <div id="stage" style="width:760px;margin:20px;padding:16px;border:1px solid #ddd;border-radius:10px;background:#fff"></div>
+    <div id="pane" style="width:760px;height:260px;margin:20px;border:1px solid #ddd;background:#fff"></div></body></html>`);
+  await page.addStyleTag({ content: css });
+  await page.addStyleTag({
+    content: "body{--interactive-accent:#7c3aed;--interactive-accent-hover:#8b5cf6;--text-accent:#7c3aed;--text-on-accent:#fff;--background-primary:#fff;--background-secondary:#f3f3f5;--background-modifier-border:#ddd;--background-modifier-hover:#eee;--text-muted:#666;--text-faint:#999;--text-normal:#222;--text-error:#c62828;--font-ui-small:13px;--font-ui-smaller:12px;--font-semibold:600;--shadow-s:0 4px 16px rgba(0,0,0,.16);font-family:'Malgun Gothic',system-ui,sans-serif;font-size:14px;color:#222}" +
+      ".workspace-leaf-content{height:100%}.view-header{display:none}.view-content{position:relative}button,select,input{font:inherit}button{padding:4px 10px;border:1px solid #ccc;border-radius:6px;background:#f7f7f8}select,input[type=search]{padding:4px 8px;border:1px solid #ccc;border-radius:6px;background:#fff}.mod-cta{background:#7c3aed;color:#fff;border-color:#7c3aed}"
+  });
+  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+
+  await page.evaluate(() => {
+    const { forms, library } = FormUi;
+    globalThis.notices = [];
+    globalThis.calls = { exports: [], saves: 0, selected: [] };
+    // One plugin state for the export window, the preview, and "several forms at once".
+    globalThis.plugin = { settings: {}, saveSettings: async () => { calls.saves += 1; } };
+    globalThis.memory = {};
+    const note = "note.md";
+    globalThis.pickerHost = () => ({
+      library: plugin,
+      toggleFavorite: async (look) => { library.toggleGongmunLookFavoriteInMemory(plugin, look); await plugin.saveSettings(); }
+    });
+    globalThis.currentForm = () => (memory[note] && forms.isGongmunForm(plugin, memory[note]) ? memory[note] : forms.currentGongmunFormId(plugin));
+    globalThis.selectForm = async (id) => {
+      const preset = forms.selectGongmunFormInMemory(plugin, id);
+      memory[note] = forms.describeGongmunForm(plugin, id).id;
+      calls.selected.push(memory[note]);
+      await plugin.saveSettings();
+      globalThis.preview?.settingsChanged?.();
+      return preset;
+    };
+    globalThis.openExport = () => {
+      globalThis.modal = new FormUi.HanmarkExportModal({}, {
+        activeTemplateId: () => "default", templateChoices: () => [], activeTemplateSummary: () => "",
+        selectTemplate: async () => {}, runOther: async () => {}, openPreview: async () => {},
+        gongmunForms: () => forms.listGongmunForms(plugin),
+        gongmunPicker: pickerHost,
+        describeGongmunForm: (id) => forms.describeGongmunForm(plugin, id),
+        currentGongmunForm: currentForm,
+        selectGongmunForm: selectForm,
+        notePresetHint: () => undefined,
+        noteLookHint: () => globalThis.noteLook,
+        exportKordoc: async (mode, preset, formId) => {
+          calls.exports.push({ mode, preset, formId, label: forms.gongmunFileLabel(plugin, formId, "ko") });
+          // What the plugin does after a saved export: remember the form and the look.
+          const form = forms.describeGongmunForm(plugin, formId);
+          memory[note] = form.id;
+          library.recordGongmunLookUseInMemory(plugin, form.look);
+          await plugin.saveSettings();
+          return { format: "hwpx", status: "saved", fileName: "note - " + calls.exports.at(-1).label + ".hwpx", displayPath: "note.hwpx" };
+        }
+      }, "hwpx", "gongmun");
+      modal.open();
+    };
+    openExport();
+  });
+
+  const frame = page.locator("#hanmark-export-gongmun-frame");
+  const lookButton = page.locator("#hanmark-export-gongmun-look");
+  const search = page.locator("#hanmark-export-gongmun-look-search");
+  const options = page.locator("#hanmark-export-gongmun-look-list .hanmark-look-option");
+  const sections = () => page.locator("#hanmark-export-gongmun-look-list .hanmark-look-group-title").allInnerTexts();
+  const activeForm = () => page.evaluate(() => FormUi.library.getTemplateLibrary(plugin).activeGongmunForm);
+
+  // Two choices instead of one list of ten forms.
+  assert.deepEqual(await frame.locator("option").allInnerTexts(), ["기안문", "일반 문서", "보고서", "개조식 보고서", "업무보고", "보도자료", "서울방침"]);
+  assert.equal(await frame.inputValue(), "report");
+  assert.equal((await lookButton.innerText()).replace(/\s*▾\s*/u, ""), "기본");
+  assert.equal(await page.locator("#stage select").count(), 1, "the look is not a dropdown");
+
+  // A frame that cannot use agency looks offers none.
+  await frame.selectOption("official");
+  await lookButton.click();
+  assert.deepEqual(await options.locator(".hanmark-look-name").allInnerTexts(), ["기본"]);
+  await search.press("Escape");
+  assert.equal(await page.locator(".hanmark-look-panel").isHidden(), true);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "hanmark-export-gongmun-look", "Escape returns to the look button");
+  assert.equal(await page.locator("#stage .hanmark-form-picker-switch").count(), 0);
+
+  // 보고서: 표지 and 목차 switches, and the engine's 52 agencies in groups.
+  await frame.selectOption("report");
+  assert.deepEqual(await page.locator("#stage .hanmark-form-picker-switch").allInnerTexts(), ["표지", "목차"]);
+  await lookButton.click();
+  assert.deepEqual(await sections(), ["기본", "한림대학교", "부", "처", "청", "위원회", "그 밖의 기관"]);
+  assert.equal(await options.count(), 2 + 1 + 52, "기본, 공통, the Hallym report form, and 52 agencies");
+  assert.equal(await page.locator('[data-look="agency:경찰청"] .hanmark-look-badge').innerText(), "표본 적음");
+  assert.equal(await page.locator('[data-look="agency:국세청"] .hanmark-look-badge').count(), 0);
+
+  // Typing part of a name filters; the keyboard picks.
+  await search.fill("국세");
+  assert.deepEqual(await options.locator(".hanmark-look-name").allInnerTexts(), ["국세청"]);
+  await page.locator("#stage").screenshot({ path: `${out}/02-look-chooser-filtered.png` });
+  await search.fill("청");
+  const filtered = await options.count();
+  assert.ok(filtered > 5 && filtered < 30, "a broader query keeps several agencies");
+  await search.press("ArrowDown");
+  await search.press("ArrowUp");
+  assert.equal(await options.first().evaluate((node) => node.classList.contains("is-active")), true);
+  await search.fill("국세");
+  await search.press("Enter");
+  assert.equal(await activeForm(), "form:report/agency:국세청");
+  assert.equal((await lookButton.innerText()).replace(/\s*▾\s*/u, ""), "국세청");
+
+  await page.locator("#hanmark-export-gongmun-option-cover").check();
+  await page.locator("#hanmark-export-gongmun-option-toc").check();
+  assert.equal(await activeForm(), "form:report/agency:국세청;cover=1;toc=1");
+  assert.equal(await page.locator("#hanmark-export-gongmun-option-cover").isChecked(), true);
+  await page.locator("#stage").screenshot({ path: `${out}/01-export-window-frame-and-look.png` });
+
+  // A favorite is saved and pinned on top.
+  const savesBefore = await page.evaluate(() => calls.saves);
+  await lookButton.click();
+  await page.locator('[data-look="agency:교육부"] .hanmark-look-star').click();
+  assert.equal(await page.evaluate(() => calls.saves), savesBefore + 1, "the star saves the settings");
+  assert.deepEqual(await page.evaluate(() => FormUi.library.getTemplateLibrary(plugin).gongmunLookFavorites), ["agency:교육부"]);
+  assert.equal((await sections())[0], "즐겨찾기");
+  assert.equal(await page.locator('[data-section="favorite"] .hanmark-look-name').innerText(), "교육부");
+  assert.equal(await page.locator('[data-section="favorite"] .hanmark-look-star').getAttribute("aria-pressed"), "true");
+  await search.press("Escape");
+
+  // Switching to a frame that cannot use the look drops it; the list hides agency looks.
+  await frame.selectOption("general");
+  assert.equal(await activeForm(), "form:general/basic");
+  assert.deepEqual(await page.locator("#stage .hanmark-form-picker-switch").allInnerTexts(), ["맺음 줄"]);
+  await lookButton.click();
+  assert.deepEqual(await options.locator(".hanmark-look-name").allInnerTexts(), ["기본", "한림대 일송자유교양대학 (회의록·회의자료)"]);
+  await options.nth(1).locator(".hanmark-look-pick").click();
+  assert.equal(await activeForm(), "form:general/builtin:hallym-ilsong");
+  assert.equal(await page.locator("#stage .hanmark-form-picker-switch").count(), 0, "a look made for one type has no switches");
+  assert.match(await page.locator("#stage .hanmark-form-picker").innerText(), /'회의록' 종류로 만듭니다/u);
+
+  // Back to the agency look with a cover and contents, then export: the file is named 틀_모양.
+  await frame.selectOption("report");
+  await lookButton.click();
+  await search.fill("국세");
+  await search.press("Enter");
+  await page.locator("#hanmark-export-gongmun-option-cover").check();
+  await page.locator("#hanmark-export-gongmun-option-toc").check();
+  await page.getByRole("button", { name: "공문서 HWPX 내보내기", exact: true }).click();
+  await page.waitForFunction(() => calls.exports.length === 1);
+  assert.deepEqual(await page.evaluate(() => calls.exports[0]), {
+    mode: "gongmun-hwpx",
+    preset: "plan",
+    formId: "form:report/agency:국세청;cover=1;toc=1",
+    label: "보고서_국세청"
+  });
+  assert.deepEqual(await page.evaluate(() => FormUi.library.getTemplateLibrary(plugin).gongmunLookRecent), ["agency:국세청"]);
+
+  // Reopened for the same note: frame, look, and switches come back; pinned sections show.
+  await page.evaluate(() => {
+    modal.close();
+    // The global form moves elsewhere; the note's memory must win.
+    FormUi.forms.selectGongmunFormInMemory(plugin, "form:press/basic");
+    openExport();
+  });
+  assert.equal(await frame.inputValue(), "report");
+  assert.equal((await lookButton.innerText()).replace(/\s*▾\s*/u, ""), "국세청");
+  assert.equal(await page.locator("#hanmark-export-gongmun-option-cover").isChecked(), true);
+  assert.equal(await page.locator("#hanmark-export-gongmun-option-toc").isChecked(), true);
+  await lookButton.click();
+  assert.deepEqual((await sections()).slice(0, 2), ["최근 사용", "즐겨찾기"]);
+  assert.equal(await page.locator('[data-section="recent"] .hanmark-look-name').innerText(), "국세청");
+  assert.equal(await page.locator('[data-section="favorite"] .hanmark-look-name').innerText(), "교육부");
+  await page.locator("#stage").screenshot({ path: `${out}/03-look-chooser-pinned.png` });
+  // Unstar and the pin goes away.
+  await page.locator('[data-section="favorite"] .hanmark-look-star').click();
+  assert.deepEqual(await page.evaluate(() => FormUi.library.getTemplateLibrary(plugin).gongmunLookFavorites), []);
+  assert.deepEqual((await sections()).slice(0, 2), ["최근 사용", "기본"]);
+  await search.press("Escape");
+
+  // The note names another look: the window says which one it uses.
+  await page.evaluate(() => { globalThis.noteLook = "교육부"; modal.close(); openExport(); });
+  assert.match(await page.locator("#stage .hanmark-export-form-row").innerText(), /노트의 공문_기관서식는 '교육부'이지만, 지금 고른 모양은 '국세청'입니다/u);
+  await page.evaluate(() => { globalThis.noteLook = undefined; modal.close(); });
+
+  // The real HWPX preview toolbar shows the same picker for the note's form.
+  await page.evaluate(async () => {
+    const workspace = { on() { return {}; }, requestSaveLayout() {}, getActiveViewOfType() { return null; } };
+    const sourceView = { file: { path: "note.md", basename: "note" }, editor: { getValue: () => "# 제목\n\n본문", getCursor: () => ({ line: 0, ch: 0 }) } };
+    globalThis.preview = new FormUi.QuickHwpxPreviewView({ app: { workspace } }, {
+      profile: () => undefined,
+      documentStyle: () => undefined,
+      sourceView: () => sourceView,
+      livePreviewEnabled: () => false,
+      autoPauseEnabled: () => false,
+      gongmunPlan: () => ({ preset: "report", options: {}, warnings: [], title: "note", formId: currentForm() }),
+      gongmunForms: () => FormUi.forms.listGongmunForms(plugin),
+      gongmunPicker: pickerHost,
+      describeGongmunForm: (id) => FormUi.forms.describeGongmunForm(plugin, id),
+      currentGongmunForm: () => currentForm(),
+      selectGongmunForm: (id) => selectForm(id),
+      rememberMode: async (kind) => { globalThis.previewKind = kind; },
+      exportHwpx: async () => true,
+      followCursor: () => false,
+      setFollowCursor: async () => {}
+    });
+    document.getElementById("pane").append(preview.containerEl);
+    await preview.onOpen();
+  });
+  const toolbar = page.locator("#pane .hanmark-hwpx-preview-toolbar");
+  const kind = toolbar.locator("select").first();
+  assert.deepEqual(await kind.locator("option").allInnerTexts(), ["빠른 HWPX (문서 템플릿)", "공문서 (틀과 모양)"]);
+  assert.equal(await toolbar.locator(".hanmark-form-picker").count(), 0, "quick HWPX has no frame or look");
+  await kind.selectOption("gongmun");
+  await page.waitForFunction(() => globalThis.previewKind === "gongmun");
+  const previewFrame = page.locator("#hanmark-preview-gongmun-frame");
+  assert.equal(await previewFrame.inputValue(), "report", "the preview opens on the note's remembered form");
+  assert.equal((await page.locator("#hanmark-preview-gongmun-look").innerText()).replace(/\s*▾\s*/u, ""), "국세청");
+  assert.equal(await page.locator("#hanmark-preview-gongmun-option-toc").isChecked(), true);
+  await previewFrame.selectOption("press");
+  await page.waitForFunction(() => calls.selected.at(-1) === "form:press/agency:국세청");
+  assert.equal((await page.locator("#hanmark-preview-gongmun-look").innerText()).replace(/\s*▾\s*/u, ""), "국세청", "the look stays where the new frame can use it");
+  await page.locator("#hanmark-preview-gongmun-look").click();
+  await page.locator("#hanmark-preview-gongmun-look-search").fill("과학");
+  await page.locator("#pane").screenshot({ path: `${out}/04-preview-toolbar.png` });
+  await page.locator("#hanmark-preview-gongmun-look-search").press("Enter");
+  await page.waitForFunction(() => calls.selected.at(-1) === "form:press/agency:과학기술정보통신부");
+
+  // Several forms at once: the frames in one look, picked from the same chooser.
+  await page.evaluate(() => {
+    const { forms, ids } = FormUi;
+    globalThis.batch = new FormUi.GongmunBatchModal({}, {
+      forms: forms.listGongmunForms(plugin),
+      listForms: (look) => forms.listGongmunForms(plugin, ids.formatGongmunFormId(ids.gongmunFormChoice("report", look))),
+      chooseLook: (current, pick) => new FormUi.GongmunLookModal({}, { host: pickerHost(), frame: "report", current, pick }).open(),
+      currentFormId: "form:report/basic",
+      noteName: "note",
+      run: async (chosen) => { calls.batch = chosen.map((form) => form.id); return chosen.map((form) => ({ form, status: "saved", result: { format: "hwpx", status: "saved", fileName: form.name + ".hwpx" } })); },
+      open: () => {}
+    });
+    batch.open();
+  });
+  await page.locator("#hanmark-batch-look").click();
+  await page.locator("#hanmark-look-modal-look-search").fill("국세");
+  await page.locator("#hanmark-look-modal-look-search").press("Enter");
+  assert.equal(await page.locator("#hanmark-batch-look").innerText(), "모양: 국세청");
+  const rows = await page.locator(".hanmark-gongmun-batch-name").allInnerTexts();
+  assert.ok(rows.includes("보고서 · 국세청") && rows.includes("기안문") && rows.includes("보도자료 · 국세청"), rows.join(" | "));
+  await page.locator(".hanmark-gongmun-batch").screenshot({ path: `${out}/05-several-forms-at-once.png` });
+  await page.getByRole("button", { name: /내보내기|시작/u }).last().click();
+  await page.waitForFunction(() => Array.isArray(calls.batch));
+  assert.deepEqual(await page.evaluate(() => calls.batch), ["form:report/agency:국세청"], "the checked row follows the look");
+
+  assert.deepEqual(await page.evaluate(() => globalThis.notices), []);
+  console.log("Form UI: frame select, searchable look chooser (filter, keyboard, small-sample mark), switches, favorites, recent looks, per-note memory, preview toolbar, and several forms at once passed.");
+} finally {
+  await browser.close();
+}

@@ -13,6 +13,14 @@ import type { GongmunOutlineStyle } from "./gongmunOutline";
 import { normalizeGongmunStyleOptions, type CoverDateFormat, type GongmunStyleOptions } from "./gongmunStyle";
 import type { GongmunFinishSpec } from "./hwpxFinish";
 import { BUILTIN_GONGMUN_STYLES, builtinGongmunStyle, isBuiltinGongmunStyleId } from "./institutionStyles";
+import {
+  choiceOfPreset,
+  formatGongmunFormId,
+  isStyleLook,
+  LOOK_BASIC,
+  migrateLegacyFormId,
+  parseGongmunFormId
+} from "./gongmunFormId";
 import { t, tKey, type MessageKey } from "../i18n";
 
 export const BUILTIN_TEMPLATE_IDS = [
@@ -66,8 +74,12 @@ export interface GongmunTemplateRecord {
   updatedAt: string;
 }
 
+/** Looks kept at the top of the look chooser (R-030). */
+export const GONGMUN_LOOK_FAVORITE_LIMIT = 40;
+export const GONGMUN_LOOK_RECENT_LIMIT = 5;
+
 export interface HanmarkTemplateLibrary {
-  schemaVersion: 2;
+  schemaVersion: 3;
   activeId: string;
   customTemplates: Record<string, HanmarkTemplateRecord>;
   gongmunTemplates: Record<string, GongmunTemplateRecord>;
@@ -75,9 +87,15 @@ export interface HanmarkTemplateLibrary {
   activeGongmunId: string;
   /** Standard type chosen last when no institution form is active (R-026). */
   activeGongmunPreset: GongmunPreset;
+  /** The active form as a frame and look pair, "form:<frame>/<look>…" (schema 3, R-030). */
+  activeGongmunForm: string;
+  /** Looks the user starred, in the order they were starred. */
+  gongmunLookFavorites: string[];
+  /** Looks used by the latest exports, newest first. */
+  gongmunLookRecent: string[];
 }
 
-/** One of Kordoc's eight official-document types. */
+/** One of Kordoc's official-document types. */
 export function isGongmunPreset(value: unknown): value is GongmunPreset {
   return typeof value === "string" && normalizeGongmunPreset(value) === value;
 }
@@ -208,12 +226,15 @@ export function isBuiltInTemplateId(value: unknown): value is BuiltInTemplateId 
 
 export function emptyTemplateLibrary(): HanmarkTemplateLibrary {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     activeId: "builtin:kordoc-default",
     customTemplates: {},
     gongmunTemplates: {},
     activeGongmunId: "",
-    activeGongmunPreset: "report"
+    activeGongmunPreset: "report",
+    activeGongmunForm: formatGongmunFormId(choiceOfPreset("report")),
+    gongmunLookFavorites: [],
+    gongmunLookRecent: []
   };
 }
 
@@ -238,7 +259,69 @@ export function normalizeTemplateLibrary(value: unknown): HanmarkTemplateLibrary
     result.activeGongmunId = activeGongmunId;
   }
   if (isGongmunPreset(value.activeGongmunPreset)) result.activeGongmunPreset = value.activeGongmunPreset;
+  // Schema 2 → 3 (R-030): the active institution form, else the type chosen last,
+  // becomes one frame-and-look id; a stored id whose look is gone falls back the same way.
+  const styleExists = (id: string): boolean => Boolean(result.gongmunTemplates[id]) || isBuiltinGongmunStyleId(id);
+  const presetOfStyle = (id: string): GongmunPreset | undefined =>
+    result.gongmunTemplates[id]?.preset ?? builtinGongmunStyle(id)?.preset;
+  const stored = parseGongmunFormId(value.activeGongmunForm);
+  const legacy = result.activeGongmunId || `preset:${result.activeGongmunPreset}`;
+  result.activeGongmunForm =
+    stored && (!isStyleLook(stored.look) || styleExists(stored.look))
+      ? formatGongmunFormId(stored)
+      : (migrateLegacyFormId(legacy, presetOfStyle, isGongmunPreset, result.activeGongmunPreset) ?? result.activeGongmunForm);
+  const looks = (raw: unknown, limit: number): string[] => {
+    const seen = new Set<string>();
+    for (const item of Array.isArray(raw) ? raw : []) {
+      if (typeof item !== "string" || !item.trim() || item === LOOK_BASIC) continue;
+      if (isStyleLook(item) && !styleExists(item)) continue;
+      seen.add(item.trim());
+    }
+    return [...seen].slice(0, limit);
+  };
+  result.gongmunLookFavorites = looks(value.gongmunLookFavorites, GONGMUN_LOOK_FAVORITE_LIMIT);
+  result.gongmunLookRecent = looks(value.gongmunLookRecent, GONGMUN_LOOK_RECENT_LIMIT);
   return result;
+}
+
+/** A 2.7.x or 3.0.0 form id as a 3.0.0 id, using the library's styles (R-030). */
+export function migrateGongmunFormIdWithLibrary(library: HanmarkTemplateLibrary, id: unknown): string | undefined {
+  const presetOfStyle = (styleId: string): GongmunPreset | undefined =>
+    library.gongmunTemplates[styleId]?.preset ?? builtinGongmunStyle(styleId)?.preset;
+  const migrated = migrateLegacyFormId(id, presetOfStyle, isGongmunPreset, library.activeGongmunPreset);
+  const choice = parseGongmunFormId(migrated);
+  if (!choice) return undefined;
+  if (isStyleLook(choice.look) && !library.gongmunTemplates[choice.look] && !isBuiltinGongmunStyleId(choice.look)) return undefined;
+  return migrated;
+}
+
+/** Stars or unstars a look; returns whether it is starred now. */
+export function toggleGongmunLookFavoriteInMemory(plugin: TemplateLibraryHost, look: string): boolean {
+  const library = getTemplateLibrary(plugin);
+  const starred = library.gongmunLookFavorites.includes(look);
+  library.gongmunLookFavorites = starred
+    ? library.gongmunLookFavorites.filter((item) => item !== look)
+    : [...library.gongmunLookFavorites, look].slice(-GONGMUN_LOOK_FAVORITE_LIMIT);
+  plugin.settings.hanmarkTemplateLibrary = library;
+  return !starred;
+}
+
+/** Puts a look an export just used at the front of the recent looks; true when the list changed. */
+export function recordGongmunLookUseInMemory(plugin: TemplateLibraryHost, look: string): boolean {
+  if (!look || look === LOOK_BASIC) return false;
+  const library = getTemplateLibrary(plugin);
+  const next = [look, ...library.gongmunLookRecent.filter((item) => item !== look)].slice(0, GONGMUN_LOOK_RECENT_LIMIT);
+  if (JSON.stringify(next) === JSON.stringify(library.gongmunLookRecent)) return false;
+  library.gongmunLookRecent = next;
+  plugin.settings.hanmarkTemplateLibrary = library;
+  return true;
+}
+
+/** Makes a frame-and-look id the active form (the caller validates it and saves). */
+export function setActiveGongmunFormInMemory(plugin: TemplateLibraryHost, formId: string): void {
+  const library = getTemplateLibrary(plugin);
+  library.activeGongmunForm = formId;
+  plugin.settings.hanmarkTemplateLibrary = library;
 }
 
 function oldPresetToBuiltIn(value: unknown): BuiltInTemplateId {
@@ -279,7 +362,9 @@ export function migrateTemplateLibrarySettingsInMemory(settings: unknown): boole
   if (!isRecord(settings)) return false;
   let changed = false;
   const hasLibrary = isRecord(settings.hanmarkTemplateLibrary) &&
-    (settings.hanmarkTemplateLibrary.schemaVersion === 1 || settings.hanmarkTemplateLibrary.schemaVersion === 2);
+    (settings.hanmarkTemplateLibrary.schemaVersion === 1 ||
+      settings.hanmarkTemplateLibrary.schemaVersion === 2 ||
+      settings.hanmarkTemplateLibrary.schemaVersion === 3);
   const library = normalizeTemplateLibrary(settings.hanmarkTemplateLibrary);
 
   if (!hasLibrary) {
@@ -583,6 +668,8 @@ export function deleteGongmunTemplateInMemory(plugin: TemplateLibraryHost, id: s
   if (!library.gongmunTemplates[id]) return false;
   delete library.gongmunTemplates[id];
   if (library.activeGongmunId === id) library.activeGongmunId = "";
+  library.gongmunLookFavorites = library.gongmunLookFavorites.filter((look) => look !== id);
+  library.gongmunLookRecent = library.gongmunLookRecent.filter((look) => look !== id);
   plugin.settings.hanmarkTemplateLibrary = library;
   return true;
 }
@@ -592,6 +679,9 @@ export function setActiveGongmunTemplateInMemory(plugin: TemplateLibraryHost, id
   const library = getTemplateLibrary(plugin);
   if (id && !library.gongmunTemplates[id] && !isBuiltinGongmunStyleId(id)) throw new Error(t("template.error.notFound"));
   library.activeGongmunId = id;
+  // The frame-and-look id follows (R-030): the style's form, else the type chosen last.
+  library.activeGongmunForm =
+    migrateGongmunFormIdWithLibrary(library, id || `preset:${library.activeGongmunPreset}`) ?? library.activeGongmunForm;
   plugin.settings.hanmarkTemplateLibrary = library;
 }
 
@@ -599,5 +689,8 @@ export function setActiveGongmunTemplateInMemory(plugin: TemplateLibraryHost, id
 export function setActiveGongmunPresetInMemory(plugin: TemplateLibraryHost, preset: GongmunPreset): void {
   const library = getTemplateLibrary(plugin);
   library.activeGongmunPreset = preset;
+  if (!library.activeGongmunId) {
+    library.activeGongmunForm = migrateGongmunFormIdWithLibrary(library, `preset:${preset}`) ?? library.activeGongmunForm;
+  }
   plugin.settings.hanmarkTemplateLibrary = library;
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { App, TFile } from "obsidian";
 import {
+  canonicalGongmunFormId,
   currentGongmunFormId,
   GONGMUN_PRESETS,
   gongmunFileLabel,
@@ -44,7 +45,8 @@ describe("forms named explicitly (R-028)", () => {
       // The global selection points elsewhere; the explicit id must win.
       selectGongmunFormInMemory(plugin, id === "preset:report" ? "preset:plan" : "preset:report");
       const named = planGongmunExport(app, FILE, plugin, undefined, id);
-      assert.equal(named.formId, id);
+      // Ids stored by 2.7.x are understood; the plan carries the frame-and-look id (R-030).
+      assert.equal(named.formId, canonicalGongmunFormId(plugin, id));
       assert.equal(named.preset, chosen.preset);
       const withoutDates = (plan: typeof named): unknown => JSON.parse(JSON.stringify(gongmunGenerateOptions(plan)));
       assert.deepEqual(withoutDates(named), withoutDates(chosen), id);
@@ -55,7 +57,7 @@ describe("forms named explicitly (R-028)", () => {
     const plugin = host();
     selectGongmunFormInMemory(plugin, "builtin:hallym-ilsong");
     const plan = planGongmunExport(noteApp({}), FILE, plugin, undefined, "gongmun:deleted");
-    assert.equal(plan.formId, "builtin:hallym-ilsong");
+    assert.equal(plan.formId, "form:general/builtin:hallym-ilsong");
     assert.equal(plan.preset, "minutes");
   });
 
@@ -64,29 +66,30 @@ describe("forms named explicitly (R-028)", () => {
     const mine = putGongmunTemplateInMemory(plugin, newGongmunTemplateRecord(plugin, '우리/학과 "보고서"', {}, "plan"));
     assert.equal(gongmunFileLabel(plugin, "preset:ministry", "ko"), "업무보고");
     assert.equal(gongmunFileLabel(plugin, "preset:ministry", "en"), "Ministry briefing");
-    assert.equal(gongmunFileLabel(plugin, "builtin:hallym-ilsong", "ko"), "일송 회의록");
-    assert.equal(gongmunFileLabel(plugin, "builtin:hallym-aicr", "en"), "AICR report");
-    assert.equal(gongmunFileLabel(plugin, mine.id, "en"), "우리 학과 보고서");
+    assert.equal(gongmunFileLabel(plugin, "builtin:hallym-ilsong", "ko"), "일반문서_한림대 일송");
+    assert.equal(gongmunFileLabel(plugin, "builtin:hallym-aicr", "en"), "Report_Hallym AICR");
+    assert.equal(gongmunFileLabel(plugin, mine.id, "en"), "Report_우리 학과 보고서");
     assert.equal(gongmunFileLabel(plugin, "gongmun:missing", "ko"), "");
     for (const item of GONGMUN_PRESETS) assert.ok(gongmunFileLabel(plugin, gongmunFormId(item.value), "ko"));
   });
 });
 
 describe("one list of official-document forms (R-026)", () => {
-  it("lists the institutions' forms, then the eight types, then the user's forms", () => {
+  it("lists the frames (with the two 2.7.x variants), then the institutions' forms, then the user's forms", () => {
     const plugin = host();
     putGongmunTemplateInMemory(plugin, newGongmunTemplateRecord(plugin, "우리 학과 보고서", { bodyPt: 13 }, "plan"));
     const forms = listGongmunForms(plugin);
     assert.deepEqual(
       forms.map((form) => form.kind),
-      [...BUILTIN_GONGMUN_STYLES.map(() => "builtin"), ...GONGMUN_PRESETS.map(() => "standard"), "custom"]
+      [...GONGMUN_PRESETS.map(() => "standard"), ...BUILTIN_GONGMUN_STYLES.map(() => "builtin"), "custom"]
     );
+    // Every 2.7.x type is still one row: 계획서 and 통지 are the report and the general document with a switch on.
     assert.deepEqual(
-      forms.filter((form) => form.kind === "standard").map((form) => form.id),
-      GONGMUN_PRESETS.map((item) => gongmunFormId(item.value))
+      forms.filter((form) => form.kind === "standard").map((form) => form.id).sort(),
+      GONGMUN_PRESETS.map((item) => gongmunFormId(item.value)).sort()
     );
-    assert.equal(forms[0].preset, "minutes");
-    assert.equal(forms.at(-1)?.name, "우리 학과 보고서");
+    assert.equal(forms.find((form) => form.kind === "builtin")?.preset, "minutes");
+    assert.equal(forms.at(-1)?.name, "보고서 · 우리 학과 보고서");
     assert.equal(forms.at(-1)?.preset, "plan");
     assert.ok(forms.every((form) => form.description), "every form says what it makes");
   });
@@ -98,7 +101,7 @@ describe("one list of official-document forms (R-026)", () => {
     assert.equal(selectGongmunFormInMemory(plugin, gongmunFormId("minutes")), "minutes");
     assert.equal(currentGongmunFormId(plugin), gongmunFormId("minutes"));
     assert.equal(selectGongmunFormInMemory(plugin, "builtin:hallym-aicr"), "report");
-    assert.equal(currentGongmunFormId(plugin, "official"), "builtin:hallym-aicr");
+    assert.equal(currentGongmunFormId(plugin, "official"), "form:report/builtin:hallym-aicr");
     // Choosing a standard type clears the institution form.
     selectGongmunFormInMemory(plugin, gongmunFormId("press"));
     assert.equal(getTemplateLibrary(plugin).activeGongmunId, "");

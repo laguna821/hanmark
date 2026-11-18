@@ -8,10 +8,12 @@ import { PRESET_ALIAS, type GongmunOptions, type GongmunPreset } from "kordoc";
  * conflict is reported. The table below is the single source of truth: reading,
  * the "insert properties" button, and the documentation all derive from it.
  */
-type ValueKind = "text" | "list" | "boolean" | "preset";
+type ValueKind = "text" | "list" | "boolean" | "preset" | "look" | "people";
 
 type Target =
   | "preset"
+  | "look"
+  | "press.contact.people"
   | "toc"
   | "approval"
   | "summary"
@@ -66,6 +68,8 @@ export interface GongmunPropertySpec {
 // i18n-data-begin: property names are part of the note format, not interface text
 export const GONGMUN_PROPERTIES: readonly GongmunPropertySpec[] = [
   { key: "공문_종류", alias: "gongmun-preset", kind: "preset", target: "preset", presets: "never" },
+  // The look (모양) of the document: a central agency, 공통, or a form name (R-030).
+  { key: "공문_기관서식", alias: "gongmun-agency-style", kind: "look", target: "look", presets: ["report", "plan", "gaejosik", "ministry", "press"] },
   { key: "공문_기관", alias: "gongmun-org", kind: "text", target: "cover.org", presets: "all" },
   { key: "공문_부서", alias: "gongmun-dept", kind: "text", target: "cover.dept", presets: ["report", "plan", "gaejosik", "ministry"] },
   { key: "공문_날짜", alias: "gongmun-date", kind: "text", target: "cover.date", presets: ["report", "plan", "gaejosik", "ministry"] },
@@ -103,7 +107,9 @@ export const GONGMUN_PROPERTIES: readonly GongmunPropertySpec[] = [
   { key: "보도_부제", alias: "press-subtitles", kind: "list", target: "press.sub", presets: ["press"] },
   { key: "보도_담당부서", alias: "press-dept", kind: "text", target: "press.contact.dept", presets: ["press"] },
   { key: "보도_담당자", alias: "press-manager", kind: "text", target: "press.contact.manager", presets: ["press"] },
-  { key: "보도_연락처", alias: "press-contact", kind: "text", target: "press.contact.phone", presets: ["press"] }
+  { key: "보도_연락처", alias: "press-contact", kind: "text", target: "press.contact.phone", presets: ["press"] },
+  // One person per item, "구분 / 직급 / 이름 / 전화": the six-column contact table of real press releases.
+  { key: "보도_담당자표", alias: "press-people", kind: "people", target: "press.contact.people", presets: "never" }
 ];
 
 const PROPERTY_PREFIXES = ["공문_", "공고_", "보도_", "gongmun-", "notice-", "press-"];
@@ -126,6 +132,8 @@ export type GongmunPropertyIssue =
 export interface GongmunPropertyResult {
   /** Preset named by the note, if any. */
   preset?: GongmunPreset;
+  /** Look named by the note (공문_기관서식), as written; the caller resolves it (R-030). */
+  look?: string;
   /** Options taken from the note (content: cover, heads, feet, approval, ...). */
   options: GongmunOptions;
   issues: GongmunPropertyIssue[];
@@ -176,6 +184,19 @@ function booleanValue(value: unknown): boolean | undefined {
   if (TRUE_WORDS.has(text)) return true;
   if (FALSE_WORDS.has(text)) return false;
   return undefined;
+}
+
+/** "책임자 / 과장 / 홍길동 / 02-000-0000" per item (blank parts may be left out from the right). */
+function peopleValue(value: unknown): Array<{ role?: string; title?: string; name?: string; phone?: string }> | undefined {
+  const items = Array.isArray(value) ? value.map(textValue) : typeof value === "string" ? value.split(/[;\n]/u) : [];
+  const people = items
+    .filter((item): item is string => Boolean(item && item.trim()))
+    .map((item) => {
+      const [role, title, name, phone] = item.split(/[/|]/u).map((part) => part.trim());
+      return Object.fromEntries(Object.entries({ role, title, name, phone }).filter(([, part]) => Boolean(part)));
+    })
+    .filter((person) => Object.keys(person).length > 0);
+  return people.length ? people : undefined;
 }
 
 function sameValue(left: unknown, right: unknown): boolean {
@@ -245,8 +266,20 @@ export function readGongmunProperties(
 
   for (const { spec, value } of values) {
     if (spec.kind === "preset") continue;
+    if (spec.kind === "look") {
+      const look = textValue(value);
+      if (look) result.look = look;
+      else if (!isBlank(value)) result.issues.push({ code: "invalid", key: spec.key });
+      continue;
+    }
     const parsed =
-      spec.kind === "list" ? listValue(value) : spec.kind === "boolean" ? booleanValue(value) : textValue(value);
+      spec.kind === "list"
+        ? listValue(value)
+        : spec.kind === "boolean"
+          ? booleanValue(value)
+          : spec.kind === "people"
+            ? peopleValue(value)
+            : textValue(value);
     if (parsed === undefined) {
       if (!isBlank(value)) result.issues.push({ code: "invalid", key: spec.key });
       continue;
@@ -267,6 +300,7 @@ export function gongmunPropertyKeysFor(preset: GongmunPreset): string[] {
 }
 
 export const GONGMUN_PRESET_PROPERTY_KEY = "공문_종류"; // i18n-data
+export const GONGMUN_LOOK_PROPERTY_KEY = "공문_기관서식"; // i18n-data
 
 // i18n-data-begin: Korean preset names Kordoc accepts as property values
 /** Written into 공문_종류 by "insert properties"; Kordoc reads them as aliases. */

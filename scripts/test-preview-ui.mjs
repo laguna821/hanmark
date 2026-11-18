@@ -37,7 +37,9 @@ const body = (word) => [
   "",
   "효과 설명."
 ].join("\n");
-const notes = { v1: body("내용 문단입니다."), v2: body("내용 문단이었습니다.") };
+// The edit keeps the text length, so the redraw has the same number of pages as before
+// (Kordoc 4.25.0 breaks pages closer to Hancom Office; a longer word used to add a page).
+const notes = { v1: body("내용 문단입니다."), v2: body("내용 문단입니까.") };
 
 writeFileSync(`${out}/notes.json`, JSON.stringify(notes));
 writeFileSync(
@@ -124,7 +126,8 @@ const fixtures = {
   vaultAssemblyHost: "export function createVaultAssemblyHost() { return {}; }",
   obsidianImageLoader: "export function createObsidianImageLoader() { return async () => null; }",
   documentStyle: "export function documentStyleSummary() { return \"\"; }",
-  gongmunExport: "export function gongmunGenerateOptions() { return {}; }"
+  // The toolbar's frame and look picker (R-030) reads the real form model; only the engine is a stand-in.
+  kordoc: 'export const VERSION = "fixture"; export const AGENCY_COMMON_NAME = "공통"; export const agencyNames = () => []; export const agencyStyle = () => ({}); export const PRESET_ALIAS = {}; export const normalizeGongmunPreset = (value) => value; export const incompatibleGongmunWarnings = () => []; export const measureTextWidth = () => 0; export const simulateWrap = () => ({ lines: 1 });'
 };
 
 const bundle = await build({
@@ -140,8 +143,8 @@ const bundle = await build({
   plugins: [{
     name: "host-fixture",
     setup(build) {
-      build.onResolve({ filter: /^obsidian$/ }, () => ({ path: "obsidian", namespace: "fixture" }));
-      build.onResolve({ filter: /\/io\/(kordocEngine|exportPreparation|vaultAssemblyHost|obsidianImageLoader|documentStyle|gongmunExport)$/ }, (args) => ({
+      build.onResolve({ filter: /^(obsidian|kordoc)$/ }, (args) => ({ path: args.path, namespace: "fixture" }));
+      build.onResolve({ filter: /^\.\.\/io\/(kordocEngine|exportPreparation|vaultAssemblyHost|obsidianImageLoader|documentStyle)$/ }, (args) => ({
         path: args.path.split("/").pop(),
         namespace: "fixture"
       }));
