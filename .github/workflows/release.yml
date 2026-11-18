@@ -2,7 +2,7 @@ name: Publish verified plugin
 
 on:
   push:
-    tags: ["2.7.1"]
+    tags: ["3.0.0"]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -80,5 +80,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}"
           release/main.js release/manifest.json release/styles.css
           --verify-tag
-          --title "HanMark 2.7.1 — Editorial PDF Paper Stays White in Dark Mode"
-          --notes-file "release-notes/2.7.1.md"
+          --title "HanMark 3.0.0 — Kordoc 4.25, Frames and Looks, Diagrams, and Built-in DOCX"
+          --notes-file "release-notes/3.0.0.md"
