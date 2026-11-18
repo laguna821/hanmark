@@ -1093,6 +1093,7 @@ export default class HanmarkPlugin extends Plugin {
       {
         templateHost: this,
         gateway: this.gateway,
+        lookPicker: () => this.gongmunPickerHost(),
         changed: (activeId) => {
           changed(activeId);
           this.refreshPreviews();
@@ -1182,8 +1183,15 @@ export default class HanmarkPlugin extends Plugin {
     new GongmunBatchModal(this.app, {
       forms: listGongmunForms(this),
       listForms: (look) => listGongmunForms(this, formatGongmunFormId(gongmunFormChoice("report", look))),
-      chooseLook: (current, pick) =>
-        new GongmunLookModal(this.app, { host: this.gongmunPickerHost(), frame: "report", current, pick }).open(),
+      chooseLook: (current, pick, frame) =>
+        new GongmunLookModal(this.app, {
+          host: this.gongmunPickerHost(),
+          frame: frame ?? "report",
+          current,
+          // A row's own look is 기본, 공통, or an agency; forms made for one type have rows of their own.
+          filter: (look) => look.kind === "basic" || look.kind === "common" || look.kind === "agency",
+          pick
+        }).open(),
       currentFormId: this.currentGongmunForm(snapshot.file),
       noteName: snapshot.file.basename,
       run: async (forms, hooks) => {

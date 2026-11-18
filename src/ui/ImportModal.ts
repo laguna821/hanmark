@@ -154,6 +154,8 @@ export class ImportModal extends Modal {
   private running = false;
   private cancelled = false;
   private progressEl: HTMLElement | null = null;
+  /** The advanced section stays open across redraws (changing an option redraws the window). */
+  private advancedOpen = false;
 
   constructor(private readonly host: ImportHost, initialInputs: ImportInput[] = []) {
     super(host.app);
@@ -278,6 +280,10 @@ export class ImportModal extends Modal {
 
   private renderAdvanced(container: HTMLElement): void {
     const details = container.createEl("details", { cls: "hanmark-import-advanced" });
+    details.open = this.advancedOpen;
+    details.addEventListener("toggle", () => {
+      this.advancedOpen = details.open;
+    });
     details.createEl("summary", { text: t("import.modal.advanced") });
     const pageSetting = new Setting(details)
       .setName(t("import.modal.pages.name"))

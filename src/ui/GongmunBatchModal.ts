@@ -2,6 +2,8 @@ import { Modal, type App } from "obsidian";
 import type { GongmunFormOption } from "../io/gongmunExport";
 import type { BatchEntry, BatchHooks } from "../io/gongmunBatch";
 import type { HanmarkExportOutcome } from "../io/exportTypes";
+import type { GongmunFrame } from "../io/gongmunFormId";
+import { AGENCY_FRAMES, gongmunFrameLabel } from "../io/gongmunForms";
 import { t } from "../i18n";
 import { setPhase } from "./motion";
 
@@ -14,8 +16,12 @@ export interface GongmunBatchHost {
   forms: GongmunFormOption[];
   /** The short list again with the frames in another look (R-030). */
   listForms?: (look: string) => GongmunFormOption[];
-  /** Opens the look chooser; `pick` gets the chosen look id and its name. */
-  chooseLook?: (current: string, pick: (look: string, name: string) => void) => void;
+  /**
+   * Opens the look chooser; `pick` gets the chosen look id and its name. With a
+   * `frame` the chooser lists that frame's looks (one row's look); without, every
+   * frame's (the look for all rows).
+   */
+  chooseLook?: (current: string, pick: (look: string, name: string) => void, frame?: GongmunFrame) => void;
   /** The form the note starts with; checked first. */
   currentFormId?: string;
   noteName: string;
@@ -32,22 +38,25 @@ export interface GongmunBatchHost {
 type Stage = "choose" | "running" | "done";
 
 export class GongmunBatchModal extends Modal {
-  private readonly checked: Set<string>;
+  /** Checked rows by position: a row keeps its place when its look changes. */
+  private readonly checked = new Set<number>();
   private stage: Stage = "choose";
   private stopRequested = false;
   private readonly rows = new Map<string, HTMLElement>();
   private progressEl: HTMLElement | null = null;
   private entries: Array<BatchEntry<GongmunFormOption, HanmarkExportOutcome>> = [];
   private forms: GongmunFormOption[];
-  /** Look the frames are made in ("basic" until the user picks one). */
+  /** Look every frame is made in ("basic" until the user picks one). */
   private look = "basic";
   private lookName = "";
+  /** Looks picked for single frames; they win over the look for every frame. */
+  private readonly rowLooks = new Map<GongmunFrame, { look: string; name: string }>();
 
   constructor(app: App, private readonly host: GongmunBatchHost) {
     super(app);
     this.forms = host.forms;
-    const first = host.forms.find((form) => form.id === host.currentFormId) ?? host.forms[0];
-    this.checked = new Set(first ? [first.id] : []);
+    const first = host.forms.findIndex((form) => form.id === host.currentFormId);
+    if (host.forms.length) this.checked.add(Math.max(0, first));
   }
 
   onOpen(): void {
@@ -85,15 +94,11 @@ export class GongmunBatchModal extends Modal {
       button.disabled = this.stage === "running";
       button.onclick = () =>
         chooseLook(this.look, (look, name) => {
-          // Checked rows stay checked by position: the list keeps its order when the look changes.
-          const checkedAt = this.forms.map((form) => this.checked.has(form.id));
           this.look = look;
           this.lookName = name;
-          this.forms = listForms(look);
-          this.checked.clear();
-          this.forms.forEach((form, index) => {
-            if (checkedAt[index]) this.checked.add(form.id);
-          });
+          // One look for every frame replaces the looks picked row by row.
+          this.rowLooks.clear();
+          this.rebuildForms();
           this.render();
         });
       lookRow.createEl("small", { text: t("gongmun.batch.lookHelp") });
@@ -101,23 +106,45 @@ export class GongmunBatchModal extends Modal {
     const list = contentEl.createDiv({ cls: "hanmark-gongmun-batch-list" });
     this.rows.clear();
     let group: string | null = null;
-    for (const form of this.forms) {
+    this.forms.forEach((form, index) => {
       if (form.group !== group) {
         group = form.group;
         list.createDiv({ cls: "hanmark-gongmun-batch-group", text: form.group });
       }
-      const row = list.createEl("label", { cls: "hanmark-gongmun-batch-row" });
+      const line = list.createDiv({ cls: "hanmark-gongmun-batch-line" });
+      const row = line.createEl("label", { cls: "hanmark-gongmun-batch-row" });
       const box = row.createEl("input", { type: "checkbox" });
-      box.checked = this.checked.has(form.id);
+      box.checked = this.checked.has(index);
       box.disabled = this.stage === "running";
       box.onchange = () => {
-        if (box.checked) this.checked.add(form.id);
-        else this.checked.delete(form.id);
+        if (box.checked) this.checked.add(index);
+        else this.checked.delete(index);
         this.render();
       };
       row.createSpan({ cls: "hanmark-gongmun-batch-name", text: form.name });
+      // A frame row carries its own look (R-030): 보고서 in 국세청, 보도자료 in 교육부, at once.
+      if (chooseLook && listForms && form.kind === "standard" && AGENCY_FRAMES.includes(form.frame)) {
+        const own = this.rowLooks.get(form.frame);
+        const current = own?.look ?? form.look;
+        const pickLook = line.createEl("button", {
+          cls: "hanmark-gongmun-batch-rowlook",
+          text: t("gongmun.batch.rowLook", { name: own?.name || (form.look === this.look && this.lookName ? this.lookName : t("gongmun.look.basic")) }),
+          attr: { type: "button", "data-frame": form.frame, title: t("gongmun.batch.rowLookTitle", { frame: gongmunFrameLabel(form.frame) }) }
+        });
+        pickLook.disabled = this.stage === "running";
+        pickLook.onclick = () =>
+          chooseLook(
+            current,
+            (look, name) => {
+              this.rowLooks.set(form.frame, { look, name });
+              this.rebuildForms();
+              this.render();
+            },
+            form.frame
+          );
+      }
       this.rows.set(form.id, row);
-    }
+    });
     this.progressEl = contentEl.createDiv({ cls: "hanmark-gongmun-batch-progress", attr: { role: "status", "aria-live": "polite" } });
 
     const actions = contentEl.createDiv({ cls: "hanmark-dialog-actions" });
@@ -134,7 +161,7 @@ export class GongmunBatchModal extends Modal {
     }
     const all = actions.createEl("button", { text: t("gongmun.batch.all") });
     all.onclick = () => {
-      for (const form of this.forms) this.checked.add(form.id);
+      this.forms.forEach((_form, index) => this.checked.add(index));
       this.render();
     };
     const none = actions.createEl("button", { text: t("gongmun.batch.none") });
@@ -149,8 +176,28 @@ export class GongmunBatchModal extends Modal {
     start.onclick = () => void this.start();
   }
 
+  /**
+   * The list in the look for every frame, with each frame that has a look of its own
+   * taken from the list in that look. The order never changes, so checks stay in place.
+   */
+  private rebuildForms(): void {
+    const listForms = this.host.listForms;
+    if (!listForms) return;
+    const base = listForms(this.look);
+    const lists = new Map<string, GongmunFormOption[]>();
+    this.forms = base.map((form, index) => {
+      const own = form.kind === "standard" ? this.rowLooks.get(form.frame) : undefined;
+      if (!own) return form;
+      let list = lists.get(own.look);
+      if (!list) lists.set(own.look, (list = listForms(own.look)));
+      // The list has the same rows in every look, so the same position is the same frame and variant.
+      const same = list[index];
+      return same && same.kind === "standard" && same.frame === form.frame ? same : form;
+    });
+  }
+
   private async start(): Promise<void> {
-    const forms = this.forms.filter((form) => this.checked.has(form.id));
+    const forms = this.forms.filter((_form, index) => this.checked.has(index));
     if (!forms.length) return;
     this.stage = "running";
     this.stopRequested = false;

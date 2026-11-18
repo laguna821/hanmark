@@ -36,6 +36,11 @@ export interface GongmunStyleOptions {
   approval?: string[];
   /** Default organization name (cover, or the draft-letter head table). */
   org?: string;
+  /**
+   * Kordoc agency look the form starts from (R-030): its measured fonts, marks and
+   * colours sit below every option set here. Only frames that take agency looks use it.
+   */
+  agency?: string;
 }
 
 const HEX = /^#[0-9A-F]{6}$/iu;
@@ -108,6 +113,7 @@ export function normalizeGongmunStyleOptions(value: unknown): GongmunStyleOption
     h2Marker: oneOf(data.h2Marker, ["band", "roman", "box", "number", "none"] as const),
     bandColor: hex(data.bandColor),
     bandTextColor: hex(data.bandTextColor),
+    agency: cleanText(data.agency, 40),
     fonts: compact({
       body: cleanText(fonts.body, 40),
       heading: cleanText(fonts.heading, 40),

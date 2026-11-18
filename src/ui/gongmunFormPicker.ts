@@ -48,6 +48,8 @@ export interface LookChooserInput {
   /** Look id that is chosen now. */
   current: string;
   idPrefix: string;
+  /** Narrows the list (the style window offers only the looks a form can start from). */
+  filter?: (look: GongmunLookEntry) => boolean;
   onPick(look: string): void;
   onClose(): void;
 }
@@ -85,6 +87,12 @@ export function lookSections(
   }
   return sections;
 }
+
+const AGENCY_SECTION = /^(?:ministry|office|agency|committee|other):/u;
+
+/** Room the open panel needs before it opens upwards instead (px). */
+const PANEL_MIN_ROOM = 260;
+const PANEL_MAX_ROOM = 380;
 
 /** The searchable look list. Returns the search input so the caller can focus it. */
 export function renderLookChooser(root: HTMLElement, input: LookChooserInput): HTMLInputElement {
@@ -126,12 +134,18 @@ export function renderLookChooser(root: HTMLElement, input: LookChooserInput): H
     list.empty();
     const library = getTemplateLibrary(input.host.library);
     const favorites = library.gongmunLookFavorites;
-    const sections = lookSections(listGongmunLooks(input.host.library, input.frame), favorites, library.gongmunLookRecent, search.value);
+    const offered = listGongmunLooks(input.host.library, input.frame).filter((look) => input.filter?.(look) ?? true);
+    const sections = lookSections(offered, favorites, library.gongmunLookRecent, search.value);
     if (!sections.length) list.createDiv({ cls: "hanmark-look-empty", text: t("gongmun.look.empty") });
     let index = 0;
     for (const section of sections) {
       const group = list.createDiv({ cls: "hanmark-look-group", attr: { role: "group", "aria-label": section.title } });
-      group.createDiv({ cls: "hanmark-look-group-title", text: section.title });
+      const title = group.createDiv({ cls: "hanmark-look-group-title" });
+      title.createSpan({ cls: "hanmark-look-group-name", text: section.title });
+      // Agency groups say how many agencies they hold (부 19곳, 청 20곳 …).
+      if (AGENCY_SECTION.test(section.key)) {
+        title.createSpan({ cls: "hanmark-look-group-count", text: t("gongmun.look.group.count", { count: section.looks.length }) });
+      }
       for (const look of section.looks) {
         const row = group.createDiv({
           cls: "hanmark-look-option",
@@ -264,6 +278,15 @@ export function renderGongmunFormPicker(root: HTMLElement, input: GongmunFormPic
     // Near the right edge (the preview toolbar) the panel opens leftwards instead of being cut off.
     const bounds = (panel.closest(".view-content, .modal") ?? panel.ownerDocument.documentElement).getBoundingClientRect();
     panel.toggleClass("is-right", panel.getBoundingClientRect().right > bounds.right);
+    // The panel stays inside its window: it opens upwards when there is more room above
+    // (the export window keeps its export button visible), and its list never runs off the edge.
+    const anchor = lookButton.getBoundingClientRect();
+    const below = bounds.bottom - anchor.bottom - 12;
+    const above = anchor.top - bounds.top - 12;
+    const up = below < PANEL_MIN_ROOM && above > below;
+    panel.toggleClass("is-up", up);
+    const room = Math.round(Math.max(160, Math.min(PANEL_MAX_ROOM, up ? above : below)));
+    panel.setCssProps({ "--hanmark-look-room": `${room}px` });
     search.focus();
   };
 
