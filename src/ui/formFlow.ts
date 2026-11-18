@@ -1,6 +1,7 @@
 import { Modal, Notice, SuggestModal, TFile, type App, type MarkdownView } from "obsidian";
 import {
   BUILTIN_FORM_PREFIX,
+  FORM_FORMAT_KEY,
   FORM_HASH_KEY,
   FORM_LINK_KEY,
   collectFormValues,
@@ -13,6 +14,7 @@ import {
   type FormFieldSpec,
   type FormOverflow
 } from "../io/formFill";
+import { isHwpxBytes } from "../io/hwpConvert";
 import { BUILTIN_FORMS, builtinFormBytes, isBuiltinFormId, type BuiltinForm } from "../io/builtinForms";
 import { uniqueNotePath } from "../io/importRunner";
 import { safeBaseName } from "../io/compareNote";
@@ -53,7 +55,8 @@ async function createFormNote(
   title: string,
   link: string,
   hash: string,
-  folder: string
+  folder: string,
+  format?: "hwpx" | "hwp"
 ): Promise<TFile> {
   const sample = fields.map((field) => `${field.name}${field.hint ?? ""}`).join(" ") || title;
   const locale = resolveOutputLocale(host.outputLanguage(), sample);
@@ -61,7 +64,7 @@ async function createFormNote(
   const base = safeBaseName(tOut(locale, "output.form.title", { form: title })) || safeBaseName(title);
   const path = uniqueNotePath(host.app, folder, base, new Set());
   const note = await host.app.vault.create(path, formNoteBody(fields, title, locale));
-  const { properties } = formNoteProperties(fields, link, hash);
+  const { properties } = formNoteProperties(fields, link, hash, {}, format);
   await host.app.fileManager.processFrontMatter(note, (frontmatter: Record<string, unknown>) => {
     Object.assign(frontmatter, properties);
   });
@@ -70,16 +73,26 @@ async function createFormNote(
   return note;
 }
 
-/** Form note from an HWPX form that lives in the Vault; the note goes next to the form unless `folder` is given. */
+const FORM_EXTENSIONS: readonly string[] = ["hwpx", "hwp"];
+
+/** Form note from an HWPX or HWP 5.x form that lives in the Vault; the note goes next to the form unless `folder` is given. */
 export async function createFormNoteFromFile(host: FormHost, file: TFile, folder?: string): Promise<void> {
-  if (file.extension.toLowerCase() !== "hwpx") {
+  if (!FORM_EXTENSIONS.includes(file.extension.toLowerCase())) {
     new Notice(t("form.hwpOnly"), 8_000);
     return;
   }
   try {
     const bytes = new Uint8Array(await host.app.vault.readBinary(file));
     const fields = await readFormFields(bytes);
-    await createFormNote(host, fields, stem(file.name), `[[${file.path}]]`, formHash(bytes), folder ?? parentFolder(file.path));
+    await createFormNote(
+      host,
+      fields,
+      stem(file.name),
+      `[[${file.path}]]`,
+      formHash(bytes),
+      folder ?? parentFolder(file.path),
+      isHwpxBytes(bytes) ? "hwpx" : "hwp"
+    );
   } catch (error: unknown) {
     new Notice(t("form.readFailed", { detail: errorMessage(error) }), 8_000);
   }
@@ -90,7 +103,7 @@ export async function createFormNoteFromExternal(host: FormHost, notePath: strin
   try {
     const [picked] = await host.gateway.pickFiles({ extensions: ["hwpx", "hwp"], multiple: false });
     if (!picked) return;
-    if (!picked.name.toLowerCase().endsWith(".hwpx")) {
+    if (!/\.hwpx?$/iu.test(picked.name)) {
       new Notice(t("form.hwpOnly"), 8_000);
       return;
     }
@@ -222,7 +235,7 @@ export async function fillFormFromNote(host: FormHost, view: MarkdownView | null
     } else {
       const form = app.metadataCache.getFirstLinkpathDest(link, note.path) ?? app.vault.getAbstractFileByPath(link);
       if (!(form instanceof TFile)) throw new Error(t("form.missingForm", { link }));
-      if (form.extension.toLowerCase() !== "hwpx") {
+      if (!FORM_EXTENSIONS.includes(form.extension.toLowerCase())) {
         new Notice(t("form.hwpOnly"), 8_000);
         return;
       }
@@ -235,7 +248,13 @@ export async function fillFormFromNote(host: FormHost, view: MarkdownView | null
     const hash = formHash(bytes);
     if (typeof frontmatter[FORM_HASH_KEY] === "string" && frontmatter[FORM_HASH_KEY] !== hash) {
       const fields = await readFormFields(bytes);
-      const { properties, added } = formNoteProperties(fields, String(frontmatter[FORM_LINK_KEY]), hash, frontmatter);
+      const { properties, added } = formNoteProperties(
+        fields,
+        String(frontmatter[FORM_LINK_KEY]),
+        hash,
+        frontmatter,
+        frontmatter[FORM_FORMAT_KEY] === "hwp" || !isHwpxBytes(bytes) ? "hwp" : "hwpx"
+      );
       await app.fileManager.processFrontMatter(note, (current: Record<string, unknown>) => {
         Object.assign(current, properties);
       });
@@ -271,7 +290,7 @@ class FormSourceSuggest extends SuggestModal<FormSourceChoice> {
     const needle = query.trim().toLowerCase();
     const files = this.app.vault
       .getFiles()
-      .filter((file) => file.extension.toLowerCase() === "hwpx" && file.path.toLowerCase().includes(needle))
+      .filter((file) => FORM_EXTENSIONS.includes(file.extension.toLowerCase()) && file.path.toLowerCase().includes(needle))
       .slice(0, 100)
       .map((file): FormSourceChoice => ({ kind: "vault", file }));
     return [{ kind: "external" }, ...files];

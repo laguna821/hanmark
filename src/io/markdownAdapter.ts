@@ -26,7 +26,9 @@ export type AdapterWarningCode =
   | "font-missing"
   | "document-style-level-unused"
   | "diagram-kept-as-code"
-  | "diagram-font";
+  | "diagram-font"
+  | "memo-placed"
+  | "memo-unplaced";
 
 export interface AdapterWarning {
   code: AdapterWarningCode;

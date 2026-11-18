@@ -131,6 +131,7 @@ import {
   type FormHost
 } from "./ui/formFlow";
 import { FORM_LINK_KEY } from "./io/formFill";
+import { convertHwpFiles } from "./ui/hwpConvertFlow";
 import {
   QuickHwpxPreviewView,
   QUICK_HWPX_PREVIEW_VIEW,
@@ -546,7 +547,15 @@ export default class HanmarkPlugin extends Plugin {
             .setIcon("git-compare")
             .onClick(() => this.openCompare(file))
         );
-        if (file.extension.toLowerCase() === "hwpx") {
+        if (file.extension.toLowerCase() === "hwp") {
+          menu.addItem((item) =>
+            item
+              .setTitle(t("menu.convertToHwpx"))
+              .setIcon("file-output")
+              .onClick(() => void convertHwpFiles(this.formHost(), [file]))
+          );
+        }
+        if (HANGUL_DOCUMENT_EXTENSIONS.includes(file.extension.toLowerCase())) {
           menu.addItem((item) =>
             item
               .setTitle(t("menu.formNote"))
@@ -568,6 +577,15 @@ export default class HanmarkPlugin extends Plugin {
             .setIcon("file-input")
             .onClick(() => void importVaultFiles(this.importHost(), documents))
         );
+        const hwpFiles = documents.filter((file) => file.extension.toLowerCase() === "hwp");
+        if (hwpFiles.length) {
+          menu.addItem((item) =>
+            item
+              .setTitle(t("menu.convertManyToHwpx", { count: hwpFiles.length }))
+              .setIcon("file-output")
+              .onClick(() => void convertHwpFiles(this.formHost(), hwpFiles))
+          );
+        }
       })
     );
   }
@@ -762,6 +780,9 @@ export default class HanmarkPlugin extends Plugin {
         new HanmarkDocumentView(leaf, {
           convertToNote: (file) => importVaultFiles(this.importHost(), [file]),
           compare: (file) => this.openCompare(file),
+          convertToHwpx: async (file) => {
+            await convertHwpFiles(this.formHost(), [file]);
+          },
           formNote: (file) => createFormNoteFromFile(this.formHost(), file),
           openWithDefaultApp: Platform.isDesktopApp ? (file) => this.openWithDefaultApp(file) : undefined
         })
@@ -786,6 +807,16 @@ export default class HanmarkPlugin extends Plugin {
       id: "compare-documents",
       name: t("command.compare"),
       callback: () => this.openCompare()
+    });
+    this.addCommand({
+      id: "convert-hwp-to-hwpx",
+      name: t("command.convertToHwpx"),
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension.toLowerCase() !== "hwp") return false;
+        if (!checking) void convertHwpFiles(this.formHost(), [file]);
+        return true;
+      }
     });
     this.addCommand({
       id: "form-note-from-hwpx",

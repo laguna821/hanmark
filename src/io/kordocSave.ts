@@ -19,6 +19,7 @@ import {
 } from "./frontmatter";
 import { HwpSaveReportModal } from "./HwpSaveReportModal";
 import { adaptMarkdownForKordoc } from "./markdownAdapter";
+import { attachMemos, commentsAsMemosSetting, extractMemoMarks } from "./hwpxMemos";
 import { assembleEmbedsSetting, prepareExportMarkdown } from "./exportPreparation";
 import { exportDiagramOptions } from "../ui/diagramEnvironment";
 import { createVaultAssemblyHost } from "./vaultAssemblyHost";
@@ -191,9 +192,11 @@ async function generateBody(
   const gongmun = options.mode === "gongmun-hwpx"
     ? planGongmunExport(app, file, host, options.gongmunPreset, options.gongmunFormId)
     : undefined;
-  const adapted = adaptMarkdownForKordoc(prepared.markdown, { outputLanguage: outputLanguage(plugin) });
+  // "주석을 한글 메모로" (R-034): highlight + comment pairs leave the body and come back as memos.
+  const memoStage = commentsAsMemosSetting(host.settings) ? extractMemoMarks(prepared.markdown) : null;
+  const adapted = adaptMarkdownForKordoc(memoStage?.markdown ?? prepared.markdown, { outputLanguage: outputLanguage(plugin) });
   adapted.warnings.unshift(...prepared.warnings, ...(gongmun?.warnings ?? []));
-  return generateValidatedHwpxFromAdapted(adapted, {
+  const generated = await generateValidatedHwpxFromAdapted(adapted, {
     profile: gongmun ? gongmun.profile : activeTableProfile(host),
     ...(gongmun ? gongmunGenerateOptions(gongmun) : {}),
     documentStyle:
@@ -210,6 +213,7 @@ async function generateBody(
       onProgress: onImageProgress
     }
   });
+  return memoStage ? attachMemos(generated, memoStage.memos) : generated;
 }
 
 /**

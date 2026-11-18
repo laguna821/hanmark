@@ -207,6 +207,15 @@ export class HanmarkSettingTab extends PluginSettingTab {
         });
       });
     new Setting(container)
+      .setName(t("settings.commentsAsMemos.name"))
+      .setDesc(t("settings.commentsAsMemos.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(this.host.settings.commentsAsMemos).onChange((enabled) => {
+          this.host.settings.commentsAsMemos = enabled;
+          void this.host.saveSettings();
+        });
+      });
+    new Setting(container)
       .setName(t("settings.mermaidDiagrams.name"))
       .setDesc(t("settings.mermaidDiagrams.desc"))
       .addToggle((toggle) => {

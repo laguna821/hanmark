@@ -30,6 +30,9 @@ export const en: MessageTable = {
   "command.fillForm": "Fill the form and save (HWPX)",
   "menu.compare": "Compare with another document",
   "menu.formNote": "Create a form note",
+  "menu.convertToHwpx": "Convert to HWPX",
+  "menu.convertManyToHwpx": "Convert to HWPX ({count} HWP files)",
+  "command.convertToHwpx": "Convert the open HWP document to HWPX",
   "reveal.unavailable": "This vault cannot be opened in the operating system's file manager.",
 
   // External programs (Pandoc, Word preview, file manager)
@@ -215,6 +218,24 @@ export const en: MessageTable = {
   },
   "viewer.compare": "Compare with another document",
   "viewer.formNote": "Create a form note",
+  "viewer.convertToHwpx": "Convert to HWPX",
+  "convert.noHwp": "There is no HWP document to convert to HWPX.",
+  "convert.done": "Converted to HWPX: {path}",
+  "convert.progress.file": "Converting to HWPX ({current}/{total}): {file} ",
+  "convert.progress.stop": "Stop the remaining files",
+  "convert.report.title": "HWPX conversion result",
+  "convert.report.summary": "{done} converted, {failed} failed. The original HWP files are unchanged.",
+  "convert.report.stopped": "{count} files were not converted because you stopped.",
+  "convert.report.saved": "Saved: {path}",
+  "convert.report.modePreserve": "Fonts, paragraph formatting, tables and pictures were carried over as they are.",
+  "convert.report.modeContent": "Only text and tables were carried over; the formatting is the default one.",
+  "convert.report.view": "View the converted document",
+  "convert.note.contentOnly": "HWP 3.x formatting cannot be carried over, so only text and tables were moved, with default formatting.",
+  "convert.error.failed": "This document could not be converted to HWPX. ({detail})",
+  "convert.error.invalid": "The converted result was not a valid HWPX, so nothing was saved. ({detail})",
+  "form.hwp3Unsupported": "An HWP 3.x form cannot keep its formatting, so it cannot be used for form filling. Save it as HWPX in Hangul first.",
+  "memo.notice.placed": "{count} comments were attached as Hangul memos.",
+  "memo.warning.unplaced": "{count} memos were not attached because their text was not found inside one paragraph of the document: {names}",
 
   // Old–new comparison (compare documents)
   "compare.title": "Compare two documents",
@@ -238,13 +259,13 @@ export const en: MessageTable = {
   "form.builtin.gian": "Standard draft letter (일반기안문)",
   "form.builtin.gianSimple": "Simplified draft letter (간이기안문)",
   "form.builtin.placeholder": "Choose a standard draft letter to start from",
-  "form.pickPlaceholder": "Choose an HWPX form",
+  "form.pickPlaceholder": "Choose an HWPX or HWP form",
   "form.pickExternal": "Choose a file outside the vault…",
   "form.noteCreated": {
     one: "Created the form note: {path} (1 field)",
     other: "Created the form note: {path} ({count} fields)"
   },
-  "form.hwpOnly": "Form filling supports HWPX only. Save the form as HWPX in Hangul first.",
+  "form.hwpOnly": "Form filling supports HWPX and HWP 5.x forms.",
   "form.readFailed": "Could not read the form: {detail}",
   "form.copied": "Copied the form into the vault: {path}",
   "form.noNote": "Open a form note first.",
@@ -1004,6 +1025,8 @@ export const en: MessageTable = {
     one: "{count} Mermaid diagram message: {first}",
     other: "{count} Mermaid diagram messages: {first}"
   },
+  "settings.commentsAsMemos.name": "Comments as Hangul memos",
+  "settings.commentsAsMemos.desc": "When exporting to HWPX, a comment written directly after a highlight, as in ==highlight==%%comment%%, becomes a Hangul memo on that text. Comments without a highlight are left out, as before.",
   "settings.mermaidDiagrams.name": "Export Mermaid diagrams as pictures",
   "settings.mermaidDiagrams.desc":
     "Exports Mermaid code blocks as drawn diagrams: pictures (PNG) in HWPX and DOCX, vector diagrams with selectable text in HTML and PDF. When off, they stay code as before. Applies to the previews too.",
