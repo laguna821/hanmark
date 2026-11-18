@@ -281,7 +281,14 @@ export function renderGongmunFormPicker(root: HTMLElement, input: GongmunFormPic
     // The panel stays inside its window: it opens upwards when there is more room above
     // (the export window keeps its export button visible), and its list never runs off the edge.
     const anchor = lookButton.getBoundingClientRect();
-    const below = bounds.bottom - anchor.bottom - 12;
+    // A window may mark what the open panel must not cover (the export window's footer
+    // with the export button): the room below ends there, however tall the window is.
+    const container = panel.closest(".view-content, .modal") ?? panel.ownerDocument.documentElement;
+    const floors = Array.from(container.querySelectorAll("[data-hanmark-picker-floor]"))
+      .map((element) => element.getBoundingClientRect().top)
+      .filter((top) => top >= anchor.bottom);
+    const bottom = Math.min(bounds.bottom, ...floors);
+    const below = bottom - anchor.bottom - 12;
     const above = anchor.top - bounds.top - 12;
     const up = below < PANEL_MIN_ROOM && above > below;
     panel.toggleClass("is-up", up);

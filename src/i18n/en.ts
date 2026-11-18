@@ -1061,6 +1061,13 @@ export const en: MessageTable = {
   },
   "settings.commentsAsMemos.name": "Comments as Hangul memos",
   "settings.commentsAsMemos.desc": "When exporting to HWPX, a comment written directly after a highlight, as in ==highlight==%%comment%%, becomes a Hangul memo on that text. Comments without a highlight are left out, as before.",
+  "settings.hwpxEquations.name": "Equations as Hangul equation objects",
+  "settings.hwpxEquations.desc": "When exporting to HWPX, an equation written as $…$ becomes a Hangul equation object. Off keeps it as text, as before. Documents made from your own sample are not affected.",
+  "export.switch.heading": "When exporting",
+  "export.switch.mermaidDiagrams.desc": "Mermaid code blocks go in as drawn diagrams. Off keeps them as code.",
+  "export.switch.commentsAsMemos.desc": "A comment written directly after a highlight, as in ==text==%%memo%%, becomes a Hangul memo on that text.",
+  "export.switch.hwpxEquations.desc": "$…$ equations go in as Hangul equation objects. Off keeps them as text.",
+  "export.switch.saveFailed": "Could not save the setting: {detail}",
   "settings.mermaidDiagrams.name": "Export Mermaid diagrams as pictures",
   "settings.mermaidDiagrams.desc":
     "Exports Mermaid code blocks as drawn diagrams: pictures (PNG) in HWPX and DOCX, vector diagrams with selectable text in HTML and PDF. When off, they stay code as before. Applies to the previews too.",

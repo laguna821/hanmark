@@ -226,6 +226,15 @@ export class HanmarkSettingTab extends PluginSettingTab {
         });
       });
     new Setting(container)
+      .setName(t("settings.hwpxEquations.name"))
+      .setDesc(t("settings.hwpxEquations.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(this.host.settings.hwpxEquations).onChange((enabled) => {
+          this.host.settings.hwpxEquations = enabled;
+          void this.host.saveSettings();
+        });
+      });
+    new Setting(container)
       .setName(t("settings.mermaidDiagrams.name"))
       .setDesc(t("settings.mermaidDiagrams.desc"))
       .addToggle((toggle) => {

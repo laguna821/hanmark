@@ -53,6 +53,8 @@ export interface QuickPreviewOptions {
   assembleEmbeds?(): boolean;
   /** Diagram drawing for the preview (R-033); undefined keeps Mermaid blocks as code. */
   diagrams?(): ExportDiagramOptions | undefined;
+  /** "수식을 한글 수식 개체로" (R-037): the preview draws what the export will write. */
+  equations?(): boolean;
   gongmunPlan?(file: TFile, preset: GongmunPreset, formId?: string): GongmunExportPlan;
   /** Official-document forms for the toolbar: institutions', standard, the user's (R-026). */
   gongmunForms?(): GongmunFormOption[];
@@ -386,10 +388,11 @@ export class QuickHwpxPreviewView extends ItemView {
     const outputLanguage = this.options.outputLanguage?.() ?? "auto";
     const platform = Platform.isWin ? "win32" : Platform.isMacOS ? "darwin" : "linux";
     const mode = this.effectiveMode(file);
+    const equations = this.options.equations?.() ? { inlineMath: true } : {};
     if (mode.kind === "gongmun" && this.options.gongmunPlan) {
       const plan = this.options.gongmunPlan(file, mode.preset, mode.formId);
       return {
-        options: { ...gongmunGenerateOptions(plan), outputLanguage, fontResolver: { platform } },
+        options: { ...gongmunGenerateOptions(plan), ...equations, outputLanguage, fontResolver: { platform } },
         notes: plan.warnings.map((warning) => warning.message)
       };
     }
@@ -398,6 +401,7 @@ export class QuickHwpxPreviewView extends ItemView {
       options: {
         profile: this.options.profile(),
         documentStyle,
+        ...equations,
         outputLanguage,
         fontResolver: { platform, rules: this.options.fontRules?.() }
       },
@@ -446,7 +450,8 @@ export class QuickHwpxPreviewView extends ItemView {
       profile: generation.options.profile,
       documentStyle: generation.options.documentStyle,
       outputLanguage: generation.options.outputLanguage,
-      rules: generation.options.fontResolver?.rules
+      rules: generation.options.fontResolver?.rules,
+      ...(generation.options.inlineMath ? { inlineMath: true } : {})
     });
     const identity = `${file.path}\u0000${JSON.stringify(mode)}`;
     let entry = this.cache.get(key);

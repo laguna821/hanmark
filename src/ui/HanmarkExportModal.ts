@@ -20,6 +20,7 @@ import { gongmunLookByName, gongmunLookName } from "../io/gongmunForms";
 import { renderGongmunFormPicker, type GongmunPickerHost } from "./gongmunFormPicker";
 import { GONGMUN_LOOK_PROPERTY_KEY, GONGMUN_PRESET_PROPERTY_KEY } from "../io/gongmunProperties";
 import { templateDisplayName } from "../io/templateLibrary";
+import { exportSwitchesFor, type ExportSwitchFormat, type ExportSwitchId } from "../io/exportSwitches";
 import { t, tKey, type MessageKey } from "../i18n";
 import { setPhase } from "./motion";
 
@@ -31,6 +32,9 @@ type HanmarkExportActionResult =
   | void;
 
 export interface HanmarkExportActions {
+  /** "내보낼 때" switches (R-037): the stored value, and storing a new one. */
+  exportSwitch?: (id: ExportSwitchId) => boolean;
+  setExportSwitch?: (id: ExportSwitchId, value: boolean) => Promise<void>;
   activeTemplateId: () => string;
   templateChoices: () => Array<{ id: string; name: string }>;
   activeTemplateSummary: () => string;
@@ -402,6 +406,7 @@ export class HanmarkExportModal extends Modal {
 
     if (this.hwpxVariant === "gongmun") {
       this.renderGongmunOptions(root);
+      this.renderExportSwitches(root, "hwpx");
       return;
     }
 
@@ -455,6 +460,47 @@ export class HanmarkExportModal extends Modal {
       await this.actions.openPreview();
       this.close();
     };
+    this.renderExportSwitches(root, "hwpx");
+  }
+
+  /**
+   * One "내보낼 때" group per format (R-037). Each box is a stored setting, so the
+   * quick commands, the previews and several-forms-at-once follow the same choice.
+   */
+  private renderExportSwitches(root: HTMLElement, format: ExportSwitchFormat): void {
+    const read = this.actions.exportSwitch;
+    const write = this.actions.setExportSwitch;
+    if (!read || !write) return;
+    const switches = exportSwitchesFor(format);
+    if (!switches.length) return;
+    const group = root.createEl("fieldset", {
+      cls: "hanmark-export-switches",
+      attr: { "data-hanmark-export-switches": format }
+    });
+    group.createEl("legend", { text: t("export.switch.heading") });
+    for (const item of switches) {
+      const id = `hanmark-export-switch-${format}-${item.id}`;
+      const row = group.createDiv({ cls: "hanmark-export-switch" });
+      const box = row.createEl("input", {
+        attr: { type: "checkbox", id, "data-hanmark-export-switch": item.id, "aria-describedby": `${id}-desc` }
+      });
+      box.checked = read(item.id);
+      box.disabled = this.busy;
+      const copy = row.createDiv({ cls: "hanmark-export-switch-copy" });
+      copy.createEl("label", { text: tKey(item.name), attr: { for: id } });
+      copy.createEl("small", { text: tKey(item.desc), attr: { id: `${id}-desc` } });
+      box.onchange = async () => {
+        const wanted = box.checked;
+        box.disabled = true;
+        try {
+          await write(item.id, wanted);
+        } catch (error: unknown) {
+          new Notice(t("export.switch.saveFailed", { detail: errorMessage(error) }));
+        }
+        box.checked = read(item.id);
+        box.disabled = this.busy;
+      };
+    }
   }
 
   private renderGongmunOptions(root: HTMLElement): void {
@@ -675,6 +721,7 @@ export class HanmarkExportModal extends Modal {
         this.actions.openPandocSettings?.();
       };
     }
+    this.renderExportSwitches(root, "docx");
   }
 
   private renderHtmlDetail(root: HTMLElement): void {
@@ -716,6 +763,7 @@ export class HanmarkExportModal extends Modal {
         text: t("export.html.themeNote")
       });
     }
+    this.renderExportSwitches(root, "html");
   }
 
   private renderPdfDetail(root: HTMLElement): void {
@@ -848,6 +896,7 @@ export class HanmarkExportModal extends Modal {
       this.close();
       this.actions.openPdfThemeManager?.("manage");
     };
+    this.renderExportSwitches(root, "pdf");
   }
 
   private renderResult(
@@ -913,7 +962,8 @@ export class HanmarkExportModal extends Modal {
   }
 
   private renderFooter(root: HTMLElement): void {
-    const footer = root.createDiv({ cls: "hanmark-export-footer" });
+    // The look chooser must leave the export button visible (see gongmunFormPicker).
+    const footer = root.createDiv({ cls: "hanmark-export-footer", attr: { "data-hanmark-picker-floor": "" } });
     const execute = footer.createEl("button", {
       text: this.busy ? t("export.footer.busy") : this.primaryActionLabel(),
       cls: "mod-cta hanmark-export-primary-button",

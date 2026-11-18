@@ -449,6 +449,41 @@
   margin-top: 0;
 }
 
+/* "내보낼 때" switches of the export window (R-037) */
+.hanmark-export-switches {
+  margin: 16px 0 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.hanmark-export-switches legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.hanmark-export-switch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 8px;
+}
+
+.hanmark-export-switch input {
+  margin-top: 3px;
+}
+
+.hanmark-export-switch-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.hanmark-export-switch-copy small {
+  color: var(--text-muted);
+}
+
 .hanmark-export-option-row {
   display: grid;
   grid-template-columns: minmax(120px, auto) minmax(0, 1fr);

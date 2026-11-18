@@ -960,6 +960,13 @@ export const ko = {
   "diagram.notice": "Mermaid 도식 안내 {count}건: {first}",
   "settings.commentsAsMemos.name": "주석을 한글 메모로",
   "settings.commentsAsMemos.desc": "HWPX로 내보낼 때 ==형광펜==%%주석%% 처럼 형광펜 바로 뒤에 붙은 주석을 그 글의 한글 메모로 답니다. 형광펜 없이 쓴 주석은 지금처럼 내보내지 않습니다.",
+  "settings.hwpxEquations.name": "수식을 한글 수식 개체로",
+  "settings.hwpxEquations.desc": "HWPX로 내보낼 때 $…$ 로 쓴 수식을 한글 수식 개체로 넣습니다. 끄면 지금처럼 글자로 남습니다. 내 견본으로 만드는 문서에는 적용되지 않습니다.",
+  "export.switch.heading": "내보낼 때",
+  "export.switch.mermaidDiagrams.desc": "Mermaid 코드 블록을 그린 도식으로 넣습니다. 끄면 코드로 남습니다.",
+  "export.switch.commentsAsMemos.desc": "==글==%%메모%% 처럼 형광펜 바로 뒤에 붙은 주석을 그 글의 한글 메모로 답니다.",
+  "export.switch.hwpxEquations.desc": "$…$ 수식을 한글 수식 개체로 넣습니다. 끄면 글자로 남습니다.",
+  "export.switch.saveFailed": "설정을 저장하지 못했습니다: {detail}",
   "settings.mermaidDiagrams.name": "Mermaid 도식을 그림으로",
   "settings.mermaidDiagrams.desc":
     "Mermaid 코드 블록을 그린 도식으로 내보냅니다. HWPX와 DOCX에는 그림(PNG)으로, HTML과 PDF에는 글자를 고를 수 있는 벡터 도식으로 들어갑니다. 끄면 예전처럼 코드로 남습니다. 미리보기에도 적용됩니다.",
