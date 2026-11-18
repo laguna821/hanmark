@@ -55,6 +55,7 @@
 | [R-031](R-031-built-in-docx-writer.md) | REQUIRED | 내장 DOCX 작성기(Pandoc 없이 DOCX 내보내기·미리보기) | 3.0.0 준비 / 2026-11-18 | 공용 문서 모델에서 Word 꾸러미를 직접 쓴다. Word 템플릿 스타일 생성을 Pandoc 경로와 공유하고, Pandoc은 고급 선택지로 남긴다. |
 | [R-032](R-032-import-notation-and-save-back.md) | REQUIRED | 가져오기 표기 선택과 원본 저장의 관계 | 3.0.0 준비 / 2026-11-18 | 표 형식·첨자·틀 표를 사용자가 고르고 PPTX를 받는다. 새로 가져온 노트의 원본 저장 경로는 지금 제품에 없어, 저장용 표기 어댑터는 설계만 남기고 결정 대기. |
 | [R-033](R-033-mermaid-diagrams-in-exports.md) | REQUIRED | Mermaid 도식을 모든 내보내기에 그림으로 넣기 | 3.0.0 준비 / 2026-11-18 | 조립 뒤 한 단계에서 Pele로 그려 HWPX·DOCX에는 PNG, HTML·PDF에는 인라인 SVG로 넣는다. 색과 글꼴은 문자 값으로 굳히고, 그리지 못한 블록은 코드로 남기고 알린다. |
+| [R-037](R-037-release-polish.md) | PARTIAL | 릴리스 전 마감: 번들 주소 문자열과 최소 앱 버전 | 3.0.0 준비 / 2026-11-18 | OCR 모델 주소·해시를 빌드에서 비우고 main.js 주소 호스트를 허용 목록으로 검사한다. 1.8.9 설치본은 Electron 34라 문제없고, 옛 설치본은 Chromium 106까지 내려갈 수 있다. |
 
 ## 3. 이번 연구의 의존 관계
 

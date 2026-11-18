@@ -115,9 +115,33 @@ const allowedWasmMembers = new Set(["Module", "Instance", "compile", "RuntimeErr
 const unexpectedWasmMembers = [
   ...new Set([...bundle.matchAll(/\bWebAssembly\.(\w+)/gu)].map((match) => match[1])),
 ].filter((member) => !allowedWasmMembers.has(member));
+// Every http(s) host named in main.js must be on this reviewed list (R-037): XML
+// namespaces and schema ids, links the interface opens for the user (font sources,
+// Hancom download page), licence banners of bundled code, and placeholder examples.
+// A new host means new bundled data; review it before adding it here.
+const allowedUrlHosts = new Set([
+  "www.w3.org", "schemas.openxmlformats.org", "schemas.microsoft.com", "purl.org", "www.idpf.org", // XML namespaces
+  "www.hancom.co.kr", // HWPX/OWPML namespaces
+  "docx", // docx-preview placeholder base URL for relationship targets
+  "www.hancom.com", "hangeul.naver.com", "fonts.google.com", // font guide links the user clicks
+  "github.com", // font guide links and the docx-preview licence banner
+  "stuk.github.io", "sheetjs.com", // JSZip error text and the cfb crc32 licence banner
+  "example.com", "example.workers.dev" // placeholder examples in sample text and settings help
+]);
+const unexpectedUrlHosts = [
+  ...new Set([...bundle.matchAll(/https?:\/\/([A-Za-z0-9.-]+)/gu)].map((match) => match[1])),
+].filter((host) => !allowedUrlHosts.has(host));
+const ocrModelPins = bundle.match(/\bsha256:\s*"[0-9a-f]{64}"/gu) ?? [];
 const hayroPayloadHead = /HAYRO_WASM_DEFLATE_BASE64 =\s*"([A-Za-z0-9+/=]{96})/u.exec(hayroWasmData)?.[1];
 const intentionalChildProcessBoundaries =
   bundle.match(/require\(\s*["']node:child_process["']\s*\)/gu) ?? [];
+
+if (unexpectedUrlHosts.length > 0) {
+  throw new Error(`main.js names hosts that are not on the reviewed list: ${unexpectedUrlHosts.join(", ")}`);
+}
+if (ocrModelPins.length > 0) {
+  throw new Error(`OCR model hash pins remain in main.js: ${ocrModelPins.length}`);
+}
 
 if (forbiddenHits.length > 0) {
   throw new Error(`Optional OCR/native modules leaked into the startup bundle: ${forbiddenHits.join(", ")}`);

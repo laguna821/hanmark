@@ -154,6 +154,10 @@ export const KORDOC_HARDENING_MANIFEST = Object.freeze({
   // Lazy OCR chunk imports: embedded-image OCR, image-file input, formula OCR,
   // and two for PDF page OCR. The chunks themselves never enter the graph.
   ocrLoaders: 5,
+  // OCR model table (src/ocr/models.ts): download URLs and SHA-256 pins blanked.
+  // The table stays only because the PDF parser asks "is a model cached?".
+  ocrModelUrls: 6,
+  ocrModelHashes: 6,
 });
 
 /** The hayro build shipped in the reviewed Kordoc package (dist/hayro-pdf.wasm). */
@@ -332,6 +336,32 @@ export function removeKordocOcrLoaders(source) {
     KORDOC_OCR_CHUNK_IMPORT,
     'Promise.reject(new Error("HanMark does not bundle OCR."))',
   );
+}
+
+const KORDOC_OCR_MODEL_TABLE_MARKER = "// src/ocr/models.ts";
+const KORDOC_OCR_MODEL_URL = /\burl: "https:\/\/huggingface\.co\/[^"\s]+"/g;
+const KORDOC_OCR_MODEL_HASH = /\bsha256: "[0-9a-f]{64}"/g;
+
+/**
+ * Kordoc's PDF parser statically imports the OCR model table to ask whether a
+ * model is cached. HanMark never downloads or verifies a model, so the table's
+ * download URLs and SHA-256 pins are dead data; blank them so main.js names no
+ * download host. Only the module that declares the table is touched.
+ */
+export function blankKordocOcrModelTable(source) {
+  if (!source.includes(KORDOC_OCR_MODEL_TABLE_MARKER)) {
+    return { source, urlReplacements: 0, hashReplacements: 0 };
+  }
+  const urls = replaceWithCount(source, KORDOC_OCR_MODEL_URL, 'url: ""');
+  const hashes = replaceWithCount(urls.source, KORDOC_OCR_MODEL_HASH, 'sha256: ""');
+  if (/huggingface\.co/u.test(hashes.source)) {
+    throw new Error("Kordoc OCR model table still names a download host after hardening.");
+  }
+  return {
+    source: hashes.source,
+    urlReplacements: urls.replacements,
+    hashReplacements: hashes.replacements,
+  };
 }
 
 // Absolute, forward-slash path of HanMark's embedded hayro reader, imported into
@@ -739,7 +769,8 @@ export function hardenKordocSource(original) {
   const cfb = injectKordocCfb(original);
   const optionalNative = hardenKordocOptionalNativeSource(cfb.source);
   const ocr = removeKordocOcrLoaders(optionalNative.source);
-  const wasm = hardenKordocWasmSource(ocr.source);
+  const models = blankKordocOcrModelTable(ocr.source);
+  const wasm = hardenKordocWasmSource(models.source);
   const comFallback = hardenKordocComFallbackSource(wasm.source);
   return {
     source: comFallback.source,
@@ -754,6 +785,8 @@ export function hardenKordocSource(original) {
       wasmAssetLookups: wasm.wasmAssetLookupReplacements,
       xmlWasmDecoders: wasm.xmlWasmDecoderReplacements,
       ocrLoaders: ocr.replacements,
+      ocrModelUrls: models.urlReplacements,
+      ocrModelHashes: models.hashReplacements,
     },
   };
 }

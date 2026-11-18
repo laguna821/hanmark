@@ -24,6 +24,7 @@ import {
   removeKordocComBranches,
   removeKordocHancomEngineBranches,
   removeKordocOcrLoaders,
+  blankKordocOcrModelTable,
 } from "../esbuild.config.mjs";
 import { loadHardenedKordocBundle } from "./helpers/hardenedKordocBundle";
 
@@ -444,6 +445,30 @@ test("OCR chunks, their model downloader, and wasm asset lookups never enter the
   assert.equal(removed.replacements, 1);
   assert.match(removed.source, /Promise\.reject\(new Error\("HanMark does not bundle OCR\."\)\)/u);
   assert.match(removed.source, /import\("\.\/page-range-ABC123\.js"\)/u);
+});
+
+test("Kordoc OCR model table loses its download URLs and hash pins, and only there (R-037)", async () => {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const dist = "node_modules/kordoc/dist";
+  let urls = 0;
+  let hashes = 0;
+  let tables = 0;
+  for (const name of await readdir(dist)) {
+    if (!name.endsWith(".js")) continue;
+    const blanked = blankKordocOcrModelTable(await readFile(`${dist}/${name}`, "utf8"));
+    urls += blanked.urlReplacements;
+    hashes += blanked.hashReplacements;
+    if (blanked.urlReplacements) {
+      tables += 1;
+      assert.doesNotMatch(blanked.source, /huggingface\.co|sha256: "[0-9a-f]{64}"/u, name);
+      assert.match(blanked.source, /filename: "det\.onnx"/u, "the cache lookup keeps the file names");
+    }
+  }
+  assert.equal(tables, 1);
+  assert.equal(urls, KORDOC_HARDENING_MANIFEST.ocrModelUrls);
+  assert.equal(hashes, KORDOC_HARDENING_MANIFEST.ocrModelHashes);
+  const untouched = 'const other = { url: "https://huggingface.co/x/y", sha256: "' + "a".repeat(64) + '" };';
+  assert.equal(blankKordocOcrModelTable(untouched).source, untouched);
 });
 
 test("Kordoc still extracts text from an in-memory PDF", async () => {
