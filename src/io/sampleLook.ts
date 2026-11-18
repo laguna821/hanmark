@@ -2,16 +2,20 @@ import JSZip from "jszip";
 import {
   applyMeasuredLayout,
   buildAgencyPack,
+  hwpxToProfile,
   loadAgencyPack,
   markdownToHwpx,
   measurePdfLayout,
   packRoleWarnings,
   packTemplate,
   resolvePackKind,
+  type FormatProfile,
   type GongmunOptions,
   type PdfLayoutSpec
 } from "kordoc";
 import { base64ToBytes, bytesToBase64 } from "./pngMeta";
+import type { GongmunStyleOptions } from "./gongmunStyle";
+import { measureSample, measuredStyleOptions, type MeasuredItem, type MeasuredShape, type SampleMeasure } from "./sampleMeasure";
 
 /**
  * A look learned from one sample document of the user's institution (R-036).
@@ -51,6 +55,63 @@ export interface SampleLookRecord {
   facts: SampleFacts;
   /** Fingerprint of the sample the engine recorded; the sample itself is not kept. */
   sourceSha256: string;
+  /**
+   * How documents are made with the look:
+   * - "template": the engine fills the emptied sample, so every shape the sample has is
+   *   the sample's own; HanMark's official-document outline and finishing do not run.
+   * - "measured": the frame's own structure with the values measured from the sample
+   *   (margins, body and level fonts and sizes, line spacing, table look); outline and
+   *   finishing run as for any form.
+   */
+  use: SampleLookUse;
+  /** Fill of the sample's table header row; drawn by HanMark's finishing when the look is used by its measured values. */
+  headerFill?: string;
+}
+
+export type SampleLookUse = "template" | "measured";
+
+/** Roles that carry a note's running content; a sample with none of them is used by its measured values. */
+const CONTENT_ROLES = ["body", "L0", "L1", "L2"];
+
+/** The way a sample is best used when nothing was tried: as a template when it has shapes for running content. */
+export function suggestedSampleUse(roles: readonly string[]): SampleLookUse {
+  return roles.some((role) => CONTENT_ROLES.includes(role)) ? "template" : "measured";
+}
+
+// i18n-data-begin: a trial document (content, not UI text)
+const TRIAL_NOTE = [
+  "# 시험 문서",
+  "",
+  "## 첫째 장",
+  "",
+  "- 첫째 단계 항목을 충분히 길게 적은 줄입니다",
+  "- 첫째 단계 항목을 한 줄 더 적습니다",
+  "  - 둘째 단계 항목을 충분히 길게 적은 줄입니다",
+  "  - 둘째 단계 항목을 한 줄 더 적습니다",
+  "",
+  "본문 문단을 충분히 길게 적은 줄입니다. 한 문장을 더 적습니다.",
+  "",
+  "본문 문단을 하나 더 충분히 길게 적은 줄입니다.",
+  ""
+].join("\n");
+// i18n-data-end
+
+/**
+ * Tries the sample as a template: a small document with items and running text is
+ * made from it and measured. The sample fits when that content comes out in the
+ * sample's own body font (or the font of a level the sample has); otherwise the
+ * engine stood in a shape of its own and the measured values serve the look better.
+ */
+async function templateKeepsSampleShapes(template: Uint8Array, measure: SampleMeasure): Promise<boolean> {
+  if (!measure.body) return false;
+  try {
+    const made = await measureSample(new Uint8Array(await markdownToHwpx(TRIAL_NOTE, { template, totalRow: "keep" })));
+    const allowed = new Set([measure.body.font, ...Object.values(measure.levels).map((level) => level.font)]);
+    const used = [made.body, ...Object.values(made.levels)].filter((shape): shape is MeasuredShape => !!shape);
+    return used.length > 0 && used.every((shape) => allowed.has(shape.font));
+  } catch {
+    return false;
+  }
 }
 
 /** Largest sample HanMark reads, and largest pack it stores or imports. */
@@ -125,10 +186,11 @@ function recordFromPack(
     kind,
     roles: [...info.roles],
     missing: [...info.missing],
-    leftover: info.leftover.map((text) => text.slice(0, 120)).slice(0, 40),
+    leftover: info.leftover.map((text) => text.slice(0, 400)).slice(0, 60),
     images: info.images,
     facts,
-    sourceSha256
+    sourceSha256,
+    use: suggestedSampleUse(info.roles)
   };
 }
 
@@ -211,6 +273,104 @@ export async function learnLookFromHwpx(sample: Uint8Array, name: string): Promi
   return { ...record, facts };
 }
 
+/** What learning from one sample gives: the pack, the measured values, and the table look. */
+export interface LearnedLook {
+  sample: SampleLookRecord;
+  /** Official-document options carrying the measured values (used by "measured", editable). */
+  options: GongmunStyleOptions;
+  /** What was read from the sample, part by part. */
+  items: MeasuredItem[];
+  measure: SampleMeasure;
+  /** A trial document made from the sample came out in the sample's own shapes. */
+  templateFits: boolean;
+  /** Borders and fills of the sample's tables, by table order (hwpxToProfile). */
+  tableStyle?: FormatProfile;
+}
+
+/** Learns everything HanMark can take from one sample HWPX. */
+export async function learnLook(sample: Uint8Array, name: string): Promise<LearnedLook> {
+  const record = await learnLookFromHwpx(sample, name);
+  const measure = await measureSample(sample);
+  const measured = measuredStyleOptions(measure);
+  let tableStyle: FormatProfile | undefined;
+  try {
+    const profile = await hwpxToProfile(sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength) as ArrayBuffer);
+    if (profile.tables.length) tableStyle = profile;
+  } catch {
+    tableStyle = undefined;
+  }
+  const templateFits =
+    suggestedSampleUse(record.roles) === "template" && (await templateKeepsSampleShapes((await openSampleLook(record)).template, measure));
+  const headerFill = measure.table?.headerFill;
+  return {
+    sample: { ...record, use: templateFits ? "template" : "measured", ...(headerFill ? { headerFill } : {}) },
+    options: measured.options,
+    items: measured.items,
+    measure,
+    templateFits,
+    ...(tableStyle ? { tableStyle } : {})
+  };
+}
+
+/**
+ * Removes chosen fixed text (letterheads, slogans) from the emptied sample inside a
+ * look, so a shared pack does not carry it. Text is matched run by run, exactly as
+ * the engine listed it.
+ */
+export async function removeLeftoverText(record: SampleLookRecord, texts: readonly string[]): Promise<SampleLookRecord> {
+  const wanted = new Set(texts.map((text) => text.trim()).filter(Boolean));
+  if (!wanted.size) return record;
+  const packBytes = exportSampleLookPack(record);
+  await assertSafePack(packBytes);
+  const pack = await JSZip.loadAsync(packBytes);
+  const fixed = { date: new Date(Date.UTC(1980, 0, 1)) };
+  const decode = (text: string): string =>
+    text.replace(/<[^>]+>/gu, "").replace(/&lt;/gu, "<").replace(/&gt;/gu, ">").replace(/&quot;/gu, '"').replace(/&apos;/gu, "'").replace(/&amp;/gu, "&").trim();
+  const out = new JSZip();
+  const removed = new Set<string>();
+  for (const name of Object.keys(pack.files)) {
+    const entry = pack.files[name];
+    if (entry.dir) continue;
+    let bytes = await entry.async("uint8array");
+    if (/^kinds\/.+\.hwpx$/u.test(name)) {
+      const inner = await JSZip.loadAsync(bytes);
+      const rebuilt = new JSZip();
+      for (const part of Object.keys(inner.files)) {
+        const item = inner.files[part];
+        if (item.dir) continue;
+        if (/^Contents\/.+\.xml$/u.test(part)) {
+          const xml = (await item.async("string")).replace(/<hp:t\b([^>]*)>([\s\S]*?)<\/hp:t>/gu, (whole: string, attrs: string, body: string) => {
+            const text = decode(body);
+            if (!wanted.has(text)) return whole;
+            removed.add(text);
+            return `<hp:t${attrs}></hp:t>`;
+          });
+          rebuilt.file(part, xml, fixed);
+        } else {
+          rebuilt.file(part, await item.async("uint8array"), { ...fixed, ...(part === "mimetype" ? { compression: "STORE" as const } : {}) });
+        }
+      }
+      bytes = await rebuilt.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+    } else if (name === "pack.json") {
+      const manifest = JSON.parse(await entry.async("string")) as { kinds?: Record<string, { leftover?: string[] }> };
+      for (const kind of Object.values(manifest.kinds ?? {})) {
+        if (Array.isArray(kind.leftover)) kind.leftover = kind.leftover.filter((text) => !wanted.has(String(text).trim()));
+      }
+      bytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
+    }
+    out.file(name, bytes, fixed);
+  }
+  const rebuiltPack = await out.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+  const next = await recordFromPackBytes(rebuiltPack);
+  return {
+    ...next,
+    facts: record.facts,
+    use: record.use,
+    ...(record.headerFill ? { headerFill: record.headerFill } : {}),
+    leftover: record.leftover.filter((text) => !removed.has(text.trim()))
+  };
+}
+
 /** Reads a look from a .kpack file someone shared. */
 export async function importSampleLookPack(bytes: Uint8Array): Promise<SampleLookRecord> {
   return recordFromPackBytes(bytes);
@@ -240,7 +400,7 @@ export function normalizeSampleLookRecord(value: unknown): SampleLookRecord | un
     kind: typeof data.kind === "string" && data.kind ? data.kind.slice(0, 60) : "report",
     roles: strings(data.roles, 40),
     missing: strings(data.missing, 40),
-    leftover: strings(data.leftover, 40),
+    leftover: strings(data.leftover, 60),
     images: number(data.images),
     facts: {
       pageMm: { width: number(page.width), height: number(page.height) },
@@ -254,7 +414,9 @@ export function normalizeSampleLookRecord(value: unknown): SampleLookRecord | un
       },
       fonts: strings(facts.fonts, 24)
     },
-    sourceSha256: typeof data.sourceSha256 === "string" ? data.sourceSha256.slice(0, 80) : ""
+    sourceSha256: typeof data.sourceSha256 === "string" ? data.sourceSha256.slice(0, 80) : "",
+    use: data.use === "measured" || data.use === "template" ? data.use : suggestedSampleUse(strings(data.roles, 40)),
+    ...(typeof data.headerFill === "string" && /^#[0-9A-Fa-f]{6}$/u.test(data.headerFill) ? { headerFill: data.headerFill.toUpperCase() } : {})
   };
 }
 

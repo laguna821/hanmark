@@ -1,94 +1,112 @@
 // Real-sample check for looks learned from samples (R-036). Samples are read at run
 // time and never committed:
-//   node --import tsx scripts/test-sample-looks.ts <output dir> <sample.hwpx|sample.pdf>...
+//   node --import tsx scripts/test-sample-looks.ts <output dir> <sample.hwpx>...
+// For every sample the same note is made twice: with the engine's template path alone
+// ("견본 그대로"), and the way HanMark chooses (template when the sample has shapes for
+// running content, else the frame with the values measured from the sample).
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import JSZip from "jszip";
 import { renderHwpxToSvg } from "kordoc";
 import { generateValidatedHwpx } from "../src/io/kordocEngine";
-import { learnLookFromHwpx, learnLookFromPdf, readSampleFacts } from "../src/io/sampleLook";
+import type { App, TFile } from "obsidian";
+import { gongmunGenerateOptions, planGongmunExport } from "../src/io/gongmunExport";
+import { newGongmunTemplateRecord, putGongmunTemplateInMemory, type TemplateLibraryHost } from "../src/io/templateLibrary";
+import { learnLook } from "../src/io/sampleLook";
+import { measureSample, type SampleMeasure } from "../src/io/sampleMeasure";
 
 const NOTE = [
   "# 2027학년도 AI 미디어 교육과정 개편 계획", "",
-  "> 공통과목 5개를 AX 융합브릿지 과목으로 재편한다.", "",
   "## 추진 배경", "",
-  "- 생성형 AI 확산으로 평가 기준 재설계 필요",
-  "  - 실습과목 12개 중 9개가 AI 도구 사용",
-  "    - 학생 설문 응답자 184명",
-  "- 앵커 사업 성과지표와 연계", "",
+  "- 생성형 AI 확산으로 제작 실습 교과의 평가 기준을 다시 설계할 필요가 있음",
+  "  - 2026학년도 2학기 실습과목 12개 가운데 9개가 AI 도구를 사용함",
+  "  - 학생 설문 응답자 184명 가운데 71%가 평가 기준이 불명확하다고 답함",
+  "    - 설문 기간은 2026. 10. 5.부터 10. 16.까지임",
+  "    - 응답률은 62%임",
+  "- 앵커 사업 성과지표와 교과과정을 연계해 달라는 요구가 있음", "",
+  "공통과목 다섯 개를 AX 융합브릿지 과목으로 재편하고 실습과목의 운영 기준을 마련한다.", "",
+  "이 계획은 교과과정위원회 심의를 거쳐 2027학년도 1학기부터 시행한다.", "",
   "※ 세부 일정은 붙임 참조", "",
   "## 추진 내용", "",
   "| 구분 | 2026학년도 | 2027학년도 |", "|---|---|---|", "| 공통과목 | 7개 | 5개 |", "| 실습과목 | 12개 | 14개 |", ""
 ].join("\n");
 
-interface ShapeFacts { bodyFont: string; bodyPt: number; lineSpacing: string; tableHeaderFill: string }
+const FILE = { basename: "노트", path: "노트.md" } as TFile;
+const APP = { metadataCache: { getFileCache: () => ({ frontmatter: {} }) } } as unknown as App;
 
-/** Body paragraph shape and first table header fill read from the package XML. */
-async function shapeFacts(bytes: Uint8Array): Promise<ShapeFacts> {
-  const zip = await JSZip.loadAsync(bytes);
-  const header = (await zip.file("Contents/header.xml")?.async("string")) ?? "";
-  const section = (await zip.file("Contents/section0.xml")?.async("string")) ?? "";
-  const fonts = [...header.matchAll(/<hh:fontface\b[^>]*lang="HANGUL"[\s\S]*?<\/hh:fontface>/gu)][0]?.[0] ?? "";
-  const faces = [...fonts.matchAll(/<hh:font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]+)"/gu)];
-  const charPrs = new Map([...header.matchAll(/<hh:charPr\b[^>]*\bid="(\d+)"[^>]*\bheight="(\d+)"[\s\S]*?<\/hh:charPr>/gu)].map((m) => [m[1], m] as const));
-  const paraPrs = new Map([...header.matchAll(/<hh:paraPr\b[^>]*\bid="(\d+)"[\s\S]*?<\/hh:paraPr>/gu)].map((m) => [m[1], m[0]] as const));
-  // The most used (paragraph shape, character shape) pair outside tables is the body.
-  const outside = section.replace(/<hp:tbl\b[\s\S]*?<\/hp:tbl>/gu, "");
-  const counts = new Map<string, number>();
-  for (const p of outside.matchAll(/<hp:p\b[^>]*\bparaPrIDRef="(\d+)"[^>]*>([\s\S]*?)<\/hp:p>/gu)) {
-    const run = /<hp:run\b[^>]*\bcharPrIDRef="(\d+)"[^>]*>\s*<hp:t>[^<]{4,}/u.exec(p[2]);
-    if (!run) continue;
-    const key = `${p[1]}/${run[1]}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  const [para, char] = ([...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "/").split("/");
-  const charPr = charPrs.get(char);
-  const fontRef = charPr ? /<hh:fontRef\b[^>]*\bhangul="(\d+)"/u.exec(charPr[0])?.[1] : undefined;
-  const spacing = /<hh:lineSpacing\b[^>]*\btype="([^"]+)"[^>]*\bvalue="(\d+)"/u.exec(paraPrs.get(para) ?? "");
-  const firstCell = /<hp:tc\b[^>]*\bborderFillIDRef="(\d+)"/u.exec(section)?.[1];
-  const fill = firstCell
-    ? /faceColor="([^"]+)"/u.exec(new RegExp(`<hh:borderFill\\b[^>]*\\bid="${firstCell}"[\\s\\S]*?</hh:borderFill>`, "u").exec(header)?.[0] ?? "")?.[1] ?? "none"
-    : "no table";
+type Check = "일치" | "불일치" | "견본에 없음";
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** Every text shape a generated document uses for the note's running content. */
+function contentShapes(measure: SampleMeasure): Array<{ font: string; pt: number; lineSpacing?: number }> {
+  return [measure.body, ...Object.values(measure.levels)].filter((shape): shape is NonNullable<typeof shape> => !!shape);
+}
+
+function compare(sample: SampleMeasure, made: SampleMeasure): Record<"margins" | "body" | "lineSpacing" | "tableFill", Check> {
+  const shapes = contentShapes(made);
+  const body = sample.body;
   return {
-    bodyFont: faces.find((face) => face[1] === fontRef)?.[2] ?? "?",
-    bodyPt: charPr ? Number(charPr[2]) / 100 : 0,
-    lineSpacing: spacing ? `${spacing[1]} ${spacing[2]}` : "?",
-    tableHeaderFill: fill
+    margins: same(sample.marginsMm, made.marginsMm) ? "일치" : "불일치",
+    // The note's content must use the sample's body shape wherever the sample has no level of its own.
+    body: !body ? "견본에 없음" : shapes.length && shapes.every((shape) => shape.font === body.font && shape.pt === body.pt) ? "일치" : made.body?.font === body.font && made.body.pt === body.pt ? "일치" : "불일치",
+    lineSpacing: !body?.lineSpacing ? "견본에 없음" : made.body?.lineSpacing === body.lineSpacing ? "일치" : "불일치",
+    tableFill: !sample.table?.headerFill ? "견본에 없음" : sample.table.headerFill === made.table?.headerFill ? "일치" : "불일치"
   };
 }
 
 async function main(): Promise<void> {
   const [out, ...files] = process.argv.slice(2);
   await mkdir(out, { recursive: true });
-  const rows: string[] = ["| 견본 | 쪽·여백 | 글꼴표 | 본문 글꼴·크기 | 줄간격 | 표 머리 음영 | 있는 역할 | 없는 역할 | 남은 글 | 팩 크기 |", "|---|---|---|---|---|---|---|---|---|---|"];
+  const rows = [
+    "| 견본 | 고른 방식 | 여백 | 본문 글꼴·크기 (견본 그대로 → 고른 방식) | 줄간격 (견본 그대로 → 고른 방식) | 표 머리 음영 | 견본에서 잰 단계 | 남은 글 |",
+    "|---|---|---|---|---|---|---|---|"
+  ];
+  const totals = { before: { body: 0, lineSpacing: 0 }, after: { body: 0, lineSpacing: 0, margins: 0, tableFill: 0 }, measurable: { body: 0, lineSpacing: 0, tableFill: 0 }, samples: 0 };
   for (const file of files) {
     const name = path.basename(file);
     const bytes = new Uint8Array(await readFile(file));
     const safe = name.replace(/[^\w가-힣-]+/gu, "_").slice(0, 40);
     try {
-      if (name.toLowerCase().endsWith(".pdf")) {
-        const learned = await learnLookFromPdf(bytes, { preset: "report" });
-        console.log(JSON.stringify({ name, pdf: true, applied: learned.applied, warnings: learned.warnings, edges: learned.spec.edges, lineSpacing: learned.spec.lineSpacing, levels: learned.spec.levels.map((l) => `${l.depth}:${l.marker}:${l.font ?? l.pdfFont}:${l.pt}`) }));
-        continue;
+      const learned = await learnLook(bytes, name);
+      const sample = learned.measure;
+      // The way the product makes it: the look saved as one of the user's forms, then the export plan.
+      const host: TemplateLibraryHost = { settings: {}, saveSettings: async () => {} };
+      const record = putGongmunTemplateInMemory(host, {
+        ...newGongmunTemplateRecord(host, name, learned.options, "report"),
+        ...(learned.tableStyle ? { tableStyle: learned.tableStyle } : {}),
+        sample: learned.sample
+      });
+      const viaFrame = (): ReturnType<typeof generateValidatedHwpx> =>
+        generateValidatedHwpx(NOTE, gongmunGenerateOptions(planGongmunExport(APP, FILE, host, undefined, record.id)));
+      const template = await generateValidatedHwpx(NOTE, { sampleLook: { ...learned.sample, use: "template" } });
+      const before = compare(sample, await measureSample(new Uint8Array(template.data)));
+      const chosen = await viaFrame();
+      const again = await viaFrame();
+      const repeatable = Buffer.compare(Buffer.from(chosen.data), Buffer.from(again.data)) === 0;
+      const madeMeasure = await measureSample(new Uint8Array(chosen.data));
+      const after = compare(sample, madeMeasure);
+      totals.samples += 1;
+      for (const key of ["body", "lineSpacing"] as const) {
+        if (before[key] !== "견본에 없음") totals.measurable[key] += 1;
+        if (before[key] === "일치") totals.before[key] += 1;
+        if (after[key] === "일치") totals.after[key] += 1;
       }
-      const sampleFacts = await readSampleFacts(bytes);
-      const sampleShape = await shapeFacts(bytes);
-      const look = await learnLookFromHwpx(bytes, name);
-      const first = await generateValidatedHwpx(NOTE, { sampleLook: look });
-      const second = await generateValidatedHwpx(NOTE, { sampleLook: look });
-      const made = new Uint8Array(first.data);
-      const madeFacts = await readSampleFacts(made);
-      const madeShape = await shapeFacts(made);
-      const same = (a: unknown, b: unknown): string => (JSON.stringify(a) === JSON.stringify(b) ? "일치" : `불일치 (${JSON.stringify(a)} → ${JSON.stringify(b)})`);
-      const render = await renderHwpxToSvg(first.data, { reflow: true });
+      if (after.tableFill !== "견본에 없음") totals.measurable.tableFill += 1;
+      if (after.tableFill === "일치") totals.after.tableFill += 1;
+      if (after.margins === "일치") totals.after.margins += 1;
+      const render = await renderHwpxToSvg(chosen.data, { reflow: true });
       await writeFile(`${out}/${safe}.note-in-this-look.svg`, render.svg);
-      await writeFile(`${out}/${safe}.note-in-this-look.hwpx`, made);
-      rows.push(`| ${name} | ${same([sampleFacts.pageMm, sampleFacts.marginsMm], [madeFacts.pageMm, madeFacts.marginsMm])} | ${same(sampleFacts.fonts, madeFacts.fonts)} | ${same([sampleShape.bodyFont, sampleShape.bodyPt], [madeShape.bodyFont, madeShape.bodyPt])} | ${same(sampleShape.lineSpacing, madeShape.lineSpacing)} | ${same(sampleShape.tableHeaderFill, madeShape.tableHeaderFill)} | ${look.roles.join(" ")} | ${look.missing.join(" ")} | ${look.leftover.length} | ${Math.round((look.pack.length * 3) / 4 / 1024)}KB |`);
-      console.log(JSON.stringify({ name, repeatable: Buffer.compare(Buffer.from(first.data), Buffer.from(second.data)) === 0, pages: render.pageCount, sampleShape, madeShape, warnings: first.warnings.map((w) => w.message.slice(0, 80)) }));
+      await writeFile(`${out}/${safe}.note-in-this-look.hwpx`, Buffer.from(chosen.data));
+      const levels = (["0", "1", "2", "3"] as const).filter((key) => sample.levels[key]).map((key) => sample.levels[key]!.marker).join(" ") || "없음";
+      const bodyText = sample.body ? `${sample.body.font} ${sample.body.pt}pt` : "";
+      rows.push(
+        `| ${name} | ${learned.sample.use === "template" ? "견본 그대로" : "잰 값으로"} | ${after.margins} | ${bodyText}: ${before.body} → ${after.body} | ${sample.body?.lineSpacing ?? ""}%: ${before.lineSpacing} → ${after.lineSpacing} | ${sample.table?.headerFill ?? ""} ${after.tableFill} | ${levels} | ${learned.sample.leftover.length} |`
+      );
+      console.log(JSON.stringify({ name, use: learned.sample.use, templateFits: learned.templateFits, repeatable, pages: render.pageCount, sampleBody: sample.body, madeBody: madeMeasure.body, madeLevels: Object.fromEntries(Object.entries(madeMeasure.levels).map(([key, shape]) => [key, `${shape.font} ${shape.pt}`])), items: learned.items.map((item) => `${item.part}:${item.source}`).join(" ") }));
     } catch (error: unknown) {
-      rows.push(`| ${name} | 실패: ${String(error instanceof Error ? error.message : error).slice(0, 80)} | | | | | | | | |`);
+      rows.push(`| ${name} | 실패: ${String(error instanceof Error ? error.message : error).slice(0, 90)} | | | | | | |`);
     }
   }
+  rows.push("", `본문 글꼴·크기 일치: 견본 그대로 ${totals.before.body}/${totals.measurable.body} → 고른 방식 ${totals.after.body}/${totals.measurable.body}`, `줄간격 일치: 견본 그대로 ${totals.before.lineSpacing}/${totals.measurable.lineSpacing} → 고른 방식 ${totals.after.lineSpacing}/${totals.measurable.lineSpacing}`, `여백 일치(고른 방식): ${totals.after.margins}/${totals.samples}`, `표 머리 음영 일치(고른 방식): ${totals.after.tableFill}/${totals.measurable.tableFill}`);
   await writeFile(`${out}/fidelity.md`, rows.join("\n") + "\n");
   console.log(rows.join("\n"));
 }

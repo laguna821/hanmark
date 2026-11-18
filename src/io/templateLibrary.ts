@@ -604,11 +604,22 @@ function builtinChoice(id: string): GongmunStyleChoice | undefined {
   };
 }
 
+/** Black or white, whichever reads better on a fill colour. */
+function readableOn(fill: string): string {
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(fill.slice(at, at + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 < 140 ? "#FFFFFF" : "#000000";
+}
+
 function customChoice(record: GongmunTemplateRecord): GongmunStyleChoice {
   const choice: GongmunStyleChoice = { id: record.id, name: record.name, builtIn: false, options: clone(record.options) };
   if (record.tableStyle) choice.tableStyle = clone(record.tableStyle);
   if (record.preset) choice.preset = record.preset;
-  if (record.sample) choice.sample = record.sample;
+  if (record.sample) {
+    choice.sample = record.sample;
+    // Used by its measured values, the look draws the sample's table header fill through the finishing (R-036).
+    const fill = record.sample.use === "measured" ? record.sample.headerFill : undefined;
+    if (fill) choice.finish = { tableHeader: { fill, textColor: readableOn(fill) } };
+  }
   return choice;
 }
 

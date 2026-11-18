@@ -371,7 +371,7 @@ export function planGongmunExport(
     preset,
     options,
     profile: style?.tableStyle,
-    sample: style?.sample,
+    sample: style?.sample?.use === "template" ? style.sample : undefined,
     warnings,
     title: noteDocumentTitle(frontmatter, file),
     finish: style?.finish,
