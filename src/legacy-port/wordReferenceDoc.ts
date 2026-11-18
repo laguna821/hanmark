@@ -156,8 +156,16 @@ function updateRunStyle(doc: Document, style: Element, spec: WordStyleSpec): voi
   fonts.setAttribute("w:hAnsi", font.hAnsiFamily ?? font.family);
   fonts.setAttribute("w:eastAsia", font.eastAsiaFamily ?? font.family);
   fonts.setAttribute("w:cs", font.csFamily ?? font.family);
-  ensureChild(doc, runProperties, "w:sz").setAttribute("w:val", halfPoints(font.sizePt));
-  ensureChild(doc, runProperties, "w:szCs").setAttribute("w:val", halfPoints(font.sizePt));
+  if (spec.id === "Hyperlink") {
+    // A link takes the size of the text it stands in (body, footnote, caption, table cell).
+    for (const name of ["w:sz", "w:szCs"]) {
+      const own = findChild(runProperties, name);
+      if (own) runProperties.removeChild(own);
+    }
+  } else {
+    ensureChild(doc, runProperties, "w:sz").setAttribute("w:val", halfPoints(font.sizePt));
+    ensureChild(doc, runProperties, "w:szCs").setAttribute("w:val", halfPoints(font.sizePt));
+  }
   setOnOff(doc, runProperties, "w:b", font.bold);
   setOnOff(doc, runProperties, "w:bCs", font.bold);
   setOnOff(doc, runProperties, "w:i", font.italic);
