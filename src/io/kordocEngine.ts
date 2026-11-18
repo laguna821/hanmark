@@ -25,6 +25,7 @@ import {
   type ExtendedHeadingMarker
 } from "./documentStyle";
 import { finalizeHwpxPackage } from "./hwpxPostProcess";
+import { applyScriptRunsToHwpx, markScriptTags } from "./hwpxScriptRuns";
 import { finishGongmunHwpx, type GongmunFinishSpec } from "./hwpxFinish";
 import { paragraphSignature, prepareGongmunMarkdown, type GongmunOutlineStyle } from "./gongmunOutline";
 import {
@@ -254,6 +255,7 @@ export async function generateValidatedHwpxFromAdapted(
   let assets: ResolvedImageAsset[] = [];
   let imageFailures: ImageFailure[] = [];
   let headingMarkers: ExtendedHeadingMarker[] = [];
+  let scriptSpans = 0;
 
   if (adapted.imageCount > 0) {
     if (!options.images?.loader) {
@@ -293,7 +295,10 @@ export async function generateValidatedHwpxFromAdapted(
   const generateCurrentPackage = async () => {
     const marked = markExtendedHeadings(markdown, options.documentStyle);
     headingMarkers = marked.markers;
-    return generateKordocPackage(marked.markdown, options, assets);
+    // Kordoc's generator drops <sup>/<sub>; HanMark writes them as runs (hwpxScriptRuns.ts).
+    const scripted = markScriptTags(marked.markdown);
+    scriptSpans = scripted.marked;
+    return generateKordocPackage(scripted.markdown, options, assets);
   };
 
   let generated = await generateCurrentPackage();
@@ -337,6 +342,10 @@ export async function generateValidatedHwpxFromAdapted(
     finalData = styled.data;
     documentStyleName = styled.profile.name;
   }
+
+  // After the document style, so a raised or lowered run copies the final character shape;
+  // before the official-document finishing, so that reads the text without markers.
+  if (scriptSpans > 0) finalData = (await applyScriptRunsToHwpx(finalData)).data;
 
   // Body paragraphs under their heading (legal family) and the institution style's finishing.
   const paragraphs = outline?.paragraphs.some((hint) => hint.depth > 0) ? outline.paragraphs : undefined;

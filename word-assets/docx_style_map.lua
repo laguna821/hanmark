@@ -74,3 +74,55 @@ function Table(el)
   last_was_heading = false
   return el
 end
+
+-- <sup>…</sup> and <sub>…</sub> reach Pandoc's GFM reader as raw HTML, which the
+-- DOCX writer drops (the text stays at body size). Turn each pair into a real
+-- Superscript or Subscript so both DOCX paths agree (HanMark 3.0.0).
+local SCRIPT_INLINES = { sup = pandoc.Superscript, sub = pandoc.Subscript }
+
+local function raw_html(el, text)
+  return el.t == "RawInline" and el.format == "html" and el.text == text
+end
+
+function Inlines(inlines)
+  if FORMAT ~= "docx" then
+    return nil
+  end
+
+  local output = pandoc.List()
+  local changed = false
+  local index = 1
+  while index <= #inlines do
+    local el = inlines[index]
+    local tag = nil
+    if el.t == "RawInline" and el.format == "html" then
+      tag = el.text:match("^<(su[bp])>$")
+    end
+    local close = nil
+    if tag then
+      for at = index + 1, #inlines do
+        if raw_html(inlines[at], "</" .. tag .. ">") then
+          close = at
+          break
+        end
+      end
+    end
+    if close then
+      local inner = pandoc.List()
+      for at = index + 1, close - 1 do
+        inner:insert(inlines[at])
+      end
+      output:insert(SCRIPT_INLINES[tag](inner))
+      changed = true
+      index = close + 1
+    else
+      output:insert(el)
+      index = index + 1
+    end
+  end
+
+  if changed then
+    return output
+  end
+  return nil
+end
