@@ -9,6 +9,7 @@ import {
   type Plugin
 } from "obsidian";
 import { patchHwpx, patchHwp, validateHwpx, VERSION as KORDOC_VERSION, type PatchResult } from "kordoc";
+import { PATCH_OPTIONS } from "./patchOptions";
 import { importedByCurrentEngine, legacyEngineNote } from "./legacyEngine";
 import { normalizeLanguagePreference, resolveOutputLocale, t, type LanguagePreference } from "../i18n";
 import {
@@ -674,7 +675,7 @@ async function patchSource(
   if (!original) return { format: "hwpx", status: "cancelled" };
 
   const patch = contract["hwp-source-format"] === "hwpx" ? patchHwpx : patchHwp;
-  const result: PatchResult = await patch(original, body, { verify: true });
+  const result: PatchResult = await patch(original, body, PATCH_OPTIONS);
   if (!result.success || !result.data) {
     new HwpSaveReportModal(app, {
       title: t("save.patch.failedTitle"),

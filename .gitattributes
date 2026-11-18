@@ -3,11 +3,12 @@
 # produces a different main.js than macOS/Linux for the same commit.
 word-assets/** text eol=lf
 src/io/embeddedAssets.ts text eol=lf
+# The embedded hayro PDF engine (R-029): one long base64 line, identical on every OS.
+src/io/hayroWasmData.ts text eol=lf
 
 # Binary fixtures and templates.
 *.hwpx binary
 *.hwp binary
 *.docx binary
 *.pdf binary
-*.bcmap binary
 styles.css text eol=lf

@@ -2,6 +2,7 @@ import esbuild from "esbuild";
 import process from "node:process";
 import { builtinModules } from "node:module";
 import { promises as fsp } from "node:fs";
+import { createHash } from "node:crypto";
 import * as nodePath from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,13 +25,18 @@ const external = [
   "@lezer/highlight",
   "@lezer/lr",
   // Kordoc optional OCR, ML, printing, and MCP integrations are not part of
-  // HanMark's runtime. PDF.js remains bundled because PDF import uses it.
+  // HanMark's runtime. Kordoc 4.25.0 reads PDFs with its own wasm engine
+  // (hayro), so PDF.js is no longer part of the bundle.
   "puppeteer-core",
   "@modelcontextprotocol/sdk",
   "onnxruntime-node",
   "sharp",
   "@huggingface/transformers",
   "@hyzyla/pdfium",
+  "@rhwp/core",
+  "zxing-wasm/reader",
+  "libheif-js/libheif-wasm/libheif-bundle.js",
+  "@huggingface/tokenizers",
   "@napi-rs/canvas",
   "canvas",
   ...builtinModules,
@@ -38,11 +44,19 @@ const external = [
 ];
 
 const CFB_DYNAMIC_REQUIRE = /\b(require\d*)\(\s*["']cfb["']\s*\)/g;
+// Optional side modules Kordoc loads lazily for OCR, formula OCR, image
+// re-encoding, QR codes, HEIC, HWP 5 saving, and printing. HanMark ships none
+// of them: every loader is replaced with a rejection and the names are erased.
 const OPTIONAL_NATIVE_MODULES = [
   "onnxruntime-node",
   "sharp",
   "@huggingface/transformers",
+  "@huggingface/tokenizers",
   "@hyzyla/pdfium",
+  "@rhwp/core",
+  "zxing-wasm/reader",
+  "libheif-js/libheif-wasm/libheif-bundle.js",
+  "puppeteer-core",
 ];
 const OPTIONAL_NATIVE_ALTERNATION = OPTIONAL_NATIVE_MODULES
   .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -63,10 +77,25 @@ const OPTIONAL_NATIVE_STRING = new RegExp(
   `(["'])(?:${OPTIONAL_NATIVE_ALTERNATION})\\1`,
   "g",
 );
-const KORDOC_PDF_ASSET_CREATE_REQUIRE =
-  /try \{\r?\n  const _require = createRequire\(import\.meta\.url\);\r?\n  const pkgDir = dirname\(_require\.resolve\("pdfjs-dist\/package\.json"\)\);\r?\n  pdfjsAssets\.cMapUrl = join\(pkgDir, "cmaps"\) \+ "\/";\r?\n  pdfjsAssets\.cMapPacked = true;\r?\n  pdfjsAssets\.standardFontDataUrl = join\(pkgDir, "standard_fonts"\) \+ "\/";\r?\n\} catch \{\r?\n\}/g;
-const KORDOC_CREATE_REQUIRE_IMPORT =
-  /import\s*\{\s*createRequire\s*\}\s*from\s*["'](?:node:)?module["'];?\r?\n/g;
+// Kordoc 4.25.0 reads PDF text through hayro (Rust, wasm). Its loader resolves
+// dist/hayro-pdf.wasm next to the module and reads it from disk (Node) or
+// fetches it (browser). Neither exists inside main.js.
+const KORDOC_HAYRO_WASM_LOADER =
+  /async function wasmBytes\(\) \{\r?\n  const url = new URL\("\.\/hayro-pdf\.wasm", import\.meta\.url\);\r?\n[\s\S]*?\r?\n\}\r?\n(?=function module\(\) \{)/g;
+// Optional wasm side files (QR reader, HWP 5 writer) are resolved through
+// createRequire and read from disk. Their modules are already unreachable.
+const KORDOC_WASM_ASSET_LOOKUP =
+  /\bawait readFile\d*\(\s*createRequire\d*\(import\.meta\.url\)\.resolve\(\s*["'][^"'\r\n]+\.wasm["']\s*\)\s*\)/g;
+// The XML parser (quick-xml, wasm) is inline base64 decoded with the browser
+// global atob; the bundle may only use Buffer.
+const KORDOC_XML_WASM_DECODE =
+  /Uint8Array\.from\(atob\(XML_FLAT_WASM\), \(c\) => c\.charCodeAt\(0\)\)/g;
+// OCR, formula OCR, and image-file input live in lazily imported chunks that
+// carry the model downloader (network) and the model cache (filesystem).
+const KORDOC_OCR_CHUNK_IMPORT =
+  /\bimport\("\.\/(?:image-ocr|formula|pdf-ocr)-[A-Z0-9]+\.js"\)/g;
+const KORDOC_NODE_MODULE_IMPORT =
+  /import\s*\{\s*createRequire\s*\}\s*from\s*["']node:module["'];?\r?\n/g;
 const SET_IMMEDIATE_STRING_CALLBACK =
   /callback\s*=\s*new Function\(""\s*\+\s*callback\);/g;
 const SET_IMMEDIATE_READY_STATE =
@@ -75,44 +104,27 @@ const SET_IMMEDIATE_READY_STATE_PROBE =
   /doc && "onreadystatechange" in doc\.createElement\("script"\)/g;
 const IMMEDIATE_READY_STATE_BRANCH =
   /  \} else if \('document' in global && 'onreadystatechange' in global\.document\.createElement\('script'\)\) \{[\s\S]*?^  \} else \{/gm;
-const PDF_EVAL_PROBE =
-  /function isEvalSupported\(\)\s*\{\s*try\s*\{\s*new Function\(""\);\s*return true;\s*\}\s*catch\s*\{\s*return false;\s*\}\s*\}/g;
-const PDF_POSTSCRIPT_COMPILER =
-  /    if \(isEvalSupported && FeatureTest\.isEvalSupported\) \{\r?\n      const compiled = new PostScriptCompiler\(\)\.compile\(code, domain, range\);\r?\n      if \(compiled\) \{\r?\n        return new Function\("src", "srcOffset", "dest", "destOffset", compiled\);\r?\n      \}\r?\n    \}/g;
-const BARE_ATOB_CALL = /(?<![\w$.])atob\s*\(/g;
-const BARE_BTOA_CALL = /(?<![\w$.])btoa\s*\(/g;
-const PDF_DYNAMIC_REQUIRE_FALLBACK =
-  "Function('return require(\"' + name + '\")')()";
-const PDF_GLOBAL_THIS_FALLBACK = "Function('return this')()";
-const PDF_NODE_FS_ACCESS =
-  /process\.getBuiltinModule\(\s*["']fs["']\s*\)/g;
-const PDF_NODE_CANVAS_BOOTSTRAP =
-  /if \(isNodeJS\) \{\r?\n  let canvas;[\s\S]*?\r?\n\}\r?\nasync function node_utils_fetchData/g;
-const PDF_NODE_CANVAS_FACTORY =
-  /class NodeCanvasFactory extends BaseCanvasFactory \{\r?\n  _createCanvas\(width, height\) \{\r?\n    const require = process\.getBuiltinModule\("module"\)\.createRequire\(import\.meta\.url\);\r?\n    const canvas = require\("@napi-rs\/canvas"\);\r?\n    return canvas\.createCanvas\(width, height\);\r?\n  \}\r?\n\}/g;
-const PDF_WORKER_CDN_WRAPPER =
-  /this\._createCDNWrapper = url => \{\r?\n      const wrapper = `await import\("\$\{url\}"\);`;\r?\n      return URL\.createObjectURL\(new Blob\(\[wrapper\], \{\r?\n        type: "text\/javascript"\r?\n      \}\)\);\r?\n    \};/g;
-const PDF_FAKE_WORKER_DYNAMIC_IMPORT =
-  /      const worker = await import\(\/\*webpackIgnore: true\*\/this\.workerSrc\);\r?\n      return worker\.WorkerMessageHandler;/g;
-const PDF_CLIPBOARD_DATA_PATH =
-  /event\.clipboardData\.setData\("application\/pdfjs",|clipboardData\.items|clipboardData\.getData\("application\/pdfjs"\)|clipboardData\.getData\("text"\)/g;
-const PDF_CLIPBOARD_EVENT_LISTENER =
-  /    (?:document|this\.editorDiv)\.addEventListener\("(?:copy|cut|paste)", this\.(?:copy|cut|paste|editorDivPaste)\.bind\(this\), \{\r?\n      signal\r?\n    \}\);\r?\n/g;
-const PDF_ANNOTATION_COPY_METHOD =
-  /  copy\(event\) \{\r?\n[\s\S]*?\r?\n  \}\r?\n(?=  cut\(event\) \{)/g;
-const PDF_ANNOTATION_CUT_METHOD =
-  /  cut\(event\) \{\r?\n[\s\S]*?\r?\n  \}\r?\n(?=  async paste\(event\) \{)/g;
-const PDF_ANNOTATION_PASTE_METHOD =
-  /  async paste\(event\) \{\r?\n[\s\S]*?\r?\n  \}\r?\n(?=  keydown\(event\) \{)/g;
-const PDF_FREETEXT_PASTE_METHOD =
-  /  editorDivPaste\(event\) \{\r?\n[\s\S]*?\r?\n  \}\r?\n(?=  #setContent\(\) \{)/g;
-const KORDOC_COM_HELPERS =
-  /\/\/ src\/hwpx\/com-fallback\.ts\r?\nimport \{ execFileSync \} from "child_process";\r?\nimport \{ platform \} from "os";\r?\nfunction isComFallbackAvailable\(\) \{[\s\S]*?\r?\n\}\r?\n(?=\r?\n\/\/ src\/)/g;
+const KORDOC_COM_MODULE_MARKER = "// src/hwpx/com-fallback.ts";
+const KORDOC_HANCOM_MODULE_MARKER = "// src/hwp5/to-hwpx/hancom.ts";
+const KORDOC_ENCRYPTED_HWPX_HELPER =
+  /function isEncryptedHwpx\(manifestXml\) \{\r?\n  return manifestXml\.includes\("encryption-data"\);\r?\n\}/;
 // Every COM call site is guarded by this condition. Branches are removed by
 // brace matching rather than by the text around them, so a Kordoc refactor of
 // neighbouring code cannot silently leave a branch behind.
 const KORDOC_COM_BRANCH_GUARD =
-  /isComFallbackAvailable\(\) && options\?\.filePath\) \{/g;
+  /isComFallbackAvailable\((?:options)?\) && options\?\.filePath\) \{/g;
+const KORDOC_COM_IMPORT =
+  /import \{([^{}]*\bisComFallbackAvailable\b[^{}]*)\} from ("\.\/chunk-[A-Z0-9]+\.js");/g;
+const KORDOC_COM_IMPORTED_NAMES = new Set([
+  "comResultToParseResult",
+  "extractTextViaCom",
+  "isComFallbackAvailable",
+]);
+// convertToHwpx() offers a second engine that saves through Hancom Office.
+const KORDOC_HANCOM_ENGINE_GUARD = /if \(engine !== "kordoc"\) \{/g;
+const KORDOC_HANCOM_ENGINE_IMPORT = /\bimport\("\.\/hancom-[A-Z0-9]+\.js"\)/;
+const KORDOC_PROCESS_RESIDUE =
+  /\b(?:execFile(?:Sync)?|execFileAsync|isComFallbackAvailable|extractTextViaCom|comResultToParseResult|hwpToHwpxViaHancom|hancomAvailable|hancomSaveInvocation)\b|["'](?:node:)?child_process["']|HWPFrame\.HwpObject|Hwp\.Application|powershell/iu;
 
 /**
  * Transform counts for the Kordoc library graph (dist/index.js and the chunks
@@ -120,12 +132,68 @@ const KORDOC_COM_BRANCH_GUARD =
  * build stops if the installed version or any count differs.
  */
 export const KORDOC_HARDENING_MANIFEST = Object.freeze({
-  version: "4.15.7",
-  cfbLoaders: 2,
+  version: "4.25.0",
+  // createRequire("cfb") loaders: HWP 5 parser, HWP 5 patcher, HWP 5 -> HWPX converter.
+  cfbLoaders: 3,
+  // The com-fallback module (replaced by a process-free stub).
   comHelpers: 1,
+  // DRM/distribution call sites: HWPX parser and HWP 5 parser.
   comBranches: 2,
-  pdfAssetLookups: 1,
+  // Import lists that named the COM helpers.
+  comImports: 2,
+  // convertToHwpx() "hancom"/"auto" engine branch.
+  hancomBranches: 1,
+  // The Hancom save module must never be loaded into the graph.
+  hancomModules: 0,
+  // hayro-pdf.wasm loader replaced by HanMark's embedded bytes.
+  hayroWasmLoaders: 1,
+  // createRequire(...).resolve("*.wasm") reads: QR reader, HWP 5 writer.
+  wasmAssetLookups: 2,
+  // quick-xml wasm decoded with Buffer instead of atob.
+  xmlWasmDecoders: 1,
+  // Lazy OCR chunk imports: embedded-image OCR, image-file input, formula OCR,
+  // and two for PDF page OCR. The chunks themselves never enter the graph.
+  ocrLoaders: 5,
 });
+
+/** The hayro build shipped in the reviewed Kordoc package (dist/hayro-pdf.wasm). */
+export const KORDOC_HAYRO_WASM = Object.freeze({
+  byteLength: 4_124_364,
+  sha256: "5da10f8423f48d6c40236f49db956afac25e160e170f80c957cebfd2a7e187e5",
+});
+
+export async function installedHayroWasmDigest(cwd = process.cwd()) {
+  const bytes = await fsp.readFile(
+    nodePath.join(cwd, "node_modules", "kordoc", "dist", "hayro-pdf.wasm"),
+  );
+  return {
+    byteLength: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+}
+
+/** The embedded copy must be the reviewed build: package, manifest, and src data agree. */
+export async function assertHayroWasmEmbedded(cwd = process.cwd()) {
+  const installed = await installedHayroWasmDigest(cwd);
+  if (
+    installed.sha256 !== KORDOC_HAYRO_WASM.sha256 ||
+    installed.byteLength !== KORDOC_HAYRO_WASM.byteLength
+  ) {
+    throw new Error(
+      `Installed hayro-pdf.wasm (${installed.byteLength} bytes, sha256 ${installed.sha256}) is not the reviewed build ${KORDOC_HAYRO_WASM.sha256}.`,
+    );
+  }
+  const data = await fsp.readFile(
+    nodePath.join(cwd, "src", "io", "hayroWasmData.ts"),
+    "utf8",
+  );
+  const recorded = /HAYRO_WASM_SHA256 = "([0-9a-f]{64})"/u.exec(data)?.[1];
+  if (recorded !== installed.sha256) {
+    throw new Error(
+      "src/io/hayroWasmData.ts does not embed the installed hayro-pdf.wasm; run node scripts/gen-hayro-wasm.mjs.",
+    );
+  }
+}
 
 export async function installedKordocVersion(cwd = process.cwd()) {
   const manifest = JSON.parse(
@@ -241,7 +309,7 @@ export function hardenKordocOptionalNativeSource(source) {
   const moduleNames = replaceWithCount(
     runtimeRequires.source,
     OPTIONAL_NATIVE_STRING,
-    '"hanmark-disabled-native-addon"',
+    (_match, quote) => `${quote}hanmark-disabled-native-addon${quote}`,
   );
   return {
     source: moduleNames.source,
@@ -252,42 +320,68 @@ export function hardenKordocOptionalNativeSource(source) {
   };
 }
 
-// Absolute, forward-slash path of HanMark's embedded CMap reader, imported into
-// Kordoc's PDF parser chunk in place of its filesystem asset lookup.
-export const HANMARK_PDF_CMAP_MODULE = nodePath
-  .join(nodePath.dirname(fileURLToPath(import.meta.url)), "src", "io", "pdfCMaps.ts")
+/**
+ * HanMark never runs OCR: it would download models and write a cache. Cutting
+ * the lazy imports keeps the whole OCR subgraph (engine, model downloader,
+ * model cache) out of main.js instead of leaving it as unreachable code.
+ * Callers already treat a failed import as "OCR unavailable".
+ */
+export function removeKordocOcrLoaders(source) {
+  return replaceWithCount(
+    source,
+    KORDOC_OCR_CHUNK_IMPORT,
+    'Promise.reject(new Error("HanMark does not bundle OCR."))',
+  );
+}
+
+// Absolute, forward-slash path of HanMark's embedded hayro reader, imported into
+// Kordoc's PDF engine chunk in place of its file/network loader.
+export const HANMARK_HAYRO_WASM_MODULE = nodePath
+  .join(nodePath.dirname(fileURLToPath(import.meta.url)), "src", "io", "hayroWasm.ts")
   .split(nodePath.sep)
   .join("/");
 
 /**
- * Kordoc resolves PDF.js CMaps and standard fonts through Node's createRequire,
- * which cannot work inside the bundled plugin. Without CMaps PDF.js drops all text
- * set in fonts that rely on predefined CMaps (common in Korean PDFs). Replace the
- * lookup with HanMark's embedded Korean CMap reader: no filesystem, no network.
+ * WebAssembly in the bundle comes from two places only, both compiled from
+ * bytes that are part of main.js: Kordoc's inline quick-xml parser and the
+ * hayro PDF engine HanMark embeds. Nothing is read from disk or fetched.
  */
-export function hardenKordocPdfParserSource(source) {
-  const assetLookup = replaceWithCount(
+export function hardenKordocWasmSource(source) {
+  const hayro = replaceWithCount(
     source,
-    KORDOC_PDF_ASSET_CREATE_REQUIRE,
-    [
-      "pdfjsAssets.CMapReaderFactory = __hanmarkPdfCMapReaderFactory;",
-      'pdfjsAssets.cMapUrl = "hanmark-embedded:";',
-      "pdfjsAssets.cMapPacked = true;",
-    ].join("\n"),
+    KORDOC_HAYRO_WASM_LOADER,
+    "async function wasmBytes() {\n  return __hanmarkHayroWasmBytes();\n}\n",
   );
-  const createRequireImport = replaceWithCount(
-    assetLookup.source,
-    KORDOC_CREATE_REQUIRE_IMPORT,
-    "",
+  const assets = replaceWithCount(
+    hayro.source,
+    KORDOC_WASM_ASSET_LOOKUP,
+    '(() => { throw new Error("HanMark does not bundle optional native features."); })()',
   );
-  const withReader =
-    assetLookup.replacements > 0
-      ? `import { HanmarkPdfCMapReaderFactory as __hanmarkPdfCMapReaderFactory } from ${JSON.stringify(HANMARK_PDF_CMAP_MODULE)};\n${createRequireImport.source}`
-      : createRequireImport.source;
+  const xml = replaceWithCount(
+    assets.source,
+    KORDOC_XML_WASM_DECODE,
+    'Buffer.from(XML_FLAT_WASM, "base64")',
+  );
+  let transformed = xml.source;
+  if (assets.replacements > 0) {
+    const withoutImport = transformed.replace(KORDOC_NODE_MODULE_IMPORT, "");
+    if (!/\bcreateRequire\b/u.test(withoutImport)) {
+      transformed = withoutImport;
+    }
+  }
+  if (hayro.replacements > 0) {
+    transformed = `import { hayroWasmBytes as __hanmarkHayroWasmBytes } from ${JSON.stringify(HANMARK_HAYRO_WASM_MODULE)};\n${transformed}`;
+  }
+  if (/hayro-pdf\.wasm/u.test(transformed)) {
+    throw new Error(
+      `Kordoc ${KORDOC_HARDENING_MANIFEST.version} still resolves hayro-pdf.wasm from a file or URL after hardening.`,
+    );
+  }
   return {
-    source: withReader,
-    assetLookupReplacements: assetLookup.replacements,
-    createRequireImportReplacements: createRequireImport.replacements,
+    source: transformed,
+    hayroWasmLoaderReplacements: hayro.replacements,
+    wasmAssetLookupReplacements: assets.replacements,
+    xmlWasmDecoderReplacements: xml.replacements,
   };
 }
 
@@ -370,59 +464,109 @@ export function removeKordocComBranches(source) {
   return { source: output, replacements };
 }
 
+/** Drops the COM helper names from one import list and reports whether it changed. */
+function stripKordocComImports(source) {
+  let replacements = 0;
+  const transformed = source.replace(KORDOC_COM_IMPORT, (_match, names, specifier) => {
+    replacements += 1;
+    const kept = names
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name && !KORDOC_COM_IMPORTED_NAMES.has(name));
+    return kept.length > 0
+      ? `import {\n  ${kept.join(",\n  ")}\n} from ${specifier};`
+      : `import ${specifier};`;
+  });
+  return { source: transformed, replacements };
+}
+
+/** Replaces convertToHwpx()'s Hancom engine branch with an explicit refusal. */
+export function removeKordocHancomEngineBranches(source) {
+  let output = "";
+  let cursor = 0;
+  let replacements = 0;
+  for (const match of source.matchAll(KORDOC_HANCOM_ENGINE_GUARD)) {
+    const guardIndex = match.index ?? 0;
+    if (guardIndex < cursor) {
+      continue;
+    }
+    const openBrace = guardIndex + match[0].length - 1;
+    const closeBrace = findMatchingBrace(source, openBrace);
+    if (!KORDOC_HANCOM_ENGINE_IMPORT.test(source.slice(openBrace, closeBrace))) {
+      continue;
+    }
+    output +=
+      source.slice(cursor, openBrace) +
+      '{\n    throw new KordocError("HanMark does not bundle Hancom Office automation.");\n  }';
+    cursor = closeBrace + 1;
+    replacements += 1;
+  }
+  output += source.slice(cursor);
+  return { source: output, replacements };
+}
+
 /**
- * Kordoc's Windows COM fallback accepts a filesystem path and starts
- * PowerShell. HanMark only passes document bytes to parse(), so the fallback
- * is unreachable. Strip every call site and the helper implementation before
- * bundling; KORDOC_HARDENING_MANIFEST counts stop the build if Kordoc changes.
+ * Kordoc can start PowerShell to drive Hancom Office (COM) on Windows: to
+ * read DRM/distribution documents from a file path, and as an alternative
+ * HWP -> HWPX engine. HanMark only passes document bytes and never starts a
+ * process for conversion, so every call site, the helper module, and the
+ * Hancom save module are removed before bundling. KORDOC_HARDENING_MANIFEST
+ * counts stop the build if Kordoc changes shape.
  */
 export function hardenKordocComFallbackSource(source) {
-  const hasComFallbackMarker = source.includes(
-    "// src/hwpx/com-fallback.ts",
-  );
-  const hasComImport = source.includes(
-    'import { execFileSync } from "child_process";',
-  );
-  if (hasComFallbackMarker && !hasComImport) {
-    throw new Error(
-      `Kordoc ${KORDOC_HARDENING_MANIFEST.version} COM hardening encountered an unsupported module format.`,
-    );
-  }
-  const expectedHelpers = hasComImport ? KORDOC_HARDENING_MANIFEST.comHelpers : 0;
-  const expectedBranches = hasComImport ? KORDOC_HARDENING_MANIFEST.comBranches : 0;
-  const branches = removeKordocComBranches(source);
-  const helpers = replaceWithCount(
-    branches.source,
-    KORDOC_COM_HELPERS,
-    `function isEncryptedHwpx(manifestXml) {
-  return manifestXml.includes("encryption-data");
-}
-`,
-  );
   const counts = {
-    helperReplacements: helpers.replacements,
-    comBranchReplacements: branches.replacements,
+    helperReplacements: 0,
+    comBranchReplacements: 0,
+    comImportReplacements: 0,
+    hancomBranchReplacements: 0,
+    hancomModuleLoads: 0,
   };
-  if (
-    counts.helperReplacements !== expectedHelpers ||
-    counts.comBranchReplacements !== expectedBranches
-  ) {
+  if (source.includes(KORDOC_HANCOM_MODULE_MARKER)) {
+    // Unreachable once the engine branch is gone; the manifest expects zero loads.
+    return {
+      source: "export {};\n",
+      ...counts,
+      hancomModuleLoads: 1,
+    };
+  }
+  if (source.includes(KORDOC_COM_MODULE_MARKER)) {
+    const sourceModules = source.match(/^\/\/ src\//gmu)?.length ?? 0;
+    const helper = KORDOC_ENCRYPTED_HWPX_HELPER.exec(source)?.[0];
+    if (
+      sourceModules !== 1 ||
+      !helper ||
+      !source.includes('import { execFile } from "child_process";')
+    ) {
+      throw new Error(
+        `Kordoc ${KORDOC_HARDENING_MANIFEST.version} COM hardening encountered an unsupported module format.`,
+      );
+    }
+    return {
+      source: `${KORDOC_COM_MODULE_MARKER} (HanMark: process-free stub)\n${helper}\n\nexport {\n  isEncryptedHwpx\n};\n`,
+      ...counts,
+      helperReplacements: 1,
+    };
+  }
+  const branches = removeKordocComBranches(source);
+  const imports = stripKordocComImports(branches.source);
+  const hancom = removeKordocHancomEngineBranches(imports.source);
+  if (branches.replacements !== imports.replacements) {
     throw new Error(
-      `Kordoc ${KORDOC_HARDENING_MANIFEST.version} COM hardening mismatch: expected ${expectedHelpers} helper module and ${expectedBranches} branches, got ${JSON.stringify(counts)}`,
+      `Kordoc ${KORDOC_HARDENING_MANIFEST.version} COM hardening mismatch: ${branches.replacements} call sites but ${imports.replacements} import lists.`,
     );
   }
-  const residual =
-    helpers.source.match(
-      /\b(?:execFileSync|isComFallbackAvailable|extractTextViaCom|comResultToParseResult)\b|["'](?:node:)?child_process["']|HWPFrame\.HwpObject/u,
-    )?.[0] ?? null;
-  if (hasComImport && residual) {
+  const residual = hancom.source.match(KORDOC_PROCESS_RESIDUE)?.[0] ?? null;
+  if (residual) {
     throw new Error(
-      `Kordoc COM fallback remained after source hardening: ${residual}`,
+      `Kordoc process automation remained after source hardening: ${residual}`,
     );
   }
   return {
-    source: helpers.source,
+    source: hancom.source,
     ...counts,
+    comBranchReplacements: branches.replacements,
+    comImportReplacements: imports.replacements,
+    hancomBranchReplacements: hancom.replacements,
   };
 }
 
@@ -526,186 +670,6 @@ export function hardenDocxPreviewSource(source) {
   };
 }
 
-/**
- * PDF.js can compile PostScript PDF functions through Function(). Disabling
- * the capability probe and removing that compiler branch makes it use the
- * built-in PostScriptEvaluator immediately. PDF parsing remains available.
- */
-export function hardenPdfJsSource(source) {
-  const clipboardDataPathReplacements =
-    source.match(PDF_CLIPBOARD_DATA_PATH)?.length ?? 0;
-  const clipboardListeners = replaceWithCount(
-    source,
-    PDF_CLIPBOARD_EVENT_LISTENER,
-    "",
-  );
-  const annotationCopy = replaceWithCount(
-    clipboardListeners.source,
-    PDF_ANNOTATION_COPY_METHOD,
-    `  copy() {
-  }
-`,
-  );
-  const annotationCut = replaceWithCount(
-    annotationCopy.source,
-    PDF_ANNOTATION_CUT_METHOD,
-    `  cut() {
-  }
-`,
-  );
-  const annotationPaste = replaceWithCount(
-    annotationCut.source,
-    PDF_ANNOTATION_PASTE_METHOD,
-    `  async paste() {
-  }
-`,
-  );
-  const freeTextPaste = replaceWithCount(
-    annotationPaste.source,
-    PDF_FREETEXT_PASTE_METHOD,
-    `  editorDivPaste() {
-  }
-`,
-  );
-  const evalProbe = replaceWithCount(
-    freeTextPaste.source,
-    PDF_EVAL_PROBE,
-    "function isEvalSupported() { return false; }",
-  );
-  const postScript = replaceWithCount(
-    evalProbe.source,
-    PDF_POSTSCRIPT_COMPILER,
-    "",
-  );
-  const dynamicRequire = replaceWithCount(
-    postScript.source,
-    new RegExp(
-      PDF_DYNAMIC_REQUIRE_FALLBACK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      "g",
-    ),
-    "__hanmarkRequireBuiltin(name)",
-  );
-  const globalThis = replaceWithCount(
-    dynamicRequire.source,
-    new RegExp(
-      PDF_GLOBAL_THIS_FALLBACK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      "g",
-    ),
-    "undefined",
-  );
-  const nodeFileSystem = replaceWithCount(
-    globalThis.source,
-    PDF_NODE_FS_ACCESS,
-    "__hanmarkBlockedFileSystem",
-  );
-  const nodeCanvasBootstrap = replaceWithCount(
-    nodeFileSystem.source,
-    PDF_NODE_CANVAS_BOOTSTRAP,
-    "async function node_utils_fetchData",
-  );
-  const nodeCanvasFactory = replaceWithCount(
-    nodeCanvasBootstrap.source,
-    PDF_NODE_CANVAS_FACTORY,
-    `class NodeCanvasFactory extends BaseCanvasFactory {
-  _createCanvas(width, height) {
-    const canvas = globalThis.document?.createElement("canvas");
-    if (!canvas) {
-      throw new Error("Browser canvas rendering is unavailable.");
-    }
-    canvas.width = width;
-    canvas.height = height;
-    return canvas;
-  }
-}`,
-  );
-  const workerCdnWrapper = replaceWithCount(
-    nodeCanvasFactory.source,
-    PDF_WORKER_CDN_WRAPPER,
-    `this._createCDNWrapper = () => {
-      throw new Error("External PDF workers are disabled in HanMark.");
-    };`,
-  );
-  const fakeWorkerDynamicImport = replaceWithCount(
-    workerCdnWrapper.source,
-    PDF_FAKE_WORKER_DYNAMIC_IMPORT,
-    '      throw new Error("The bundled PDF worker is unavailable.");',
-  );
-  const atob = replaceWithCount(
-    fakeWorkerDynamicImport.source,
-    BARE_ATOB_CALL,
-    "__hanmarkDecodeBase64(",
-  );
-  const btoa = replaceWithCount(
-    atob.source,
-    BARE_BTOA_CALL,
-    "__hanmarkEncodeBase64(",
-  );
-  return {
-    source: btoa.source,
-    evalProbeReplacements: evalProbe.replacements,
-    postScriptReplacements: postScript.replacements,
-    dynamicRequireReplacements: dynamicRequire.replacements,
-    globalThisFallbackReplacements: globalThis.replacements,
-    nodeFileSystemReplacements: nodeFileSystem.replacements,
-    nodeCanvasBootstrapReplacements: nodeCanvasBootstrap.replacements,
-    nodeCanvasFactoryReplacements: nodeCanvasFactory.replacements,
-    workerCdnWrapperReplacements: workerCdnWrapper.replacements,
-    fakeWorkerDynamicImportReplacements: fakeWorkerDynamicImport.replacements,
-    atobReplacements: atob.replacements,
-    btoaReplacements: btoa.replacements,
-    clipboardDataPathReplacements,
-    clipboardListenerReplacements: clipboardListeners.replacements,
-    clipboardCopyMethodReplacements: annotationCopy.replacements,
-    clipboardCutMethodReplacements: annotationCut.replacements,
-    clipboardPasteMethodReplacements: annotationPaste.replacements,
-    clipboardFreeTextPasteMethodReplacements: freeTextPaste.replacements,
-  };
-}
-
-export function assertPdfJsClipboardHardening(path, transformed) {
-  const expected = /\.worker\.mjs$/u.test(path) ? 0 : 4;
-  const counts = {
-    clipboardDataPathReplacements:
-      transformed.clipboardDataPathReplacements,
-    clipboardListenerReplacements:
-      transformed.clipboardListenerReplacements,
-    clipboardCopyMethodReplacements:
-      transformed.clipboardCopyMethodReplacements,
-    clipboardCutMethodReplacements:
-      transformed.clipboardCutMethodReplacements,
-    clipboardPasteMethodReplacements:
-      transformed.clipboardPasteMethodReplacements,
-    clipboardFreeTextPasteMethodReplacements:
-      transformed.clipboardFreeTextPasteMethodReplacements,
-  };
-  const expectedCounts = {
-    clipboardDataPathReplacements: expected,
-    clipboardListenerReplacements: expected,
-    clipboardCopyMethodReplacements: expected === 0 ? 0 : 1,
-    clipboardCutMethodReplacements: expected === 0 ? 0 : 1,
-    clipboardPasteMethodReplacements: expected === 0 ? 0 : 1,
-    clipboardFreeTextPasteMethodReplacements: expected === 0 ? 0 : 1,
-  };
-  if (
-    Object.entries(counts).some(
-      ([key, count]) => count !== expectedCounts[key],
-    )
-  ) {
-    throw new Error(
-      `PDF.js 4.10.38 clipboard hardening mismatch in ${path}: expected ${JSON.stringify(expectedCounts)}, got ${JSON.stringify(counts)}`,
-    );
-  }
-  if (
-    /\bclipboardData\b|\.addEventListener\(\s*["'](?:copy|cut|paste)["']/u.test(
-      transformed.source,
-    )
-  ) {
-    throw new Error(
-      `PDF.js annotation-editor clipboard access remained in ${path}.`,
-    );
-  }
-}
-
 const unsafeRuntimePatterns = [
   ["dynamic Function constructor", /(?<![\w$.])(?:new\s+)?Function\s*\(/u],
   ["eval", /(?<![\w$.])eval\s*\(/u],
@@ -741,13 +705,14 @@ function assertDependencyTransform(path, source) {
   }
 }
 
+const KORDOC_TALLY_KEYS = Object.freeze(
+  Object.keys(KORDOC_HARDENING_MANIFEST).filter((key) => key !== "version"),
+);
+
 export function emptyKordocHardeningTally() {
   return {
     loadedFiles: 0,
-    cfbLoaders: 0,
-    comHelpers: 0,
-    comBranches: 0,
-    pdfAssetLookups: 0,
+    ...Object.fromEntries(KORDOC_TALLY_KEYS.map((key) => [key, 0])),
   };
 }
 
@@ -756,23 +721,41 @@ export function assertKordocHardeningTally(tally) {
   if (tally.loadedFiles === 0) {
     return;
   }
-  const expected = {
-    cfbLoaders: KORDOC_HARDENING_MANIFEST.cfbLoaders,
-    comHelpers: KORDOC_HARDENING_MANIFEST.comHelpers,
-    comBranches: KORDOC_HARDENING_MANIFEST.comBranches,
-    pdfAssetLookups: KORDOC_HARDENING_MANIFEST.pdfAssetLookups,
-  };
-  const actual = {
-    cfbLoaders: tally.cfbLoaders,
-    comHelpers: tally.comHelpers,
-    comBranches: tally.comBranches,
-    pdfAssetLookups: tally.pdfAssetLookups,
-  };
+  const expected = Object.fromEntries(
+    KORDOC_TALLY_KEYS.map((key) => [key, KORDOC_HARDENING_MANIFEST[key]]),
+  );
+  const actual = Object.fromEntries(
+    KORDOC_TALLY_KEYS.map((key) => [key, tally[key]]),
+  );
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(
       `Kordoc ${KORDOC_HARDENING_MANIFEST.version} hardening totals differ from the manifest: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
     );
   }
+}
+
+/** Runs every Kordoc source transform on one dist file. */
+export function hardenKordocSource(original) {
+  const cfb = injectKordocCfb(original);
+  const optionalNative = hardenKordocOptionalNativeSource(cfb.source);
+  const ocr = removeKordocOcrLoaders(optionalNative.source);
+  const wasm = hardenKordocWasmSource(ocr.source);
+  const comFallback = hardenKordocComFallbackSource(wasm.source);
+  return {
+    source: comFallback.source,
+    counts: {
+      cfbLoaders: cfb.replacements,
+      comHelpers: comFallback.helperReplacements,
+      comBranches: comFallback.comBranchReplacements,
+      comImports: comFallback.comImportReplacements,
+      hancomBranches: comFallback.hancomBranchReplacements,
+      hancomModules: comFallback.hancomModuleLoads,
+      hayroWasmLoaders: wasm.hayroWasmLoaderReplacements,
+      wasmAssetLookups: wasm.wasmAssetLookupReplacements,
+      xmlWasmDecoders: wasm.xmlWasmDecoderReplacements,
+      ocrLoaders: ocr.replacements,
+    },
+  };
 }
 
 export const kordocSourceHardeningPlugin = {
@@ -782,22 +765,19 @@ export const kordocSourceHardeningPlugin = {
     build.onStart(async () => {
       tally = emptyKordocHardeningTally();
       assertKordocManifestVersion(await installedKordocVersion());
+      await assertHayroWasmEmbedded();
     });
     build.onLoad(
       { filter: /kordoc[\\/]dist[\\/].*\.(?:c?js|mjs)$/ },
       async (args) => {
         const original = await fsp.readFile(args.path, "utf8");
-        const cfb = injectKordocCfb(original);
-        const optionalNative = hardenKordocOptionalNativeSource(cfb.source);
-        const pdfParser = hardenKordocPdfParserSource(optionalNative.source);
-        const comFallback = hardenKordocComFallbackSource(pdfParser.source);
+        const hardened = hardenKordocSource(original);
         tally.loadedFiles += 1;
-        tally.cfbLoaders += cfb.replacements;
-        tally.comHelpers += comFallback.helperReplacements;
-        tally.comBranches += comFallback.comBranchReplacements;
-        tally.pdfAssetLookups += pdfParser.assetLookupReplacements;
+        for (const key of KORDOC_TALLY_KEYS) {
+          tally[key] += hardened.counts[key];
+        }
         return {
-          contents: comFallback.source,
+          contents: hardened.source,
           loader: "js",
           resolveDir: nodePath.dirname(args.path),
         };
@@ -847,24 +827,6 @@ export const dependencySourceHardeningPlugin = {
         };
       },
     );
-
-    build.onLoad(
-      {
-        filter:
-          /pdfjs-dist[\\/]legacy[\\/]build[\\/]pdf(?:\.worker)?\.mjs$/,
-      },
-      async (args) => {
-        const original = await fsp.readFile(args.path, "utf8");
-        const transformed = hardenPdfJsSource(original);
-        assertPdfJsClipboardHardening(args.path, transformed);
-        assertDependencyTransform(args.path, transformed.source);
-        return {
-          contents: transformed.source,
-          loader: "js",
-          resolveDir: nodePath.dirname(args.path),
-        };
-      },
-    );
   },
 };
 
@@ -904,6 +866,10 @@ export const createReadStream = blocked;
 export const createWriteStream = blocked;
 export const watch = blocked;
 export const existsSync = () => false;
+// Kordoc 4.25.0: the PDF parser statically imports the OCR model-cache helpers
+// (they only answer "is a model cached?"); these two names come with them.
+export const readlinkSync = blocked;
+export const readdir = blockedAsync;
 export const promises = { readFile, writeFile, mkdir, stat, unlink, rename, realpath };
 export default {
   readFile, writeFile, mkdir, stat, unlink, rename, realpath,
@@ -937,15 +903,11 @@ const verifyBundledCodePlugin = {
 
 export const options = {
   banner: {
-    // Kordoc calls createRequire(import.meta.url), so the CJS bundle supplies a
-    // real file URL. PDF.js base64 helpers replace browser globals with Buffer.
+    // Kordoc modules still mention import.meta.url, so the CJS bundle supplies
+    // a real file URL for it.
     js:
       "/* THIS IS A GENERATED/BUNDLED FILE BY ESBUILD */\n" +
-      "const __hwpImportMetaUrl = require('url').pathToFileURL(__filename).href;\n" +
-      "const __hanmarkRequireBuiltin = (name) => require(name);\n" +
-      "const __hanmarkBlockedFileSystem = { promises: { readFile: async () => { throw new Error('Filesystem PDF loading is disabled; HanMark supplies PDF bytes directly.'); } } };\n" +
-      "const __hanmarkDecodeBase64 = (value) => Buffer.from(value, 'base64').toString('latin1');\n" +
-      "const __hanmarkEncodeBase64 = (value) => Buffer.from(value, 'latin1').toString('base64');",
+      "const __hwpImportMetaUrl = require('url').pathToFileURL(__filename).href;",
   },
   define: {
     "import.meta.url": "__hwpImportMetaUrl",

@@ -12,7 +12,7 @@ import {
 import { bytesAsArrayBuffer } from "./fileGateway";
 import { finalizeHwpxPackage } from "./hwpxPostProcess";
 import { sha256Bytes } from "./hash";
-import type { HanmarkParseOptions } from "./importOptions";
+import { kordocParseOptions } from "./importOptions";
 import { tOut, translate, type Locale, type MessageKey } from "../i18n";
 
 /**
@@ -143,8 +143,10 @@ export async function readFormFields(bytes: Uint8Array): Promise<FormFieldSpec[]
     });
   }
   // Offline whitelist, as in the "form" import preset.
-  const options: HanmarkParseOptions = { keepTrailingEmptyCols: true, includeFieldPlaceholders: true };
-  const parsed = await parse(copyBuffer(bytes), options);
+  const parsed = await parse(
+    copyBuffer(bytes),
+    kordocParseOptions({ keepTrailingEmptyCols: true, includeFieldPlaceholders: true })
+  );
   if (!parsed.success) return fields;
   for (const block of parsed.blocks) {
     const columns = block.type === "table" && block.table ? headerRowColumns(block.table) : null;

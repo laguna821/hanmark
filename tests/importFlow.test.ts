@@ -29,7 +29,9 @@ import { normalizeHanmarkSettings } from "../src/legacy-port/settings";
 import { setUiLocale } from "../src/i18n";
 import { makeKoreanCMapPdf } from "./fixtures/koreanCMapPdf";
 
-const FORBIDDEN_OPTIONS = ["ocr", "formulaOcr", "filePath", "inlineImages"];
+// The whitelist never carries these; "ocr" and "hancomFallback" are added later, forced to
+// false, by kordocParseOptions (tests/kordocPins.test.ts).
+const FORBIDDEN_OPTIONS = ["ocr", "formulaOcr", "filePath", "inlineImages", "hancomFallback"];
 
 interface MockNote {
   path: string;

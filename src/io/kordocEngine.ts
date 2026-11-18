@@ -37,6 +37,29 @@ import {
 import { fontGuideLines } from "./fontGuide";
 import { resolveOutputLocale, t, type LanguagePreference } from "../i18n";
 
+/**
+ * Official-document defaults that Kordoc changed after 4.15.7, pinned to the old
+ * behaviour until HanMark adopts them on purpose (R-029). A value the caller set
+ * always wins.
+ * - totalRow "keep": a 합계/총계/계 row stays where the note has it (4.23.0 moves
+ *   it under the header row by default).
+ * - bodyTitleBox false, for the bullet-style report without a cover only: the
+ *   first "#" stays chapter Ⅰ instead of becoming a title box (4.25.0).
+ */
+export function pinGongmunDefaults(gongmun: GongmunOptions | undefined): GongmunOptions | undefined {
+  if (!gongmun) return gongmun;
+  const pinned: GongmunOptions = { ...gongmun };
+  if (pinned.totalRow === undefined) pinned.totalRow = "keep";
+  if (
+    pinned.bodyTitleBox === undefined &&
+    pinned.cover === false &&
+    normalizeGongmunPreset(pinned.preset) === "gaejosik"
+  ) {
+    pinned.bodyTitleBox = false;
+  }
+  return pinned;
+}
+
 export interface GenerateHwpxOptions {
   gongmun?: GongmunOptions;
   profile?: FormatProfile;
@@ -200,7 +223,7 @@ async function generateKordocPackage(
   // over-long official-document heading); HanMark shows these in the report.
   const engineWarnings: string[] = [];
   const raw = await markdownToHwpx(markdown, {
-    gongmun: options.gongmun,
+    gongmun: pinGongmunDefaults(options.gongmun),
     profile: options.profile,
     warnings: engineWarnings
   });

@@ -13,10 +13,10 @@ const FIRST_NOTE_PARAGRAPH = /(<hp:subList\b[^>]*>\s*<hp:p\b[^>]*>)/;
 const FIRST_RUN_CHAR_PR = /<hp:run\s[^>]*\bcharPrIDRef="(\d+)"/;
 
 /**
- * Kordoc 4.15.7 writes footnote bodies without the leading autoNum control that Hancom
- * uses to draw the number in front of each note ("1) …"). Insert the same control the
- * upstream fix (kordoc commit b8c0c52) emits. Notes that already start with an autoNum
- * are left untouched, so a newer Kordoc release makes this a no-op.
+ * Hancom draws the number in front of each footnote ("1) …") from a leading autoNum
+ * control. Kordoc 4.15.7 left it out and HanMark inserted it; Kordoc 4.16.0 and later
+ * write it themselves (R-029), so on a package from the bundled engine this adds
+ * nothing. The guard stays so a note without the control never reaches the user.
  */
 export function addFootnoteAutoNumbers(sectionXml: string): { xml: string; added: number } {
   let added = 0;

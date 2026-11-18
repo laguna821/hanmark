@@ -20,7 +20,7 @@ if (versions[version] !== manifest.minAppVersion) {
   throw new Error(`versions.json ${versions[version]} != minAppVersion ${manifest.minAppVersion}`);
 }
 // Keep in step with KORDOC_HARDENING_MANIFEST.version in esbuild.config.mjs.
-const KORDOC_VERSION = "4.15.7";
+const KORDOC_VERSION = "4.25.0";
 if (pkg.dependencies?.kordoc !== KORDOC_VERSION) {
   throw new Error(`kordoc must be pinned exactly to ${KORDOC_VERSION}`);
 }
@@ -47,18 +47,35 @@ if (lock.packages?.["node_modules/@fontsource/pretendard"]?.version !== "5.3.0")
   throw new Error("package-lock must resolve @fontsource/pretendard exactly to 5.3.0");
 }
 
+// Kordoc 4.25.0 itself requires the patched zod (^4.6.7) and MCP SDK (^1.32.0), and
+// adm-zip, protobufjs, and sharp are no longer installed, so the overrides that
+// 4.15.7 needed are gone (R-029). The lockfile holds the transitive versions and
+// the audit gate in CI fails on any new advisory.
 const requiredOverrides = {
-  "adm-zip": "0.6.1",
-  "fast-uri": "3.1.9",
-  hono: "4.13.19",
-  "ip-address": "10.7.6",
-  moment: "2.31.0",
-  protobufjs: "8.7.1",
-  "proxy-addr": "2.0.8",
-  qs: "6.17.1",
-  sharp: "0.35.4",
-  zod: "4.6.7"
+  moment: "2.31.0"
 };
+const retiredOverrides = [
+  "adm-zip",
+  "body-parser",
+  "fast-uri",
+  "hono",
+  "@hono/node-server",
+  "ip-address",
+  "@modelcontextprotocol/sdk",
+  "protobufjs",
+  "proxy-addr",
+  "qs",
+  "sharp",
+  "zod"
+];
+for (const name of retiredOverrides) {
+  if (pkg.overrides?.[name] !== undefined) {
+    throw new Error(`${name} override is retired with Kordoc 4.25.0; remove it or record why it is back`);
+  }
+}
+if (lock.packages?.["node_modules/zod"]?.version !== "4.6.7") {
+  throw new Error("package-lock must resolve zod to 4.6.7 (Kordoc 4.25.0 requirement)");
+}
 for (const [name, safeVersion] of Object.entries(requiredOverrides)) {
   if (pkg.overrides?.[name] !== safeVersion) {
     throw new Error(`${name} override must be pinned to ${safeVersion}`);

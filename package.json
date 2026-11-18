@@ -4,7 +4,7 @@
   "description": "No-setup Markdown export to HWPX, self-contained HTML, and Editorial PDF.",
   "main": "main.js",
   "scripts": {
-    "gen-assets": "node scripts/gen-embedded-assets.mjs && node scripts/gen-pdf-cmaps.mjs && node scripts/gen-form-templates.mjs && node scripts/gen-font-css.mjs",
+    "gen-assets": "node scripts/gen-embedded-assets.mjs && node scripts/gen-hayro-wasm.mjs && node scripts/gen-form-templates.mjs && node scripts/gen-font-css.mjs",
     "dev": "npm run gen-assets && node esbuild.config.mjs",
     "build": "npm run gen-assets && tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
     "test": "node scripts/run-tests.mjs",
@@ -32,26 +32,13 @@
     "@xmldom/xmldom": "^0.8.15",
     "docx-preview": "0.4.0",
     "jszip": "^3.10.1",
-    "kordoc": "4.15.7",
+    "kordoc": "4.25.0",
     "markdown-it": "14.3.3",
-    "markdown-it-footnote": "4.0.0",
-    "pdfjs-dist": "4.10.38"
+    "markdown-it-footnote": "4.0.0"
   },
   "overrides": {
-    "adm-zip": "0.6.1",
-    "body-parser": "2.4.0",
     "esbuild": "0.28.1",
-    "fast-uri": "3.1.9",
-    "hono": "4.13.19",
-    "@hono/node-server": "2.1.9",
-    "ip-address": "10.7.6",
-    "@modelcontextprotocol/sdk": "1.32.2",
-    "moment": "2.31.0",
-    "protobufjs": "8.7.1",
-    "proxy-addr": "2.0.8",
-    "qs": "6.17.1",
-    "sharp": "0.35.4",
-    "zod": "4.6.7"
+    "moment": "2.31.0"
   },
   "devDependencies": {
     "@codemirror/view": "6.38.6",
@@ -64,6 +51,7 @@
     "eslint": "9.39.5",
     "eslint-plugin-obsidianmd": "0.4.1",
     "obsidian": "^1.5.0",
+    "pdfjs-dist": "4.10.38",
     "playwright": "1.62.1",
     "tslib": "^2.8.1",
     "tsx": "4.21.0",

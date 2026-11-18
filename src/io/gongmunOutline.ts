@@ -30,7 +30,7 @@ import type { GongmunClosing } from "./gongmunStyle";
  * paragraph of its own, and so is every hint here.
  */
 
-/** Kordoc's default numbering per preset (PRESET_DEFAULTS in Kordoc 4.15.7). */
+/** Kordoc's default numbering per preset (PRESET_DEFAULTS in Kordoc 4.25.0). */
 const PRESET_NUMBERING: Readonly<Record<GongmunPreset, GongmunNumbering>> = {
   official: "standard",
   report: "report",
@@ -39,7 +39,9 @@ const PRESET_NUMBERING: Readonly<Record<GongmunPreset, GongmunNumbering>> = {
   minutes: "standard",
   gaejosik: "gaejosik",
   press: "report",
-  ministry: "report"
+  ministry: "report",
+  // 서울방침 (Kordoc 4.16.1): the Seoul report family, □ ○ - numbering.
+  bangchim: "report"
 };
 
 // i18n-data-begin: Kordoc's marker glyphs and lead words matched in document text (Kordoc 4.15.7)

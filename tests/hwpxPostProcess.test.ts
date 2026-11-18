@@ -18,9 +18,17 @@ async function section(data: ArrayBuffer): Promise<string> {
 }
 
 describe("HWPX post-processing", () => {
-  it("adds the leading footnote number control the upstream fix emits, once", async () => {
+  it("leaves the footnote number control Kordoc 4.25.0 writes alone, and restores it where it is missing", async () => {
     const xml = await section(await markdownToHwpx("가[^a] 나[^b]\n\n[^a]: 첫째\n[^b]: 둘째\n"));
-    const first = addFootnoteAutoNumbers(xml);
+    assert.equal(xml.match(/<hp:autoNum\b[^>]*numType="FOOTNOTE"/g)?.length, 2, "Kordoc 4.25.0 numbers both notes itself");
+    assert.deepEqual(addFootnoteAutoNumbers(xml), { xml, added: 0 }, "nothing is added twice");
+    // A package written by Kordoc 4.15.7 has no control; the guard still repairs it.
+    const legacy = xml.replace(
+      /<hp:run\b[^>]*><hp:ctrl><hp:autoNum\b[^>]*numType="FOOTNOTE"[^>]*>[\s\S]*?<\/hp:autoNum><\/hp:ctrl>(?:<hp:t> <\/hp:t>)?<\/hp:run>/g,
+      ""
+    );
+    assert.doesNotMatch(legacy, /numType="FOOTNOTE"/);
+    const first = addFootnoteAutoNumbers(legacy);
     assert.equal(first.added, 2);
     const notes = [...first.xml.matchAll(/<hp:footNote\s[^>]*>[\s\S]*?<\/hp:footNote>/g)].map((m) => m[0]);
     notes.forEach((note, index) => {
@@ -66,6 +74,11 @@ describe("HWPX post-processing", () => {
     const names: string[] = [];
     archive.forEach((name) => names.push(name));
     assert.equal(names[0], "mimetype");
+    // Kordoc 4.25.0 writes the OWPML version.xml itself, right after mimetype; the
+    // finisher keeps that order and never adds a second copy.
+    assert.equal(names[1], "version.xml");
+    assert.equal(names.filter((name) => name === "version.xml").length, 1);
+    assert.equal(new Set(names).size, names.length, "no entry is written twice");
     const bytes = new Uint8Array(first.data);
     assert.equal(new TextDecoder().decode(bytes.slice(30, 38)), "mimetype");
     assert.equal(bytes[8] | (bytes[9] << 8), 0, "mimetype must be stored, not deflated");

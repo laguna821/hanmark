@@ -4,7 +4,7 @@ import { persistImportedImages, type PersistedCloudImage } from "./importImages"
 import type { ImportCloudSettings } from "./kordocImport";
 import { bytesAsArrayBuffer, splitFilename } from "./fileGateway";
 import { describeImportFailure, describeImportWarning } from "./messageCatalog";
-import { toParseOptions, type ImportOptions } from "./importOptions";
+import { kordocParseOptions, toParseOptions, type ImportOptions } from "./importOptions";
 import { errorMessage } from "../utils/errors";
 import { t } from "../i18n";
 
@@ -167,7 +167,10 @@ export async function importOne(
 ): Promise<ImportResult> {
   let result: ParseResult;
   try {
-    result = await parse(bytesAsArrayBuffer(input.bytes), toParseOptions(job.options, { password, onProgress: onPage }));
+    result = await parse(
+          bytesAsArrayBuffer(input.bytes),
+          kordocParseOptions(toParseOptions(job.options, { password, onProgress: onPage }))
+        );
   } catch (error) {
     return failure(input, null, error);
   }

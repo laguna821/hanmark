@@ -80,6 +80,34 @@ export const ALLOWED_PARSE_OPTION_KEYS: ReadonlySet<string> = new Set<keyof Hanm
   "onProgress"
 ]);
 
+/**
+ * Values HanMark sets on every Kordoc parse() call, whatever the caller chose
+ * (R-029). The first two keep the offline contract; the last two pin the
+ * Kordoc 4.15.7 output until HanMark decides to adopt the new defaults.
+ * - hancomFallback: never start Hancom Office (PowerShell/COM). The code is also
+ *   removed from the bundle.
+ * - ocr: never run OCR. Kordoc 4.25.0 turns built-in OCR on by itself for image
+ *   input and for scanned pages when a model is cached.
+ * - layoutTables "keep": borderless layout tables stay tables (4.17.0 made
+ *   "visual" the default; patch and form filling need the original structure).
+ * - scriptTags false: superscripts and subscripts stay plain text (4.16.2 made
+ *   <sup>/<sub> the default for HWP, HWPX, and DOCX).
+ */
+export const FORCED_PARSE_OPTIONS = Object.freeze({
+  hancomFallback: false,
+  ocr: false,
+  layoutTables: "keep",
+  scriptTags: false
+} as const);
+
+/** What actually reaches Kordoc: the whitelist plus the forced values. */
+export type KordocParseOptions = HanmarkParseOptions & typeof FORCED_PARSE_OPTIONS;
+
+/** The only way HanMark builds the options object it hands to Kordoc's parse(). */
+export function kordocParseOptions(options: HanmarkParseOptions = {}): KordocParseOptions {
+  return { ...options, ...FORCED_PARSE_OPTIONS };
+}
+
 const MAX_PAGE_NUMBER = 100_000;
 
 export function normalizeImportPreset(value: unknown): ImportPresetId {

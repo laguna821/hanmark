@@ -278,6 +278,7 @@ export const GONGMUN_PRESET_KOREAN_NAMES: Readonly<Record<GongmunPreset, string>
   minutes: "회의록",
   gaejosik: "개조식",
   press: "보도자료",
-  ministry: "업무보고"
+  ministry: "업무보고",
+  bangchim: "서울방침"
 };
 // i18n-data-end

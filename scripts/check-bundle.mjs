@@ -10,6 +10,7 @@ const docxPreviewView = await readFile(
 const packageManifest = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8")
 );
+const hayroWasmData = await readFile(new URL("../src/io/hayroWasmData.ts", import.meta.url), "utf8");
 // 2.6.1 (Kordoc 4.2.5): 3,322,872 bytes. 2.7.0 M1 (Kordoc 4.15.7 library graph,
 // no new features yet): 3,668,074 bytes. 2.7.0 M2: 3,889,725 bytes (+214,678 bytes
 // of base64 Korean PDF CMaps, plus HWPX post-processing and the font guide).
@@ -21,9 +22,14 @@ const packageManifest = JSON.parse(
 // feedback (R-024 to R-026: heading mapping and finishing, Hallym University
 // forms, per-type frames, one form list, the preview toolbar): 4,179,268 bytes
 // (+32,035; new modules 16,197 bytes).
+// 2.7.1: 4,262,290 bytes. Kordoc 4.25.0 engine port (R-029): 5,221,731 bytes.
+// Kordoc and HanMark code shrank to about 2.97 MB (PDF.js, the Korean CMaps, and
+// the OCR subgraph left the bundle); the embedded hayro PDF engine adds 2,248,248
+// bytes (4,124,364 bytes of wasm, raw DEFLATE, base64). An Obsidian plugin ships
+// main.js only, so the engine cannot be a separate file.
 // The ceiling keeps ~3% headroom and is raised only with a recorded reason
-// (docs/research/R-018 change log).
-const maximumBundleBytes = 4_305_000;
+// (docs/research/R-018 and R-029 change logs).
+const maximumBundleBytes = 5_380_000;
 const pinnedKordocVersion = packageManifest.dependencies?.kordoc;
 const installedKordoc = JSON.parse(
   await readFile(new URL("../node_modules/kordoc/package.json", import.meta.url), "utf8")
@@ -32,10 +38,15 @@ const forbiddenNativeModules = [
   "sharp",
   "onnxruntime-node",
   "@huggingface/transformers",
+  "@huggingface/tokenizers",
   "@hyzyla/pdfium",
+  "@rhwp/core",
+  "zxing-wasm/reader",
+  "libheif-js/libheif-wasm/libheif-bundle.js",
   "@napi-rs/canvas",
   "puppeteer-core",
   "@modelcontextprotocol/sdk",
+  "pdfjs-dist",
   "canvas"
 ];
 
@@ -50,8 +61,16 @@ const optionalNativeLoaderHits = bundle.match(optionalNativeLoader) ?? [];
 const forbiddenSpecificNames = [
   "onnxruntime-node",
   "@huggingface/transformers",
+  "@huggingface/tokenizers",
   "@hyzyla/pdfium",
+  "@rhwp/core",
+  "zxing-wasm/reader",
+  "libheif-js/libheif-wasm",
   "@napi-rs/canvas",
+  "puppeteer-core",
+  "pdfjs-dist",
+  // Kordoc's PDF engine must come from the embedded bytes, never from a file or URL.
+  "hayro-pdf.wasm",
 ].filter((name) => bundle.includes(name));
 const dynamicCfbRequire =
   bundle.match(/\brequire\d*\(\s*["']cfb["']\s*\)/g) ?? [];
@@ -78,9 +97,23 @@ const unsafeRuntimeHits = unsafeRuntimePatterns
   .map(([name]) => name);
 const unintendedComRuntime = [
   ...bundle.matchAll(
-    /require\(\s*["']child_process["']\s*\)|\bexecFileSync\b|HWPFrame\.HwpObject/gu,
+    /require\(\s*["']child_process["']\s*\)|\bexecFile(?:Sync|Async)?\b|HWPFrame\.HwpObject|Hwp\.Application|\b(?:extractTextViaCom|hwpToHwpxViaHancom|hancomAvailable)\b|KORDOC_NO_HANCOM/gu,
   ),
 ].map((match) => match[0]);
+// PowerShell appears once: HanMark's own user-initiated Word preview, which runs
+// through the userProcess boundary. Kordoc's Hancom automation scripts are gone.
+const powerShellMentions = bundle.match(/powershell/giu) ?? [];
+const wordPreviewPowerShell = bundle.match(/executable:\s*"powershell\.exe"/gu) ?? [];
+// No network: HanMark and its engine never fetch.
+const networkCalls = bundle.match(/(?<![\w$.])fetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\s*\(/gu) ?? [];
+// WebAssembly is compiled only from bytes inside main.js (Kordoc's inline XML
+// parser and the embedded hayro PDF engine). The streaming APIs take a network
+// response, so they are not allowed.
+const allowedWasmMembers = new Set(["Module", "Instance", "compile", "RuntimeError"]);
+const unexpectedWasmMembers = [
+  ...new Set([...bundle.matchAll(/\bWebAssembly\.(\w+)/gu)].map((match) => match[1])),
+].filter((member) => !allowedWasmMembers.has(member));
+const hayroPayloadHead = /HAYRO_WASM_DEFLATE_BASE64 =\s*"([A-Za-z0-9+/=]{96})/u.exec(hayroWasmData)?.[1];
 const intentionalChildProcessBoundaries =
   bundle.match(/require\(\s*["']node:child_process["']\s*\)/gu) ?? [];
 
@@ -117,6 +150,26 @@ if (
   );
 }
 
+if (powerShellMentions.length !== 1 || wordPreviewPowerShell.length !== 1) {
+  throw new Error(
+    `PowerShell must appear only as HanMark's user-initiated Word preview (found ${powerShellMentions.length} mentions, ${wordPreviewPowerShell.length} preview boundaries).`
+  );
+}
+
+if (networkCalls.length > 0) {
+  throw new Error(`Network calls leaked into the production bundle: ${[...new Set(networkCalls)].join(", ")}`);
+}
+
+if (unexpectedWasmMembers.length > 0) {
+  throw new Error(
+    `Only in-memory WebAssembly compilation is allowed; found WebAssembly.${unexpectedWasmMembers.join(", WebAssembly.")}`
+  );
+}
+
+if (!hayroPayloadHead || !bundle.includes(hayroPayloadHead)) {
+  throw new Error("The embedded hayro PDF engine (src/io/hayroWasmData.ts) is missing from the bundle.");
+}
+
 if (typeof pinnedKordocVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(pinnedKordocVersion)) {
   throw new Error("kordoc must be pinned to an exact version in package.json.");
 }
@@ -149,8 +202,10 @@ if (packageManifest.dependencies?.["docx-preview"] !== "0.4.0") {
   throw new Error("The DOCX package renderer must remain pinned to docx-preview 0.4.0.");
 }
 
-if (packageManifest.dependencies?.["pdfjs-dist"] !== "4.10.38") {
-  throw new Error("PDF.js source hardening requires the exact pdfjs-dist 4.10.38 source.");
+// Kordoc 4.25.0 reads PDFs with its own engine. PDF.js is only a test tool now
+// (scripts/test-editorial-pdf-render.mjs reads the exported PDF back with it).
+if (packageManifest.dependencies?.["pdfjs-dist"] !== undefined) {
+  throw new Error("pdfjs-dist must not be a runtime dependency; Kordoc 4.25.0 bundles its own PDF engine.");
 }
 
 if (
@@ -176,5 +231,5 @@ if (!bundle.includes("A user-initiated DOCX preview request is required.")) {
 }
 
 console.log(
-  `Bundle check passed: ${Buffer.byteLength(bundle, "utf8")} bytes; Kordoc ${pinnedKordocVersion} and guarded DOCX package preview present; PDF.js clipboard and Kordoc COM fallbacks removed; only the user-initiated process boundary remains.`
+  `Bundle check passed: ${Buffer.byteLength(bundle, "utf8")} bytes; Kordoc ${pinnedKordocVersion} and guarded DOCX package preview present; Kordoc Hancom automation and OCR removed; hayro PDF engine embedded; no network calls; only the user-initiated process boundary remains.`
 );

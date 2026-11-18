@@ -1,6 +1,6 @@
 import { diffBlocks, parse, type BlockDiff, type DiffResult, type IRBlock } from "kordoc";
 import { bytesAsArrayBuffer } from "./fileGateway";
-import type { HanmarkParseOptions } from "./importOptions";
+import { kordocParseOptions } from "./importOptions";
 import { describeImportFailure } from "./messageCatalog";
 
 /**
@@ -91,8 +91,7 @@ export function alignedDiff(blocksA: readonly IRBlock[], blocksB: readonly IRBlo
 
 async function parseForCompare(input: CompareInput): Promise<IRBlock[]> {
   // Offline whitelist: never OCR, file paths, or inline images.
-  const options: HanmarkParseOptions = { images: false };
-  const result = await parse(bytesAsArrayBuffer(input.bytes.slice()), options);
+  const result = await parse(bytesAsArrayBuffer(input.bytes.slice()), kordocParseOptions({ images: false }));
   if (!result.success) {
     throw new Error(`${input.name}: ${describeImportFailure(result.code, result.fileType).title}`);
   }
