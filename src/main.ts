@@ -136,7 +136,7 @@ import {
   QUICK_HWPX_PREVIEW_VIEW,
   type QuickPreviewMode
 } from "./ui/QuickHwpxPreviewView";
-import { GongmunLintModal } from "./ui/GongmunLintModal";
+import { GongmunCheckController } from "./ui/gongmunCheckController";
 import { HanmarkStatusBar } from "./ui/statusBar";
 import { StartPanels } from "./ui/startPanel";
 import { GongmunStyleModal } from "./ui/GongmunStyleModal";
@@ -353,6 +353,14 @@ export default class HanmarkPlugin extends Plugin {
   private readonly editorialPdf = new EditorialPdfService();
   private toolbar: ToolbarController | null = null;
   private statusBar: HanmarkStatusBar | null = null;
+  private readonly gongmunCheck = new GongmunCheckController({
+    app: this.app,
+    families: () => this.settings.gongmunCheckFamilies,
+    preflightEnabled: () => this.settings.gongmunPreflight,
+    currentView: () => this.currentMarkdownView(),
+    presetOf: (file) => notePresetHint(this.app, file) ?? describeGongmunForm(this, this.currentGongmunForm(file ?? undefined))?.preset ?? "report",
+    addStatusItem: () => this.addStatusBarItem()
+  });
   private startPanels: StartPanels | null = null;
   private settingTab: HanmarkSettingTab | null = null;
   private lastMarkdownView: MarkdownView | null = null;
@@ -410,6 +418,9 @@ export default class HanmarkPlugin extends Plugin {
     this.registerCommands();
     registerEditorCompatibilityCommands(this);
     this.registerEditorExtension(this.activity.extension);
+    this.registerEditorExtension(this.gongmunCheck.extension);
+    this.gongmunCheck.installStatus();
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.gongmunCheck.refreshStatus()));
     this.followVaultChanges();
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
@@ -942,6 +953,11 @@ export default class HanmarkPlugin extends Plugin {
       callback: () => this.openWordTemplateManager()
     });
     this.addCommand({
+      id: "toggle-gongmun-check-marks",
+      name: t("command.toggleCheckMarks"),
+      callback: () => this.gongmunCheck.toggleMarks()
+    });
+    this.addCommand({
       id: "toggle-toolbar",
       name: t("command.toggleToolbar"),
       callback: () => {
@@ -1018,6 +1034,7 @@ export default class HanmarkPlugin extends Plugin {
         exportKordoc: (mode, preset, formId) =>
           this.jobs.run(async () => {
             const note = this.currentMarkdownView()?.file?.path;
+            if (mode === "gongmun-hwpx" && !(await this.gongmunCheck.preflight(preset))) return { format: "hwpx", status: "cancelled" };
             const outcome = await exportKordocHwpxWithOutcome(this.app, this, {
               mode,
               gongmunPreset: preset,
@@ -1187,6 +1204,8 @@ export default class HanmarkPlugin extends Plugin {
    * beside it and named after the form; the global and remembered forms stay as they are.
    */
   private async openGongmunBatch(): Promise<void> {
+    // One check for the note, whatever the number of forms.
+    if (!(await this.gongmunCheck.preflight(undefined))) return;
     const snapshot = await readExportSnapshot(this.app, this);
     if (!snapshot) return;
     new GongmunBatchModal(this.app, {
@@ -1317,12 +1336,7 @@ export default class HanmarkPlugin extends Plugin {
   }
 
   private openGongmunLint(preset: GongmunPreset): void {
-    const view = this.currentMarkdownView();
-    if (!view?.file) {
-      new Notice(t("gongmun.lint.noNote"));
-      return;
-    }
-    new GongmunLintModal(this.app, view.editor, preset).open();
+    this.gongmunCheck.openWindow(preset);
   }
 
   private openEditorialPdfThemeManager(

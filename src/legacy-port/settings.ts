@@ -16,6 +16,14 @@ import {
   normalizeEditorialPdfThemeLibrary,
   type EditorialPdfThemeLibraryV1
 } from "../io/editorialPdfTheme";
+import { CHECK_FAMILIES, DEFAULT_CHECK_FAMILIES, type CheckFamily } from "../io/gongmunCheckFamilies";
+
+function normalizeCheckFamilies(value: unknown): Record<CheckFamily, boolean> {
+  const data = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  const out = { ...DEFAULT_CHECK_FAMILIES };
+  for (const family of CHECK_FAMILIES) if (typeof data[family] === "boolean") out[family] = data[family];
+  return out;
+}
 
 export type DocxPreviewMode = "fast-docx" | "word-pdf";
 /** DOCX engine: the built-in writer (no installation) or the optional Pandoc path (R-031). */
@@ -176,6 +184,10 @@ export interface HanmarkSettings extends Record<string, unknown> {
   mermaidDiagrams: boolean;
   /** Always draw diagrams with the document palette instead of the note's colours (R-033). */
   mermaidPaperPalette: boolean;
+  /** Official-document check families that run (R-035). */
+  gongmunCheckFamilies: Record<CheckFamily, boolean>;
+  /** Run the check before an official-document export and show blocking findings (R-035). */
+  gongmunPreflight: boolean;
   /** What the HWPX preview shows when it opens: quick HWPX or the official-document form (R-026). */
   hwpxPreviewMode: "quick" | "gongmun";
   /** Toolbar folded to a slim strip (R-028); hiding it completely stays `showToolbarOnStartup`. */
@@ -235,6 +247,8 @@ export const DEFAULT_HANMARK_SETTINGS: Readonly<HanmarkSettings> = Object.freeze
   assembleEmbeds: true,
   mermaidDiagrams: true,
   mermaidPaperPalette: false,
+  gongmunCheckFamilies: { ...DEFAULT_CHECK_FAMILIES },
+  gongmunPreflight: false,
   hwpxPreviewMode: "quick",
   toolbarCollapsed: false,
   toolbarPeek: false,
@@ -485,6 +499,8 @@ export function normalizeHanmarkSettings(
         : DEFAULT_HANMARK_SETTINGS.assembleEmbeds,
     mermaidDiagrams: data.mermaidDiagrams !== false,
     mermaidPaperPalette: data.mermaidPaperPalette === true,
+    gongmunCheckFamilies: normalizeCheckFamilies(data.gongmunCheckFamilies),
+    gongmunPreflight: data.gongmunPreflight === true,
     hwpxPreviewMode: data.hwpxPreviewMode === "gongmun" ? "gongmun" : "quick",
     toolbarCollapsed: booleanOr(data.toolbarCollapsed, DEFAULT_HANMARK_SETTINGS.toolbarCollapsed),
     toolbarPeek: booleanOr(data.toolbarPeek, DEFAULT_HANMARK_SETTINGS.toolbarPeek),

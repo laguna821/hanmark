@@ -51,6 +51,16 @@ import {
   type MessageKey
 } from "../i18n";
 import { VERSION as KORDOC_VERSION } from "kordoc";
+import { CHECK_FAMILIES, type CheckFamily } from "../io/gongmunCheck";
+import { CHECK_FAMILY_LABELS } from "./GongmunLintModal";
+
+const CHECK_FAMILY_DESCRIPTIONS: Readonly<Record<CheckFamily, MessageKey>> = {
+  notation: "settings.gongmunCheck.notation",
+  munche: "settings.gongmunCheck.munche",
+  budget: "settings.gongmunCheck.budget",
+  logic: "settings.gongmunCheck.logic",
+  slop: "settings.gongmunCheck.slop"
+};
 
 /** The bundled Kordoc engine version, read from the engine itself. */
 export const HWPX_ENGINE_VERSION: string = String(KORDOC_VERSION);
@@ -220,6 +230,31 @@ export class HanmarkSettingTab extends PluginSettingTab {
       .addToggle((toggle) => {
         toggle.setValue(this.host.settings.mermaidPaperPalette).onChange((enabled) => {
           void this.changeDiagramSetting("mermaidPaperPalette", enabled);
+        });
+      });
+    this.renderCheckSettings(container);
+  }
+
+  /** Official-document checks: which families run, and the pre-flight before export (R-035). */
+  private renderCheckSettings(container: HTMLElement): void {
+    for (const family of CHECK_FAMILIES) {
+      new Setting(container)
+        .setName(t("settings.gongmunCheck.family", { family: tKey(CHECK_FAMILY_LABELS[family]) }))
+        .setDesc(tKey(CHECK_FAMILY_DESCRIPTIONS[family]))
+        .addToggle((toggle) => {
+          toggle.setValue(this.host.settings.gongmunCheckFamilies[family]).onChange((enabled) => {
+            this.host.settings.gongmunCheckFamilies = { ...this.host.settings.gongmunCheckFamilies, [family]: enabled };
+            void this.host.saveSettings();
+          });
+        });
+    }
+    new Setting(container)
+      .setName(t("settings.gongmunPreflight.name"))
+      .setDesc(t("settings.gongmunPreflight.desc"))
+      .addToggle((toggle) => {
+        toggle.setValue(this.host.settings.gongmunPreflight).onChange((enabled) => {
+          this.host.settings.gongmunPreflight = enabled;
+          void this.host.saveSettings();
         });
       });
   }
