@@ -62,7 +62,7 @@ export const ko = {
 
   // Import window
   "import.modal.title": "문서 불러오기",
-  "import.modal.drop": "HWP·HWPX·PDF·DOCX·XLSX 파일이나 폴더를 여기로 끌어다 놓으세요",
+  "import.modal.drop": "HWP·HWPX·PDF·DOCX·XLSX·PPTX 파일이나 폴더를 여기로 끌어다 놓으세요",
   "import.modal.pickFiles": "파일 선택…",
   "import.modal.pickFolder": "폴더 선택…",
   "import.modal.selected": "선택한 파일 {count}개",
