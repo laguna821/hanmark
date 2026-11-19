@@ -685,6 +685,8 @@ export const en: MessageTable = {
   "gongmun.look.group.committee": "Commissions (위원회)",
   "gongmun.look.group.other": "Other agencies",
   "gongmun.look.group.count": "{count}",
+  "gongmun.look.otherFrameHint": "The central-agency looks below are not used with {frame}. Choosing one switches the frame to {to}.",
+  "gongmun.look.detail": "{font} {pt} pt",
   "gongmun.lookFile.common": "Common",
   "gongmun.lookFile.hallymIlsong": "Ilsong college",
   "gongmun.lookFile.hallymAicr": "Hallym AICR",

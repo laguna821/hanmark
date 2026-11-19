@@ -116,6 +116,34 @@ export interface GongmunLookEntry {
   /** The measured sample behind an agency look is small (fewer than five reports). */
   smallSample: boolean;
   description?: string;
+  /** What an agency look puts on paper, shown in the chooser (body font and size, band colour). */
+  detail?: GongmunLookDetail;
+  /** A look of another frame, offered so it can be found; choosing it also switches to this frame. */
+  switchesFrameTo?: GongmunFrame;
+}
+
+export interface GongmunLookDetail {
+  font?: string;
+  pt?: number;
+  /** Chapter band colour as #RRGGBB, when the agency uses one. */
+  band?: string;
+}
+
+/** The body font, size and band colour Kordoc measured for an agency ("공통" included). */
+export function agencyLookDetail(name: string): GongmunLookDetail | undefined {
+  let style: unknown;
+  try {
+    style = agencyStyle(name);
+  } catch {
+    return undefined;
+  }
+  const data = style as { report?: { p?: { font?: unknown; pt?: unknown } }; press?: { p?: { font?: unknown; pt?: unknown } }; band?: { fill?: unknown } } | undefined;
+  const body = data?.report?.p ?? data?.press?.p;
+  const detail: GongmunLookDetail = {};
+  if (typeof body?.font === "string" && body.font) detail.font = body.font;
+  if (typeof body?.pt === "number" && body.pt > 0) detail.pt = body.pt;
+  if (typeof data?.band?.fill === "string" && /^#[0-9a-f]{6}$/iu.test(data.band.fill)) detail.band = data.band.fill.toUpperCase();
+  return Object.keys(detail).length ? detail : undefined;
 }
 
 const AGENCY_GROUP_LABEL: Readonly<Record<"ministry" | "office" | "agency" | "committee" | "other", MessageKey>> = {
@@ -193,8 +221,43 @@ function agencyEntry(name: string): GongmunLookEntry {
     groupKey,
     group: tKey(AGENCY_GROUP_LABEL[groupKey]),
     smallSample: isSmallSampleAgency(name),
-    description: t("gongmun.look.agencyDesc", { name })
+    description: t("gongmun.look.agencyDesc", { name }),
+    ...withDetail(agencyLookDetail(name))
   };
+}
+
+function withDetail(detail: GongmunLookDetail | undefined): { detail?: GongmunLookDetail } {
+  return detail ? { detail } : {};
+}
+
+function commonEntry(standard: string): GongmunLookEntry {
+  return {
+    id: agencyLook(AGENCY_COMMON_NAME),
+    name: t("gongmun.look.common"),
+    kind: "common",
+    groupKey: "standard",
+    group: standard,
+    smallSample: false,
+    description: t("gongmun.look.commonDesc"),
+    ...withDetail(agencyLookDetail(AGENCY_COMMON_NAME))
+  };
+}
+
+function sortedAgencyEntries(): GongmunLookEntry[] {
+  const order = ["ministry", "office", "agency", "committee", "other"];
+  return [...agencies().names]
+    .sort((left, right) => order.indexOf(agencyGroupOf(left)) - order.indexOf(agencyGroupOf(right)) || left.localeCompare(right, "ko"))
+    .map(agencyEntry);
+}
+
+/**
+ * 공통 and the 52 agency looks for a frame that cannot use them, so the chooser can
+ * still show what exists; each one switches the form to the 보고서 frame when chosen.
+ */
+export function agencyLooksForOtherFrame(frame: GongmunFrame): GongmunLookEntry[] {
+  if (AGENCY_FRAMES.includes(frame)) return [];
+  const to: GongmunFrame = "report";
+  return [commonEntry(t("gongmun.look.group.standard")), ...sortedAgencyEntries()].map((look) => ({ ...look, switchesFrameTo: to }));
 }
 
 /** Every look the frame can use: 기본, then 공통 and the agencies, the institution forms, the user's forms. */
@@ -207,27 +270,10 @@ export function listGongmunLooks(host: TemplateLibraryHost, frame: GongmunFrame)
     const made = styleFrame(style);
     return made === undefined || made === frame;
   });
-  if (AGENCY_FRAMES.includes(frame)) {
-    looks.push({
-      id: agencyLook(AGENCY_COMMON_NAME),
-      name: t("gongmun.look.common"),
-      kind: "common",
-      groupKey: "standard",
-      group: standard,
-      smallSample: false,
-      description: t("gongmun.look.commonDesc")
-    });
-  }
+  if (AGENCY_FRAMES.includes(frame)) looks.push(commonEntry(standard));
   looks.push(...styles.filter((style) => style.builtIn).map(styleEntry));
   looks.push(...styles.filter((style) => !style.builtIn).map(styleEntry));
-  if (AGENCY_FRAMES.includes(frame)) {
-    const order = ["ministry", "office", "agency", "committee", "other"];
-    const sorted = [...agencies().names].sort(
-      (left, right) =>
-        order.indexOf(agencyGroupOf(left)) - order.indexOf(agencyGroupOf(right)) || left.localeCompare(right, "ko")
-    );
-    looks.push(...sorted.map(agencyEntry));
-  }
+  if (AGENCY_FRAMES.includes(frame)) looks.push(...sortedAgencyEntries());
   return looks;
 }
 

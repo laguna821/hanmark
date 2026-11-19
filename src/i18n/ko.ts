@@ -612,6 +612,8 @@ export const ko = {
   "gongmun.look.group.committee": "위원회",
   "gongmun.look.group.other": "그 밖의 기관",
   "gongmun.look.group.count": "{count}곳",
+  "gongmun.look.otherFrameHint": "아래 중앙행정기관 모양은 {frame} 틀에 쓰지 않습니다. 고르면 틀이 {to}로 바뀝니다.",
+  "gongmun.look.detail": "{font} {pt}pt",
   "gongmun.lookFile.common": "공통",
   "gongmun.lookFile.hallymIlsong": "한림대 일송",
   "gongmun.lookFile.hallymAicr": "한림대 AI융합연구원",

@@ -4536,6 +4536,53 @@ body {
   font-size: var(--font-ui-smaller);
 }
 
+/* What an agency look puts on paper: band colour, body font and size (3.0.0). */
+.hanmark-look-chip {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  background: var(--hanmark-look-chip, transparent);
+}
+
+.hanmark-look-chip.is-empty {
+  border-style: dashed;
+}
+
+.hanmark-look-detail {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+
+.hanmark-look-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hanmark-look-frame-hint {
+  margin: 8px 4px 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+}
+
+.hanmark-look-option.is-other-frame .hanmark-look-name {
+  color: var(--text-muted);
+}
+
+.hanmark-look-panel {
+  min-width: 340px;
+}
+
 .hanmark-look-empty {
   padding: 10px 8px;
   color: var(--text-muted);

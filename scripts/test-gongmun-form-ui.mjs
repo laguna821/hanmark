@@ -18,12 +18,9 @@ writeFileSync(
   "test-artifacts/gongmun-form-ui/engine-fixture.ts",
   `import { writeFileSync } from "node:fs";
 import { AGENCY_COMMON_NAME, agencyNames, agencyStyle, PRESET_ALIAS, VERSION } from "kordoc";
-const docs: Record<string, number | null> = {};
-for (const name of agencyNames()) {
-  const count = (agencyStyle(name) as { report?: { docs?: number } }).report?.docs;
-  docs[name] = typeof count === "number" ? count : null;
-}
-writeFileSync(process.argv[2], JSON.stringify({ common: AGENCY_COMMON_NAME, names: agencyNames(), docs, alias: PRESET_ALIAS, version: VERSION }));
+const styles: Record<string, unknown> = {};
+for (const name of agencyNames()) styles[name] = agencyStyle(name);
+writeFileSync(process.argv[2], JSON.stringify({ common: AGENCY_COMMON_NAME, names: agencyNames(), styles, alias: PRESET_ALIAS, version: VERSION }));
 `
 );
 execFileSync(process.execPath, ["--import", "tsx", "test-artifacts/gongmun-form-ui/engine-fixture.ts", "test-artifacts/gongmun-form-ui/engine.json"], { stdio: "inherit" });
@@ -130,8 +127,8 @@ export const AGENCY_COMMON_NAME = engine.common;
 export const PRESET_ALIAS = engine.alias;
 export const agencyNames = () => [...engine.names];
 export const agencyStyle = (name) => {
-  if (!(name in engine.docs)) throw new Error("agency: " + name);
-  return engine.docs[name] === null ? {} : { report: { docs: engine.docs[name] } };
+  if (!(name in engine.styles)) throw new Error("agency: " + name);
+  return JSON.parse(JSON.stringify(engine.styles[name]));
 };
 export const normalizeGongmunPreset = (value) => engine.alias[String(value ?? "").trim()] ?? "official";
 export const incompatibleGongmunWarnings = () => [];
@@ -267,10 +264,25 @@ try {
   assert.equal((await lookButton.innerText()).replace(/\s*▾\s*/u, ""), "기본");
   assert.equal(await page.locator("#stage select").count(), 1, "the look is not a dropdown");
 
-  // A frame that cannot use agency looks offers none.
+  // A frame that cannot use agency looks still shows all of them, under a line saying
+  // that choosing one switches the frame to 보고서 (a user could not find them before).
   await frame.selectOption("official");
   await lookButton.click();
-  assert.deepEqual(await options.locator(".hanmark-look-name").allInnerTexts(), ["기본"]);
+  assert.equal(await options.count(), 1 + 1 + 52, "기본, 공통, and 52 agencies");
+  assert.match(await page.locator("#hanmark-export-gongmun-look-list .hanmark-look-frame-hint").innerText(), /아래 중앙행정기관 모양은 기안문 틀에 쓰지 않습니다\. 고르면 틀이 보고서로 바뀝니다/u);
+  assert.equal(await page.locator("#hanmark-export-gongmun-look-list .hanmark-look-option.is-other-frame").count(), 53);
+  // Each agency row says what it puts on paper: body font and size, and its band colour.
+  assert.match(await page.locator('[data-look="agency:국세청"] .hanmark-look-detail').innerText(), /^바탕 13pt$/u);
+  assert.equal(await page.locator('[data-look="agency:국세청"] .hanmark-look-chip').evaluate((node) => getComputedStyle(node).backgroundColor), "rgb(62, 87, 165)");
+  await page.locator("#stage").screenshot({ path: `${out}/11-official-frame-shows-agencies.png` });
+  await search.fill("국세");
+  assert.deepEqual(await options.locator(".hanmark-look-name").allInnerTexts(), ["국세청"]);
+  await search.press("Enter");
+  assert.equal(await activeForm(), "form:report/agency:국세청", "choosing an agency from 기안문 switches the frame to 보고서");
+  assert.equal(await frame.inputValue(), "report");
+  await frame.selectOption("official");
+  assert.equal((await lookButton.innerText()).replace(/\s*▾\s*/u, ""), "기본", "back on 기안문 the look returns to 기본");
+  await lookButton.click();
   await search.press("Escape");
   assert.equal(await page.locator(".hanmark-look-panel").isHidden(), true);
   assert.equal(await page.evaluate(() => document.activeElement?.id), "hanmark-export-gongmun-look", "Escape returns to the look button");
@@ -374,16 +386,31 @@ try {
   assert.equal(await page.locator('[data-section="favorite"] .hanmark-look-star').getAttribute("aria-pressed"), "true");
   await search.press("Escape");
 
-  // Switching to a frame that cannot use the look drops it; the list hides agency looks.
+  // Switching to a frame that cannot use the look drops it; the frame's own looks come
+  // first, and the agencies follow, marked as switching the frame (recent and favorite
+  // agencies stay pinned on top so they can still be found).
   await frame.selectOption("general");
   assert.equal(await activeForm(), "form:general/basic");
   assert.deepEqual(await page.locator("#stage .hanmark-form-picker-switch").allInnerTexts(), ["맺음 줄"]);
   await lookButton.click();
-  assert.deepEqual(await options.locator(".hanmark-look-name").allInnerTexts(), ["기본", "한림대 일송자유교양대학 (회의록·회의자료)"]);
-  await options.nth(1).locator(".hanmark-look-pick").click();
+  const own = page.locator("#hanmark-export-gongmun-look-list .hanmark-look-option:not(.is-other-frame) .hanmark-look-name");
+  assert.deepEqual(await own.allInnerTexts(), ["기본", "한림대 일송자유교양대학 (회의록·회의자료)"]);
+  assert.equal(await page.locator('#hanmark-export-gongmun-look-list .hanmark-look-option.is-other-frame:not([data-section="recent"]):not([data-section="favorite"])').count(), 53);
+  await page.locator("#stage").screenshot({ path: `${out}/12-general-frame-shows-agencies.png` });
+  await page.locator('#hanmark-export-gongmun-look-list [data-look="builtin:hallym-ilsong"] .hanmark-look-pick').click();
   assert.equal(await activeForm(), "form:general/builtin:hallym-ilsong");
   assert.equal(await page.locator("#stage .hanmark-form-picker-switch").count(), 0, "a look made for one type has no switches");
   assert.match(await page.locator("#stage .hanmark-form-picker").innerText(), /'회의록' 종류로 만듭니다/u);
+
+  // The user's case (2026-11-18): with the Hallym minutes look, which fixes the type, the
+  // chooser still lists the 52 agencies, and picking one leaves the Hallym look for 보고서.
+  await lookButton.click();
+  assert.equal(await page.locator('#hanmark-export-gongmun-look-list .hanmark-look-option.is-other-frame:not([data-section="recent"]):not([data-section="favorite"])').count(), 53);
+  await search.fill("행정안전");
+  assert.deepEqual(await options.locator(".hanmark-look-name").allInnerTexts(), ["행정안전부"]);
+  await search.press("Enter");
+  assert.equal(await activeForm(), "form:report/agency:행정안전부");
+  assert.equal(await frame.inputValue(), "report");
 
   // Back to the agency look with a cover and contents, then export: the file is named 틀_모양.
   await frame.selectOption("report");

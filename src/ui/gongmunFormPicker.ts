@@ -1,6 +1,7 @@
 import { describeGongmunForm, gongmunPresetLabel } from "../io/gongmunExport";
 import { FRAME_OPTIONS, GONGMUN_FRAMES, LOOK_BASIC, parseGongmunFormId, type GongmunFrame } from "../io/gongmunFormId";
 import {
+  agencyLooksForOtherFrame,
   gongmunFrameLabel,
   gongmunFrameOptionLabel,
   gongmunLookName,
@@ -50,7 +51,12 @@ export interface LookChooserInput {
   idPrefix: string;
   /** Narrows the list (the style window offers only the looks a form can start from). */
   filter?: (look: GongmunLookEntry) => boolean;
-  onPick(look: string): void;
+  /**
+   * Also list the agency looks when the frame cannot use them, so the user sees they
+   * exist; picking one hands its frame to onPick (the export window and the preview).
+   */
+  offerOtherFrames?: boolean;
+  onPick(look: string, frame?: GongmunFrame): void;
   onClose(): void;
 }
 
@@ -92,7 +98,7 @@ const AGENCY_SECTION = /^(?:ministry|office|agency|committee|other):/u;
 
 /** Room the open panel needs before it opens upwards instead (px). */
 const PANEL_MIN_ROOM = 260;
-const PANEL_MAX_ROOM = 380;
+const PANEL_MAX_ROOM = 560;
 
 /** The searchable look list. Returns the search input so the caller can focus it. */
 export function renderLookChooser(root: HTMLElement, input: LookChooserInput): HTMLInputElement {
@@ -134,11 +140,22 @@ export function renderLookChooser(root: HTMLElement, input: LookChooserInput): H
     list.empty();
     const library = getTemplateLibrary(input.host.library);
     const favorites = library.gongmunLookFavorites;
-    const offered = listGongmunLooks(input.host.library, input.frame).filter((look) => input.filter?.(look) ?? true);
+    const own = listGongmunLooks(input.host.library, input.frame).filter((look) => input.filter?.(look) ?? true);
+    const other = input.offerOtherFrames ? agencyLooksForOtherFrame(input.frame) : [];
+    const offered = [...own, ...other];
     const sections = lookSections(offered, favorites, library.gongmunLookRecent, search.value);
     if (!sections.length) list.createDiv({ cls: "hanmark-look-empty", text: t("gongmun.look.empty") });
+    // A frame without agency looks still shows them, under one line that says what choosing does.
+    let hinted = false;
     let index = 0;
     for (const section of sections) {
+      if (!hinted && section.looks.some((look) => look.switchesFrameTo)) {
+        hinted = true;
+        list.createDiv({
+          cls: "hanmark-look-frame-hint",
+          text: t("gongmun.look.otherFrameHint", { frame: gongmunFrameLabel(input.frame), to: gongmunFrameLabel("report") })
+        });
+      }
       const group = list.createDiv({ cls: "hanmark-look-group", attr: { role: "group", "aria-label": section.title } });
       const title = group.createDiv({ cls: "hanmark-look-group-title" });
       title.createSpan({ cls: "hanmark-look-group-name", text: section.title });
@@ -158,8 +175,21 @@ export function renderLookChooser(root: HTMLElement, input: LookChooserInput): H
           }
         });
         index += 1;
+        if (look.switchesFrameTo) row.addClass("is-other-frame");
         const pick = row.createEl("button", { cls: "hanmark-look-pick", attr: { type: "button", tabindex: "-1" } });
+        if (look.detail?.band) {
+          const chip = pick.createSpan({ cls: "hanmark-look-chip", attr: { "aria-hidden": "true" } });
+          chip.setCssProps({ "--hanmark-look-chip": look.detail.band });
+        } else if (look.detail) {
+          pick.createSpan({ cls: "hanmark-look-chip is-empty", attr: { "aria-hidden": "true" } });
+        }
         pick.createSpan({ cls: "hanmark-look-name", text: look.name });
+        if (look.detail?.font) {
+          pick.createSpan({
+            cls: "hanmark-look-detail",
+            text: look.detail.pt ? t("gongmun.look.detail", { font: look.detail.font, pt: look.detail.pt }) : look.detail.font
+          });
+        }
         if (look.smallSample) {
           pick.createSpan({
             cls: "hanmark-look-badge",
@@ -167,7 +197,8 @@ export function renderLookChooser(root: HTMLElement, input: LookChooserInput): H
             attr: { title: t("gongmun.look.smallSampleTip") }
           });
         }
-        pick.onclick = () => input.onPick(look.id);
+        if (look.switchesFrameTo) row.setAttribute("data-frame", look.switchesFrameTo);
+        pick.onclick = () => input.onPick(look.id, look.switchesFrameTo);
         if (look.id !== LOOK_BASIC) {
           const starred = favorites.includes(look.id);
           const star = row.createEl("button", {
@@ -204,8 +235,9 @@ export function renderLookChooser(root: HTMLElement, input: LookChooserInput): H
       mark(true);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const look = options()[active]?.getAttribute("data-look");
-      if (look) input.onPick(look);
+      const option = options()[active];
+      const look = option?.getAttribute("data-look");
+      if (look) input.onPick(look, (option?.getAttribute("data-frame") as GongmunFrame | null) ?? undefined);
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -266,9 +298,12 @@ export function renderGongmunFormPicker(root: HTMLElement, input: GongmunFormPic
       frame,
       current: form?.look ?? LOOK_BASIC,
       idPrefix: input.idPrefix,
-      onPick: (look) => {
+      // Shown also when the chosen look fixes the document type (the Hallym forms), so the agencies stay findable.
+      offerOtherFrames: true,
+      onPick: (look, toFrame) => {
         close();
-        input.onChange(withGongmunLook(library, input.formId, look));
+        const base = toFrame && toFrame !== frame ? withGongmunFrame(library, input.formId, toFrame) : input.formId;
+        input.onChange(withGongmunLook(library, base, look));
       },
       onClose: () => {
         close();
