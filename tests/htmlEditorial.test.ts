@@ -159,7 +159,7 @@ test("Editorial callouts remove Obsidian markers while preserving safe visible t
   assert.equal((html.match(/class="hanmark-callout"/g) ?? []).length, 1);
   assert.match(
     html,
-    /<aside class="hanmark-callout" data-callout="note"><p class="hanmark-line hanmark-body"><strong>참고 제목<\/strong> 이어지는 설명<\/p><\/aside>/
+    /<aside class="hanmark-callout" data-callout="note"><p class="hanmark-callout-title"><strong>참고 제목<\/strong><\/p><p class="hanmark-line hanmark-body">이어지는 설명<\/p><\/aside>/
   );
   assert.match(html, /<blockquote class="hanmark-quote">/);
   assert.match(html, /일반 인용문/);

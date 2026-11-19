@@ -62,6 +62,8 @@ export type EditorialBlock =
       type: "callout";
       kind: string;
       collapsed?: boolean;
+      /** Text after the marker on its first line (`> [!note] 회의 메모`), shown as the callout's heading. */
+      title?: EditorialInline[];
       blocks: EditorialBlock[];
     }
   | { type: "code"; language?: string; value: string }
@@ -1198,6 +1200,33 @@ function stripCalloutMarker(
   };
 }
 
+/**
+ * When a quote starts with a callout marker, cuts the rest of the marker line out of
+ * the first paragraph and returns it as inlines. Obsidian shows that text as the
+ * callout's heading, not as the start of its body. The marker itself stays for
+ * stripCalloutMarker; a marker without a title returns null and changes nothing.
+ */
+function takeCalloutTitle(tokens: MarkdownToken[], start: number): EditorialInline[] | null {
+  if (tokens[start]?.type !== "paragraph_open") return null;
+  const inline = tokens[start + 1];
+  const children = inline?.children;
+  if (!children?.length || children[0].type !== "text") return null;
+  const marker = /^\[![A-Za-z0-9_-]+\][+-]?/.exec(children[0].content);
+  if (!marker) return null;
+  const end = children.findIndex((child) => child.type === "softbreak" || child.type === "hardbreak");
+  const line = end < 0 ? children : children.slice(0, end);
+  const head = Object.assign(Object.create(Object.getPrototypeOf(children[0]) as object) as MarkdownToken, children[0], {
+    content: children[0].content.slice(marker[0].length).replace(/^\s+/u, "")
+  });
+  const titleTokens = [head, ...line.slice(1)].filter((child) => child.type !== "text" || child.content);
+  const title = parseInlineTokens(titleTokens);
+  if (!editorialPlainText(title).trim()) return null;
+  // The paragraph keeps only the marker, then its body after the line break.
+  const markerOnly = Object.assign(Object.create(Object.getPrototypeOf(children[0]) as object) as MarkdownToken, children[0], { content: marker[0] });
+  inline.children = [markerOnly, ...(end < 0 ? [] : children.slice(end + 1))];
+  return title;
+}
+
 function stripTaskMarker(item: EditorialListItem): void {
   const paragraph = item.blocks[0];
   if (paragraph?.type !== "paragraph") return;
@@ -1299,6 +1328,8 @@ function parseMarkdownBlocks(
     }
     if (token.type === "blockquote_open") {
       cursor.index += 1;
+      // A callout's own title is the rest of the marker line; the body starts on the next line.
+      const title = takeCalloutTitle(tokens, cursor.index);
       const quoteBlocks = parseMarkdownBlocks(
         tokens,
         cursor,
@@ -1314,6 +1345,7 @@ function parseMarkdownBlocks(
               ...(callout.collapsed !== undefined
                 ? { collapsed: callout.collapsed }
                 : {}),
+              ...(title && title.length ? { title } : {}),
               blocks: quoteBlocks
             }
           : { type: "quote", blocks: quoteBlocks }

@@ -1434,6 +1434,13 @@
   margin-top: 6px;
 }
 
+/* Several pieces of advice on one underline (3.0.0): one block each, separated by a rule. */
+.hanmark-check-tooltip-item + .hanmark-check-tooltip-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
 .hanmark-status-check.is-on {
   color: var(--text-accent);
 }

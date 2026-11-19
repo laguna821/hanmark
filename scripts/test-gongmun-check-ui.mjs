@@ -219,7 +219,7 @@ try {
   assert.equal(await page.locator(".hanmark-check-mark").count(), 0);
   await page.evaluate(() => view.dispatch({ effects: CheckUi.setCheckMarksEnabled.of(true) }));
   await page.waitForFunction(() => document.querySelectorAll(".hanmark-check-mark").length > 0);
-  const marked = await page.locator(".hanmark-check-mark").evaluateAll((nodes) => nodes.map((node) => node.dataset.hanmarkCheckRule));
+  const marked = await page.locator(".hanmark-check-mark").evaluateAll((nodes) => nodes.flatMap((node) => node.dataset.hanmarkCheckRule.split(" ")));
   assert.ok(marked.includes("BUDGET_CALC_MISMATCH") && !marked.includes("DATE_NO_SPACE"), marked.join(","));
   await page.evaluate(() => { const line = view.state.doc.line(7); view.dispatch({ changes: { from: line.to, insert: " 그리고 2026. 11. 19.(금)" } }); });
   await page.waitForFunction(() => [...document.querySelectorAll(".hanmark-check-mark")].some((node) => node.dataset.hanmarkCheckRule === "WEEKDAY_MISMATCH"));
@@ -230,6 +230,26 @@ try {
   await page.locator('.hanmark-check-tooltip [data-hanmark-check-action="fix"]').click();
   assert.match(await page.evaluate(() => editor.getLine(6)), /2026\. 11\. 19\.\(목\)$/u);
   await page.waitForFunction(() => ![...document.querySelectorAll(".hanmark-check-mark")].some((node) => node.dataset.hanmarkCheckRule === "WEEKDAY_MISMATCH"));
+  // Two rules on overlapping text ("200달러": won first; no exchange rate given) make ONE
+  // underline whose tooltip gives both pieces of advice, each with its own buttons.
+  await page.evaluate(() => { const end = view.state.doc.length; view.dispatch({ changes: { from: end, insert: "\n\n클라우드 임대는 월 100~200달러 수준의 종량제로 운영한다.\n" } }); });
+  await page.waitForFunction(() => [...document.querySelectorAll(".hanmark-check-mark")].some((node) => node.textContent.includes("달러")));
+  // A wording finding over the whole sentence (DA_ENDING) stays its own underline.
+  const dollar = page.locator('.hanmark-check-mark[data-hanmark-check-rule*="BUDGET_"]', { hasText: "달러" });
+  assert.equal(await dollar.count(), 1, "one underline for the two rules");
+  assert.deepEqual((await dollar.getAttribute("data-hanmark-check-rule")).split(" ").sort(), ["BUDGET_RATE_MISSING", "BUDGET_WON_FIRST"]);
+  assert.equal(await dollar.getAttribute("data-hanmark-check-count"), "2");
+  assert.equal(await dollar.innerText(), "200달러");
+  await dollar.hover();
+  await page.waitForSelector(".hanmark-check-tooltip .hanmark-check-tooltip-item + .hanmark-check-tooltip-item");
+  const advice = await page.locator(".hanmark-check-tooltip .hanmark-check-tooltip-item").allInnerTexts();
+  assert.equal(advice.length, 3, "the two budget rules, then the sentence-wide wording finding");
+  assert.ok(advice.some((text) => /원화를 앞에 쓰고/u.test(text)) && advice.some((text) => /환율 기준이 없음/u.test(text)), advice.join(" | "));
+  await page.screenshot({ path: `${out}/05-two-rules-one-underline.png` });
+  // Ignoring one rule keeps the other on the same text.
+  await page.locator(".hanmark-check-tooltip .hanmark-check-tooltip-item", { hasText: "환율" }).locator('[data-hanmark-check-action="ignore"]').click();
+  await page.waitForFunction(() => { const node = [...document.querySelectorAll(".hanmark-check-mark")].find((item) => item.dataset.hanmarkCheckRule.includes("BUDGET_") && item.textContent.includes("달러")); return node && !node.dataset.hanmarkCheckCount; });
+  assert.equal(await page.locator('.hanmark-check-mark[data-hanmark-check-rule*="BUDGET_"]', { hasText: "달러" }).getAttribute("data-hanmark-check-rule"), "BUDGET_WON_FIRST");
   await page.evaluate(() => view.dispatch({ effects: CheckUi.setCheckMarksEnabled.of(false) }));
   assert.equal(await page.locator(".hanmark-check-mark").count(), 0);
 

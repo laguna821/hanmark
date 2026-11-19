@@ -120,3 +120,28 @@ test("Editorial parser drops unsafe HTML subtrees and preserves safe visible chi
   assert.match(visible, /보존/);
   assert.doesNotMatch(visible, /숨김/);
 });
+
+test("a callout's own title is the rest of its marker line, not the start of its body", () => {
+  const titled = parseEditorialDocument(["> [!note] 회의 **메모**", "> 콜아웃 본문 첫 줄입니다.", "> - 항목"].join("\n"), "t");
+  const callout = titled.blocks.find((block) => block.type === "callout");
+  assert.ok(callout && callout.type === "callout");
+  assert.equal(callout.kind, "note");
+  assert.equal(editorialPlainText(callout.title ?? []), "회의 메모");
+  assert.ok(callout.title?.some((inline) => inline.type === "styled"), "emphasis in the title is kept");
+  const first = callout.blocks[0];
+  assert.ok(first.type === "paragraph");
+  assert.equal(editorialPlainText(first.inlines), "콜아웃 본문 첫 줄입니다.");
+
+  const bare = parseEditorialDocument(["> [!tip]", "> 본문만 있음"].join("\n"), "t").blocks[0];
+  assert.ok(bare.type === "callout" && bare.title === undefined);
+  assert.equal(editorialPlainText((bare.blocks[0] as { inlines: [] }).inlines), "본문만 있음");
+
+  const titleOnly = parseEditorialDocument("> [!warning]- 주의만", "t").blocks[0];
+  assert.ok(titleOnly.type === "callout");
+  assert.equal(titleOnly.collapsed, true);
+  assert.equal(editorialPlainText(titleOnly.title ?? []), "주의만");
+  assert.equal(titleOnly.blocks.length, 0);
+
+  const quote = parseEditorialDocument("> 그냥 인용 [!note] 아님", "t").blocks[0];
+  assert.equal(quote.type, "quote", "a marker that does not open the quote is text");
+});

@@ -162,8 +162,8 @@ describe("built-in DOCX writer: structures (R-031)", () => {
       [
         ["BlockText", "인용"],
         ["BlockText", "속 인용"],
-        ["CalloutTitle", "WARNING"],
-        ["CalloutBody", "주의 본문"],
+        ["CalloutTitle", "주의"],
+        ["CalloutBody", "본문"],
         ["SourceCode", "const a = 1;  indented();"]
       ]
     );
@@ -466,7 +466,8 @@ describe("built-in DOCX writer: package (R-031)", () => {
       "| 실습과목 | 12개 | 14개 | [안내](https://www.hallym.ac.kr/) |",
       "| AI 크레딧 | 없음 | 과목당 30만 원 | 앵커 예산 |",
       "인용문 둘째 문단이다.",
-      "NOTE",
+      "참고",
+      "콜아웃 본문 첫 줄이다.",
       "- 콜아웃 안 목록",
       "def credit(course):",
       "강제 줄바꿈 뒤의 줄이다."

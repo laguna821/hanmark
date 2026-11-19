@@ -662,7 +662,10 @@ function renderEditorialBlocks(blocks: EditorialBlock[], locale: Locale): string
       return `<blockquote class="hanmark-quote">${renderEditorialBlocks(block.blocks, locale)}</blockquote>`;
     }
     if (block.type === "callout") {
-      return `<aside class="hanmark-callout" data-callout="${escapeAttribute(block.kind)}">${renderEditorialBlocks(block.blocks, locale)}</aside>`;
+      const heading = block.title?.length
+        ? renderEditorialInlines(block.title)
+        : escapeHtml(block.kind.charAt(0).toUpperCase() + block.kind.slice(1));
+      return `<aside class="hanmark-callout" data-callout="${escapeAttribute(block.kind)}"><p class="hanmark-callout-title">${heading}</p>${renderEditorialBlocks(block.blocks, locale)}</aside>`;
     }
     if (block.type === "list") {
       const tag = block.ordered ? "ol" : "ul";
@@ -802,6 +805,7 @@ h4.hanmark-heading, h5.hanmark-heading, h6.hanmark-heading { font-size: 1.08rem;
 }
 .hanmark-quote .hanmark-body:last-child,
 .hanmark-callout .hanmark-body:last-child { margin-bottom: 0; }
+.hanmark-callout-title { margin: 0 0 .5em; font-weight: 700; }
 a { color: var(--hanmark-blue); text-decoration-thickness: .08em; text-underline-offset: .15em; }
 .hanmark-wikilink { color: var(--hanmark-blue); }
 img {

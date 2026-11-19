@@ -4,6 +4,7 @@ import type {
   EditorialInline
 } from "./editorialDocument";
 import {
+  editorialPlainText,
   parseEditorialDocument,
   safeEditorialImageUrl
 } from "./editorialDocument";
@@ -1345,6 +1346,11 @@ export function createEditorialPdfStyles(
     text-transform: uppercase;
   }
 
+  .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-callout-label.has-title {
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body pre,
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body table,
   .${EDITORIAL_PDF_ROOT_CLASS} .hanmark-editorial-pdf-body img {
@@ -2291,7 +2297,7 @@ function appendBlocks(
           appendEditorialPdfContainerFallback(
             ownerDocument,
             parent,
-            block.kind,
+            block.title?.length ? editorialPlainText(block.title) : block.kind,
             block.blocks,
             depth,
             deferTableLayout,
@@ -2303,8 +2309,10 @@ function appendBlocks(
         callout.className = "hanmark-editorial-pdf-callout";
         const label = createHtmlElement(ownerDocument, "p");
         label.className = "hanmark-editorial-pdf-callout-label";
+        // The callout's own title as written (no capitals forced); else its kind.
+        if (block.title?.length) label.classList.add("has-title");
         label.textContent = truncateEditorialPdfFallbackLabel(
-          block.kind,
+          block.title?.length ? editorialPlainText(block.title) : block.kind,
           "CALLOUT"
         );
         callout.appendChild(label);

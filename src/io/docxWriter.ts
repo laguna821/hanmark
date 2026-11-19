@@ -725,7 +725,8 @@ class DocxBuilder {
         });
       } else if (block.type === "callout") {
         if (block.collapsed !== undefined) this.note("callout-fold");
-        output += this.p(textRun(block.kind.toUpperCase(), {}), {
+        const heading = block.title?.length ? this.inlines(block.title, context.rels) : textRun(block.kind.toUpperCase(), {});
+        output += this.p(heading, {
           style: STYLE.calloutTitle,
           indent: context.indent,
           keepNext: block.blocks.length > 0
