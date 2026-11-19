@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import type { App, TFile } from "obsidian";
 import { renderHwpxToSvg, validateHwpx } from "kordoc";
@@ -12,6 +13,7 @@ import {
   activeGongmunTemplate,
   listGongmunStyleChoices,
   newGongmunTemplateRecord,
+  normalizeCoverLogoRecord,
   normalizeTemplateLibrary,
   putGongmunTemplateInMemory,
   setActiveGongmunTemplateInMemory,
@@ -350,6 +352,55 @@ describe("built-in Hallym institution styles", () => {
       assert.ok(Math.abs(box.x + box.width / 2 - rendered.width / 2) < 1, "centred on the paper");
       assert.ok(box.y > 841.89 * 0.6 && box.y + box.height < 841.89 - 80, `bottom third: ${box.y}`);
     }
+  });
+
+  it("puts the user's own logo on every kind of cover, and nowhere without a cover", async () => {
+    const plugin = host();
+    const png = readFileSync("assets/cover-logos/hallym-emblem.png");
+    const record = putGongmunTemplateInMemory(plugin, {
+      ...newGongmunTemplateRecord(plugin, "국토 표지", { agency: "국토교통부", cover: true }, "gaejosik"),
+      coverLogo: { name: "logo.png", data: png.toString("base64"), mime: "image/png", width: 640, height: 640, widthMm: 999, bottomMm: 40 }
+    });
+    assert.equal(record.coverLogo?.widthMm, 120, "the width is kept in range");
+    const choice = listGongmunStyleChoices(plugin).find((item) => item.id === record.id);
+    assert.equal(choice?.finish?.cover?.logo?.key, "mine");
+    const logo = { ...choice!.finish!.cover!.logo!, widthMm: 30 };
+    for (const preset of ["report", "plan", "gaejosik", "ministry", "bangchim", "official", "press"] as const) {
+      for (const cover of [true, false]) {
+        const generated = await generateValidatedHwpx("# 정책 보고\n\n## 배경\n\n- 내용\n", {
+          gongmun: resolveGongmunOptions({ preset, style: { cover } }),
+          gongmunFinish: { cover: { logo } },
+          gongmunTitle: "보고"
+        });
+        assert.equal(generated.validation.ok, true);
+        const zip = await JSZip.loadAsync(generated.data);
+        const placed = !!zip.file("BinData/hanmark_logo_mine.png");
+        const expected = cover && preset !== "official" && preset !== "press";
+        assert.equal(placed, expected, `${preset} cover=${cover}`);
+        if (!expected) continue;
+        const rendered = await renderHwpxToSvg(generated.data, { reflow: true });
+        assert.equal(rendered.regions.find((region) => region.type === "image")?.page, 1, preset);
+      }
+    }
+    // A JPEG keeps its type in the package.
+    const jpeg = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==", "base64");
+    const generated = await generateValidatedHwpx("# 보고\n\n## 배경\n\n- 내용\n", {
+      gongmun: resolveGongmunOptions({ preset: "gaejosik" }),
+      gongmunFinish: { cover: { logo: { key: "mine", widthMm: 30, bottomMm: 32, image: { data: jpeg.toString("base64"), mime: "image/jpeg", width: 1, height: 1 } } } },
+      gongmunTitle: "보고"
+    });
+    const zip = await JSZip.loadAsync(generated.data);
+    assert.ok(zip.file("BinData/hanmark_logo_mine.jpg"));
+    assert.match(await zip.file("Contents/content.hpf")!.async("string"), /href="BinData\/hanmark_logo_mine\.jpg" media-type="image\/jpeg"/u);
+  });
+
+  it("keeps only usable cover logos in a user look", () => {
+    const base = { name: "a.png", data: "iVBORw0KGgo=", mime: "image/png", width: 10, height: 10, widthMm: 30, bottomMm: 32 };
+    assert.ok(normalizeCoverLogoRecord(base));
+    assert.equal(normalizeCoverLogoRecord({ ...base, mime: "image/svg+xml" }), undefined);
+    assert.equal(normalizeCoverLogoRecord({ ...base, data: "<svg>" }), undefined);
+    assert.equal(normalizeCoverLogoRecord({ ...base, width: 0 }), undefined);
+    assert.deepEqual([normalizeCoverLogoRecord({ ...base, widthMm: 1, bottomMm: "45" })?.widthMm, normalizeCoverLogoRecord({ ...base, bottomMm: "45" })?.bottomMm], [10, 45]);
   });
 
   it("leaves other covers without a logo", async () => {

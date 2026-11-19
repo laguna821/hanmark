@@ -12,7 +12,7 @@ import {
 } from "./documentStylePresets";
 import type { GongmunOutlineStyle } from "./gongmunOutline";
 import { normalizeGongmunStyleOptions, type CoverDateFormat, type GongmunStyleOptions } from "./gongmunStyle";
-import type { GongmunFinishSpec } from "./hwpxFinish";
+import type { CoverLogoImage, GongmunFinishSpec } from "./hwpxFinish";
 import { BUILTIN_GONGMUN_STYLES, builtinGongmunStyle, isBuiltinGongmunStyleId } from "./institutionStyles";
 import {
   choiceOfPreset,
@@ -73,8 +73,47 @@ export interface GongmunTemplateRecord {
   preset?: GongmunPreset;
   /** A look learned from a sample HWPX (R-036): the document is made from the sample's own shapes. */
   sample?: SampleLookRecord;
+  /** The user's logo at the bottom of the cover (3.0.0); only documents with a cover show it. */
+  coverLogo?: CoverLogoRecord;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A cover logo kept in a user look: the picture, its file name, and where it goes. */
+export interface CoverLogoRecord extends CoverLogoImage {
+  name: string;
+  widthMm: number;
+  bottomMm: number;
+}
+
+/** Largest stored logo picture (bytes); larger pictures are redrawn smaller before saving. */
+export const COVER_LOGO_MAX_BYTES = 1024 * 1024;
+export const COVER_LOGO_DEFAULT = { widthMm: 30, bottomMm: 32 } as const;
+export const COVER_LOGO_WIDTH_MM = { min: 10, max: 120 } as const;
+export const COVER_LOGO_BOTTOM_MM = { min: 10, max: 200 } as const;
+
+function clampNumber(value: unknown, range: { min: number; max: number }, fallback: number): number {
+  const number = typeof value === "string" ? Number(value) : value;
+  if (typeof number !== "number" || !Number.isFinite(number)) return fallback;
+  return Math.round(Math.min(range.max, Math.max(range.min, number)) * 10) / 10;
+}
+
+/** A stored cover logo, or undefined when it is not a usable PNG or JPEG picture. */
+export function normalizeCoverLogoRecord(value: unknown): CoverLogoRecord | undefined {
+  if (!isRecord(value)) return undefined;
+  const { data, mime, width, height } = value;
+  if (mime !== "image/png" && mime !== "image/jpeg") return undefined;
+  if (typeof data !== "string" || !data || data.length > Math.ceil(COVER_LOGO_MAX_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(data)) return undefined;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || (width as number) <= 0 || (height as number) <= 0) return undefined;
+  return {
+    name: cleanName(value.name, "logo"),
+    data,
+    mime,
+    width: width as number,
+    height: height as number,
+    widthMm: clampNumber(value.widthMm, COVER_LOGO_WIDTH_MM, COVER_LOGO_DEFAULT.widthMm),
+    bottomMm: clampNumber(value.bottomMm, COVER_LOGO_BOTTOM_MM, COVER_LOGO_DEFAULT.bottomMm)
+  };
 }
 
 /** Looks kept at the top of the look chooser (R-030). */
@@ -219,6 +258,7 @@ function normalizedGongmunRecord(value: unknown, fallbackId?: string): GongmunTe
     ...(tableStyle ? { tableStyle } : {}),
     ...(isGongmunPreset(value.preset) ? { preset: value.preset } : {}),
     ...(normalizeSampleLookRecord(value.sample) ? { sample: normalizeSampleLookRecord(value.sample) } : {}),
+    ...(normalizeCoverLogoRecord(value.coverLogo) ? { coverLogo: normalizeCoverLogoRecord(value.coverLogo) } : {}),
     createdAt,
     updatedAt
   };
@@ -626,7 +666,16 @@ function customChoice(record: GongmunTemplateRecord): GongmunStyleChoice {
     const finish = sampleLookFinish(record.sample);
     if (finish) choice.finish = finish;
   }
+  const logo = coverLogoFinish(record.coverLogo);
+  if (logo) choice.finish = { ...choice.finish, ...logo };
   return choice;
+}
+
+/** The finishing that puts a user look's logo on the cover. */
+export function coverLogoFinish(logo: CoverLogoRecord | undefined): GongmunFinishSpec | undefined {
+  if (!logo) return undefined;
+  const { name: _name, widthMm, bottomMm, ...image } = logo;
+  return { cover: { logo: { key: "mine", widthMm, bottomMm, image } } };
 }
 
 /** Built-in styles first (in their catalog order), then the user's styles by name. */

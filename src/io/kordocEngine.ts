@@ -28,6 +28,7 @@ import { finalizeHwpxPackage } from "./hwpxPostProcess";
 import { openSampleLook, type SampleLookRecord } from "./sampleLook";
 import { applyScriptRunsToHwpx, markScriptTags } from "./hwpxScriptRuns";
 import { finishGongmunHwpx, type GongmunFinishSpec } from "./hwpxFinish";
+import { gongmunCoverIsOn } from "./gongmunStyle";
 import { paragraphSignature, prepareGongmunMarkdown, type GongmunOutlineStyle } from "./gongmunOutline";
 import {
   fontSubstitutionSummary,
@@ -380,8 +381,14 @@ export async function generateValidatedHwpxFromAdapted(
   const closing = closingLine ? { key: paragraphSignature(closingLine) } : undefined;
   // Every official-document style draws titles and headings in frames sized for one line (R-027).
   const fitFrames = !!options.gongmun;
-  if (options.gongmunFinish || paragraphs || closing || fitFrames) {
-    finalData = (await finishGongmunHwpx(finalData, { ...options.gongmunFinish, paragraphs, closing, fitFrames })).data;
+  // A cover logo only where the document has a cover (a frame switch or the note can turn it off).
+  let finish = options.gongmunFinish;
+  if (finish?.cover?.logo && !(options.gongmun && gongmunCoverIsOn(options.gongmun))) {
+    const { logo: _logo, ...cover } = finish.cover;
+    finish = { ...finish, cover: Object.keys(cover).length ? cover : undefined };
+  }
+  if (finish || paragraphs || closing || fitFrames) {
+    finalData = (await finishGongmunHwpx(finalData, { ...finish, paragraphs, closing, fitFrames })).data;
   }
 
   // Footnote numbers, repeated header rows, and fixed ZIP timestamps (R-018 M2).

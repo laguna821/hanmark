@@ -198,6 +198,11 @@ export function resolveGongmunOptions(input: {
 /** How a cover without a date shows the export day: "2026. 9." or "2026. 9. 29.". */
 export type CoverDateFormat = "month" | "day";
 
+/** Whether the document gets a cover (the note, the form, or the type's default). */
+export function gongmunCoverIsOn(options: GongmunOptions): boolean {
+  return coverIsOn(options, normalizeGongmunPreset(options.preset));
+}
+
 function coverIsOn(options: GongmunOptions, preset: GongmunPreset): boolean {
   if (preset === "press") return false;
   return options.cover !== undefined ? options.cover !== false : preset === "gaejosik" || preset === "ministry";

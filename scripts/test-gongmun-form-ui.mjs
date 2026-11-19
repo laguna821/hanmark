@@ -45,6 +45,7 @@ proto.setText = function(text) { this.textContent = text; };
 Element.prototype.addClass = function(...values) { this.classList.add(...values); };
 Element.prototype.removeClass = function(...values) { this.classList.remove(...values); };
 Element.prototype.toggleClass = function(value, on) { this.classList.toggle(value, on); };
+Element.prototype.setAttr = function(key, value) { this.setAttribute(key, String(value)); };
 Element.prototype.setCssProps = function(props) { for (const [key, value] of Object.entries(props)) this.style.setProperty(key, value); };
 Object.defineProperty(Node.prototype, "doc", { get() { return this.ownerDocument || this; } });
 Object.defineProperty(Node.prototype, "win", { get() { return (this.ownerDocument || this).defaultView; } });
@@ -140,7 +141,8 @@ const sampleLookOnly = (name) => () => { throw new Error("Kordoc " + name + " is
 `;
 
 const fixtures = {
-  kordocEngine: `export async function renderQuickHwpxPreview() {
+  kordocEngine: `export async function renderQuickHwpxPreview(markdown, options) {
+    globalThis.lastPreviewOptions = options;
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 595 842" width="595pt" height="842pt"><g data-page="1"><rect width="595" height="842" fill="#fff"/></g></svg>';
     return { render: { svg, warnings: [], pageCount: 1, width: 595, height: 842 }, warnings: [], imageCount: 0, embeddedImageCount: 0, embeddedImageOccurrences: 0, imageFailures: [] };
   }`,
@@ -583,7 +585,7 @@ try {
     globalThis.styleChanged = [];
     globalThis.styleModal = new FormUi.GongmunStyleModal({}, {
       templateHost: plugin,
-      gateway: {},
+      gateway: { pickFiles: async () => (globalThis.logoFile ? [globalThis.logoFile] : []) },
       lookPicker: pickerHost,
       changed: (id) => styleChanged.push(id)
     }, null, "report");
@@ -614,13 +616,50 @@ try {
   await page.locator(".hanmark-gongmun-style-form input[type=text]").first().fill("학과 계획서");
   await page.waitForSelector(".hanmark-gongmun-style-paper svg");
   await page.locator(".hanmark-gongmun-style-modal").screenshot({ path: `${out}/08-style-window-frame-and-look.png` });
+
+  // 표지 로고 (3.0.0): an SVG the user chooses is drawn into a PNG, shown, sized, and sent to the preview.
+  const logoSvg = [...readFileSync("assets/cover-logos/hallym-emblem.svg")];
+  await page.evaluate((bytes) => { globalThis.logoFile = { name: "기관 로고.svg", bytes: new Uint8Array(bytes) }; }, logoSvg);
+  const logoSetting = page.locator(".hanmark-cover-logo-setting");
+  assert.match(await logoSetting.innerText(), /표지 로고[\s\S]*정부상징/u, "the rights note is shown before a logo is chosen");
+  await logoSetting.getByRole("button", { name: "그림 고르기" }).click();
+  await page.waitForSelector(".hanmark-cover-logo-thumb");
+  assert.match(await page.locator(".hanmark-cover-logo-setting .setting-item-description").innerText(), /기관 로고\.svg \(1200×1200px\)/u);
+  await page.locator('[data-hanmark-logo="widthMm"]').fill("25");
+  await page.waitForFunction(() => globalThis.lastPreviewOptions?.gongmunFinish?.cover?.logo?.widthMm === 25);
+  const previewLogo = await page.evaluate(() => {
+    const logo = globalThis.lastPreviewOptions.gongmunFinish.cover.logo;
+    return { mime: logo.image.mime, width: logo.image.width, png: logo.image.data.startsWith("iVBORw0KGgo"), bottomMm: logo.bottomMm, cover: globalThis.lastPreviewOptions.gongmun.cover };
+  });
+  assert.deepEqual(previewLogo, { mime: "image/png", width: 1200, png: true, bottomMm: 32, cover: true });
+  await page.locator(".hanmark-cover-logo-setting").scrollIntoViewIfNeeded();
+  await page.locator(".hanmark-gongmun-style-modal").screenshot({ path: `${out}/09-style-window-cover-logo.png` });
+  await page.locator('[data-hanmark-logo="bottomMm"]').fill("5");
+  await page.waitForTimeout(700);
+  assert.equal(await page.evaluate(() => globalThis.lastPreviewOptions.gongmunFinish.cover.logo.bottomMm), 32, "a distance out of range is not taken");
   await page.locator(".hanmark-gongmun-style-modal .hanmark-dialog-actions .mod-cta").click();
   await page.waitForFunction(() => styleChanged.length === 1);
   const savedStyle = await page.evaluate(() => {
     const record = FormUi.library.listGongmunTemplates(plugin).at(-1);
-    return { name: record.name, preset: record.preset, agency: record.options.agency, look: FormUi.looks.listGongmunLooks(plugin, "report").some((look) => look.id === record.id) };
+    return {
+      name: record.name,
+      preset: record.preset,
+      agency: record.options.agency,
+      cover: record.options.cover,
+      logo: record.coverLogo && { name: record.coverLogo.name, mime: record.coverLogo.mime, width: record.coverLogo.width, widthMm: record.coverLogo.widthMm, bottomMm: record.coverLogo.bottomMm },
+      finish: FormUi.library.gongmunStyleById(plugin, record.id).finish.cover.logo.key,
+      look: FormUi.looks.listGongmunLooks(plugin, "report").some((look) => look.id === record.id)
+    };
   });
-  assert.deepEqual(savedStyle, { name: "학과 계획서", preset: "plan", agency: "국세청", look: true });
+  assert.deepEqual(savedStyle, {
+    name: "학과 계획서",
+    preset: "plan",
+    agency: "국세청",
+    cover: true,
+    logo: { name: "기관 로고.svg", mime: "image/png", width: 1200, widthMm: 25, bottomMm: 32 },
+    finish: "mine",
+    look: true
+  });
 
   assert.deepEqual(await page.evaluate(() => globalThis.notices), ["내 양식을 저장했습니다: 학과 계획서"]);
   console.log("Form UI: frame select, searchable look chooser (filter, keyboard, small-sample mark), switches, favorites, recent looks, per-note memory, preview toolbar, several forms at once with a look per frame, chooser placement, and the style window in the frame-and-look model passed.");

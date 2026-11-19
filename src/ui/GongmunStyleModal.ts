@@ -6,6 +6,10 @@ import {
   type GongmunStyleOptions
 } from "../io/gongmunStyle";
 import {
+  COVER_LOGO_BOTTOM_MM,
+  COVER_LOGO_WIDTH_MM,
+  coverLogoFinish,
+  normalizeCoverLogoRecord,
   deleteGongmunTemplateInMemory,
   listGongmunTemplates,
   newGongmunTemplateRecord,
@@ -40,6 +44,7 @@ import { safeFileLabel } from "../io/exportFileNames";
 import { renderSampleLookPanel, VaultFilePickModal, type SampleSource } from "./sampleLookPanel";
 import { bytesAsArrayBuffer, type FileGateway } from "../io/fileGateway";
 import { appendSanitizedSvg } from "./svgSanitize";
+import { COVER_LOGO_EXTENSIONS, COVER_LOGO_PICK_MAX_BYTES, coverLogoFromFile } from "./coverLogoPick";
 import { confirmAction } from "./dialogs";
 import { errorMessage } from "../utils/errors";
 import { t, tKey, type MessageKey } from "../i18n";
@@ -321,6 +326,7 @@ export class GongmunStyleModal extends Modal {
     this.toggle(form, "gongmun.style.centerTitle.name", "centerTitle");
     this.toggle(form, "gongmun.style.suppressSingle.name", "suppressSingle");
     this.toggle(form, "gongmun.style.autoFit.name", "autoFit");
+    this.renderCoverLogo(form);
 
     new Setting(form)
       .setName(t("gongmun.style.approval.name"))
@@ -385,6 +391,71 @@ export class GongmunStyleModal extends Modal {
     save.onclick = () => void this.save();
     form.scrollTop = scrolled;
     this.schedulePreview(0);
+  }
+
+  /**
+   * 표지 로고 (3.0.0): a picture centred at the bottom of the cover, for documents of
+   * this look that have a cover. The user brings the logo; HanMark ships none for them.
+   */
+  private renderCoverLogo(form: HTMLElement): void {
+    const logo = this.draft.coverLogo;
+    const setting = new Setting(form)
+      .setName(t("gongmun.style.logo.name"))
+      .setDesc(logo ? t("gongmun.style.logo.current", { name: logo.name, width: logo.width, height: logo.height }) : t("gongmun.style.logo.desc"))
+      .addButton((button) =>
+        button.setButtonText(logo ? t("gongmun.style.logo.change") : t("gongmun.style.logo.pick")).onClick(() => void this.pickCoverLogo())
+      );
+    setting.settingEl.addClass("hanmark-cover-logo-setting");
+    if (!logo) return;
+    setting.addButton((button) =>
+      button.setButtonText(t("gongmun.style.logo.remove")).onClick(() => {
+        const { coverLogo: _removed, ...rest } = this.draft;
+        this.draft = rest;
+        this.render();
+      })
+    );
+    const thumb = setting.controlEl.createEl("img", {
+      cls: "hanmark-cover-logo-thumb",
+      attr: { src: `data:${logo.mime};base64,${logo.data}`, alt: logo.name }
+    });
+    setting.controlEl.prepend(thumb);
+    const place = new Setting(form).setName(t("gongmun.style.logo.place")).setDesc(t("gongmun.style.logo.placeDesc"));
+    const number = (key: "widthMm" | "bottomMm", label: string, range: { min: number; max: number }): void => {
+      place.addText((input) => {
+        input.setValue(String(logo[key])).setPlaceholder(label);
+        input.inputEl.addClass("hanmark-gongmun-style-number");
+        input.inputEl.setAttr("aria-label", label);
+        input.inputEl.dataset.hanmarkLogo = key;
+        input.onChange((value) => {
+          const current = this.draft.coverLogo;
+          const parsed = Number(value);
+          if (!current || !Number.isFinite(parsed) || parsed < range.min || parsed > range.max) return;
+          this.draft = { ...this.draft, coverLogo: normalizeCoverLogoRecord({ ...current, [key]: parsed }) ?? current };
+          this.schedulePreview();
+        });
+      });
+    };
+    number("widthMm", t("gongmun.style.logo.width"), COVER_LOGO_WIDTH_MM);
+    number("bottomMm", t("gongmun.style.logo.bottom"), COVER_LOGO_BOTTOM_MM);
+  }
+
+  private async pickCoverLogo(): Promise<void> {
+    try {
+      const [picked] = await this.host.gateway.pickFiles({
+        title: t("gongmun.style.logo.pick"),
+        extensions: COVER_LOGO_EXTENSIONS,
+        multiple: false,
+        maxFileBytes: COVER_LOGO_PICK_MAX_BYTES
+      });
+      if (!picked) return;
+      const logo = await coverLogoFromFile(this.modalEl.doc, picked.name, picked.bytes, this.draft.coverLogo);
+      this.draft = { ...this.draft, coverLogo: logo };
+      // A logo is drawn on the cover, so a form that left the cover to its type turns it on.
+      if (this.get("cover") === undefined) this.raw.cover = true;
+      this.render();
+    } catch (error: unknown) {
+      new Notice(t("gongmun.style.logo.failed", { detail: errorMessage(error) }));
+    }
   }
 
   private renderSamplePanel(form: HTMLElement): void {
@@ -611,7 +682,9 @@ export class GongmunStyleModal extends Modal {
     // With the fixed text the user chose to remove already gone, as it will be after saving.
     const sample = await this.cleanedSample();
     if (sample?.use === "template") return { sampleLook: sample };
-    const finish = sample ? sampleLookFinish(sample) : undefined;
+    const sampleFinish = sample ? sampleLookFinish(sample) : undefined;
+    const logoFinish = coverLogoFinish(this.draft.coverLogo);
+    const finish = sampleFinish || logoFinish ? { ...sampleFinish, ...logoFinish } : undefined;
     return {
       gongmun: resolveGongmunOptions({ preset: this.previewPreset, style: this.savedOptions() }),
       profile: this.draft.tableStyle,

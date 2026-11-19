@@ -72,15 +72,25 @@ export interface GongmunFinishSpec {
   fitFrames?: boolean;
 }
 
+/** A logo picture: PNG or JPEG bytes (base64) and their pixel size. */
+export interface CoverLogoImage {
+  data: string;
+  mime: "image/png" | "image/jpeg";
+  width: number;
+  height: number;
+}
+
 /**
- * A logo drawn at the bottom of the cover (3.0.0): a picture from coverLogoData.ts,
- * centred on the paper and anchored to it, so it stays in place however long the
- * title runs. Sizes are millimetres; `bottomMm` is the paper's lower edge to the logo.
+ * A logo drawn at the bottom of the cover (3.0.0): a picture centred on the paper and
+ * anchored to it, so it stays in place however long the title runs. A built-in look
+ * names a picture of coverLogoData.ts by `key`; the user's own look carries its
+ * `image`. Sizes are millimetres; `bottomMm` is the paper's lower edge to the logo.
  */
 export interface CoverLogo {
   key: string;
   widthMm: number;
   bottomMm: number;
+  image?: CoverLogoImage;
 }
 
 export interface FinishedXml {
@@ -89,7 +99,7 @@ export interface FinishedXml {
   /** Operations that found nothing to change (for tests and diagnostics). */
   missed: string[];
   /** Cover logos placed in the section; their pictures go into the package. */
-  logos?: string[];
+  logos?: CoverLogo[];
 }
 
 // i18n-data-begin: Kordoc's own marker glyphs, cover labels, and colors matched in its XML
@@ -718,10 +728,16 @@ export function coverLogoItemId(key: string): string {
   return `hanmark_logo_${key.replace(/[^A-Za-z0-9]/g, "_")}`;
 }
 
+function coverLogoImage(logo: CoverLogo): CoverLogoImage | undefined {
+  if (logo.image) return logo.image;
+  const builtIn = COVER_LOGO_DATA[logo.key];
+  return builtIn ? { data: builtIn.png, mime: "image/png", width: builtIn.width, height: builtIn.height } : undefined;
+}
+
 /** Kordoc's picture XML with the position of a logo anchored to the paper. */
 function coverLogoPicXml(logo: CoverLogo): string | null {
-  const data = COVER_LOGO_DATA[logo.key];
-  if (!data) return null;
+  const data = coverLogoImage(logo);
+  if (!data || data.width <= 0 || data.height <= 0) return null;
   const w = Math.round(logo.widthMm * HU_PER_MM);
   const h = Math.round((w * data.height) / data.width);
   const id = COVER_LOGO_PIC_ID;
@@ -740,22 +756,37 @@ function coverLogoPicXml(logo: CoverLogo): string | null {
 }
 
 /**
- * Anchors the logo to the first empty paragraph after the title frame: that one is
- * on the cover page whatever follows it.
+ * Anchors the logo to a text run of the cover's own paragraphs (not one in a table cell,
+ * not the first paragraph that holds the page setup): the first empty one after the
+ * title frame, else the first such run. It is on the cover page whatever follows it.
  */
 function placeCoverLogo(region: string, logo: CoverLogo): string | null {
   const pic = coverLogoPicXml(logo);
   if (!pic) return null;
-  const frameEnd = region.indexOf("</hp:tbl>");
-  const empty = /<hp:run charPrIDRef="\d+"><hp:t><\/hp:t><\/hp:run>/g;
-  empty.lastIndex = frameEnd < 0 ? 0 : frameEnd;
-  const at = empty.exec(region);
-  if (!at) return null;
-  const runOpen = at[0].indexOf("<hp:t>");
-  return region.slice(0, at.index) + at[0].slice(0, runOpen) + pic + at[0].slice(runOpen) + region.slice(at.index + at[0].length);
+  const firstParagraphEnd = region.indexOf("</hp:p>");
+  const firstFrameEnd = region.indexOf("</hp:tbl>");
+  const token = /<hp:tbl\b|<\/hp:tbl>|<hp:run charPrIDRef="\d+"><hp:t>(<\/hp:t><\/hp:run>)?/g;
+  let depth = 0;
+  let any: number | undefined;
+  let empty: number | undefined;
+  for (const match of region.matchAll(token)) {
+    if (match[0] === "</hp:tbl>") depth = Math.max(0, depth - 1);
+    else if (match[0].startsWith("<hp:tbl")) depth += 1;
+    else if (depth === 0 && match.index > firstParagraphEnd) {
+      any ??= match.index;
+      if (match[1] && match.index > firstFrameEnd) {
+        empty = match.index;
+        break;
+      }
+    }
+  }
+  const at = empty ?? any;
+  if (at === undefined) return null;
+  const textOpen = region.indexOf("<hp:t>", at);
+  return region.slice(0, textOpen) + pic + region.slice(textOpen);
 }
 
-function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinishSpec["cover"], missed: string[], logos: string[] = []): string {
+function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinishSpec["cover"], missed: string[], logos: CoverLogo[] = []): string {
   if (!cover) return section;
   const bodyStart = section.search(/<hp:p\b[^>]*\bpageBreak="1"/);
   if (bodyStart < 0) {
@@ -764,11 +795,20 @@ function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinish
   }
   let region = section.slice(0, bodyStart);
   let rest = section.slice(bodyStart);
-  // Only a real report cover has Kordoc's title bars; anything else is left alone.
+  // Only a real report cover has Kordoc's title bars; the report-cover changes leave
+  // anything else alone. The logo goes on any cover (the caller sends it only with one).
   const barFills = styles.borderFillIdsWithColor(COVER_BAR_COLOR);
   if (![...barFills].some((id) => region.includes(`borderFillIDRef="${id}"`))) {
-    missed.push("cover");
-    return section;
+    const { logo, ...reportCover } = cover;
+    if (Object.keys(reportCover).length) missed.push("cover");
+    if (!logo) return section;
+    const placed = placeCoverLogo(region, logo);
+    if (!placed) {
+      missed.push("cover.logo");
+      return section;
+    }
+    logos.push(logo);
+    return placed + rest;
   }
 
   if (cover.removeInfoBox) {
@@ -822,7 +862,7 @@ function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinish
     const placed = placeCoverLogo(region, cover.logo);
     if (placed) {
       region = placed;
-      logos.push(cover.logo.key);
+      logos.push(cover.logo);
     } else {
       missed.push("cover.logo");
     }
@@ -833,7 +873,7 @@ function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinish
 export function finishGongmunXml(sectionXml: string, headerXml: string, spec: GongmunFinishSpec): FinishedXml {
   const styles = new HeaderStyles(headerXml);
   const missed: string[] = [];
-  const logos: string[] = [];
+  const logos: CoverLogo[] = [];
   let section = sectionXml;
   section = alignParagraphs(section, styles, spec.paragraphs, missed);
   section = spaceClosing(section, styles, spec.closing, missed);
@@ -848,17 +888,17 @@ export function finishGongmunXml(sectionXml: string, headerXml: string, spec: Go
 }
 
 /** Adds each placed logo's picture and its manifest entry to the package. */
-async function addCoverLogos(zip: JSZip, keys: readonly string[]): Promise<void> {
+async function addCoverLogos(zip: JSZip, logos: readonly CoverLogo[]): Promise<void> {
   const manifestEntry = zip.file("Contents/content.hpf");
-  if (!manifestEntry || !keys.length) return;
+  if (!manifestEntry || !logos.length) return;
   let manifest = await manifestEntry.async("text");
-  for (const key of new Set(keys)) {
-    const data = COVER_LOGO_DATA[key];
-    const itemId = coverLogoItemId(key);
-    if (!data || manifest.includes(`id="${itemId}"`)) continue;
-    const href = `BinData/${itemId}.png`;
-    zip.file(href, new Uint8Array(Buffer.from(data.png, "base64")));
-    manifest = manifest.replace("</opf:manifest>", () => `<opf:item id="${itemId}" href="${href}" media-type="image/png" isEmbeded="1"/></opf:manifest>`);
+  for (const logo of logos) {
+    const image = coverLogoImage(logo);
+    const itemId = coverLogoItemId(logo.key);
+    if (!image || manifest.includes(`id="${itemId}"`)) continue;
+    const href = `BinData/${itemId}.${image.mime === "image/jpeg" ? "jpg" : "png"}`;
+    zip.file(href, new Uint8Array(Buffer.from(image.data, "base64")));
+    manifest = manifest.replace("</opf:manifest>", () => `<opf:item id="${itemId}" href="${href}" media-type="${image.mime}" isEmbeded="1"/></opf:manifest>`);
   }
   zip.file("Contents/content.hpf", manifest);
 }
@@ -872,7 +912,7 @@ export async function finishGongmunHwpx(data: ArrayBuffer, spec: GongmunFinishSp
   if (!headerEntry) return { data, missed: ["header"] };
   let header = await headerEntry.async("text");
   const missed: string[] = [];
-  const logos: string[] = [];
+  const logos: CoverLogo[] = [];
   const sections = Object.keys(zip.files).filter((name) => SECTION_ENTRY.test(name)).sort();
   for (const name of sections) {
     const finished = finishGongmunXml(await zip.file(name)!.async("text"), header, spec);

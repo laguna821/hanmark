@@ -23,7 +23,8 @@ Kordoc 4.25.0 with its PDF engine built in; official documents chosen as a frame
 - **Hangul document viewer:** open `.hwp` and `.hwpx` files inside Obsidian (read-only) and convert, compare, or make a form note from the viewer.
 - **Stronger HWPX:** real footnotes that Hancom Office numbers, clickable hyperlinks, and long tables that split across pages with the header row repeated. The same note always produces the same file.
 - **Official documents:** eight types (the ministry briefing is new), chosen with the Hallym University forms and your own forms from one form list, institution styles with a live preview, cover, approval, heading, and closing blocks filled from note properties (Korean keys such as `공문_수신` or English aliases such as `gongmun-to`), a button that inserts the properties a type needs, an official-style notation check, and a preview. The note's headings become the document's levels (for example 1. → 가. → 1) in a draft letter), and a note without a `#` title uses its file name.
-- **Built-in Hallym University forms:** Ilsong College of Liberal Arts minutes and meeting materials, and the AI Convergence Research Institute interim report, listed first in the form list.
+- **Built-in Hallym University forms:** Ilsong College of Liberal Arts minutes and meeting materials, and the AI Convergence Research Institute interim report, listed first in the form list. The research institute report cover carries the Hallym University emblem (the university's mark, for Hallym documents only).
+- **Cover logo for your own looks:** add your organization's logo (PNG, JPG, SVG, WebP) to a look of your own; it is centred at the bottom of the cover. Start from one of the 52 agencies to keep its fonts and colours. HanMark ships no government logos, because the government symbol may not be used without permission.
 - **HWPX preview toolbar:** switch between quick HWPX and any official-document form, refresh, and save as HWPX from the preview; it reopens the way it was last used.
 - **Note assembly:** `![[note]]`, `![[note#heading]]`, and `![[note#^block]]` embeds are exported as their actual content in every format and in the preview. Cycles and missing notes are marked. It can be turned off in settings.
 - **Old–new comparison table (신구대조표):** compare two versions of a document (HWP, HWPX, PDF, DOCX, or XLSX, mixed as you like) and get a note with a table of what changed, changed words in bold. Export that note to HWPX or DOCX to submit it.
@@ -181,7 +182,8 @@ PDF 엔진을 내장한 Kordoc 4.25.0, 틀과 모양으로 고르는 공문서(�
 - **한글 파일 보기 화면:** 볼트 안의 `.hwp`·`.hwpx`를 옵시디언에서 읽기 전용으로 열고, 그 화면에서 노트로 변환·다른 문서와 비교·양식 입력 노트 만들기를 할 수 있습니다.
 - **더 강한 HWPX:** 한컴오피스가 번호를 매기는 실제 각주, 누를 수 있는 하이퍼링크, 쪽에서 나뉘며 머리행이 반복되는 긴 표를 만듭니다. 같은 노트는 언제나 같은 파일이 됩니다.
 - **공문서:** 8종(업무보고 추가)을 한림대 양식·내 양식과 함께 "양식" 목록 하나에서 고르고, 실시간 미리보기가 있는 기관 서식, 노트 속성으로 채우는 표지·결재란·두문·결문(`공문_수신` 같은 한국어 키 또는 `gongmun-to` 같은 영어 별칭), 종류별 속성을 한 번에 넣는 버튼, 공문서 표기 점검, 공문서 미리보기를 제공합니다. 노트의 제목 단계가 문서의 단계가 됩니다(예: 기안문 1. → 가. → 1)). `#` 제목이 없는 노트는 파일 이름을 제목으로 씁니다.
-- **한림대학교 내장 양식:** 일송자유교양대학 회의록·회의자료, AI융합연구원 중간 보고서를 양식 목록 맨 위에서 고를 수 있습니다.
+- **한림대학교 내장 양식:** 일송자유교양대학 회의록·회의자료, AI융합연구원 중간 보고서를 양식 목록 맨 위에서 고를 수 있습니다. AI융합연구원 보고서 표지에는 한림대학교 상징이 들어갑니다(학교의 표지이므로 한림대 문서에만 쓰세요).
+- **내 양식 표지 로고:** 내 양식에 기관 로고(PNG·JPG·SVG·WebP)를 넣으면 표지 아래쪽 가운데에 들어갑니다. 52개 중앙행정기관 모양 중 하나에서 시작하면 그 기관의 글꼴·색을 그대로 쓰면서 로고를 더할 수 있습니다. 정부상징은 허락 없이 쓰면 법에 걸릴 수 있어 HanMark에는 정부 로고를 넣지 않았습니다.
 - **HWPX 미리보기 막대:** 미리보기 안에서 빠른 HWPX와 공문서 양식을 바꾸고, 새로 고치고, 바로 HWPX로 저장합니다. 툴바 버튼은 마지막에 쓴 방식으로 미리보기를 엽니다.
 - **노트 조립:** `![[노트]]`, `![[노트#제목]]`, `![[노트#^블록]]` 임베드를 모든 내보내기 형식과 미리보기에서 실제 본문으로 합칩니다. 순환·없는 노트는 표시해 알려 주며 설정에서 끌 수 있습니다.
 - **신구대조표:** 두 판의 문서(HWP·HWPX·PDF·DOCX·XLSX, 형식을 섞어도 됨)를 비교해 바뀐 부분을 표로 정리한 노트를 만들고, 바뀐 낱말은 굵게 표시합니다. 이 노트를 HWPX·DOCX로 내보내면 제출용 대조표가 됩니다.

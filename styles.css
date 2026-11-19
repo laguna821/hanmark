@@ -1224,6 +1224,17 @@
   width: 4.5em;
 }
 
+/* Cover logo of a user look (3.0.0) */
+.hanmark-cover-logo-thumb {
+  max-width: 56px;
+  max-height: 40px;
+  object-fit: contain;
+  padding: 2px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: #ffffff;
+}
+
 /* A look learned from a sample (R-036) */
 .hanmark-sample-look {
   margin: 0 0 12px;
