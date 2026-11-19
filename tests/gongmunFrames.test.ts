@@ -355,7 +355,10 @@ describe("the 2.7.x forms keep their output (R-030)", () => {
         assert.ok(next, old);
         for (const id of [old, next]) {
           const made = await generate(plugin, id);
-          assert.equal(sha(made.section), baseline.forms[old].section, `${id}: section0.xml`);
+          // 3.0.0 adds the Hallym emblem to the AICR cover; everything else stays as recorded.
+          const withoutLogo = made.section.replace(/<hp:pic\b(?:(?!<\/hp:pic>)[\s\S])*?HanMark cover logo<\/hp:shapeComment><\/hp:pic>/gu, "");
+          assert.equal(withoutLogo !== made.section, old === "builtin:hallym-aicr", `${id}: cover logo`);
+          assert.equal(sha(withoutLogo), baseline.forms[old].section, `${id}: section0.xml`);
           assert.equal(sha(made.header), baseline.forms[old].header, `${id}: header.xml`);
         }
       }

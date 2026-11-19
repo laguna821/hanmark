@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { measureTextWidth, simulateWrap, type MeasureOptions } from "kordoc";
+import { COVER_LOGO_DATA } from "./coverLogoData";
 import { paragraphSignature, type GongmunParagraphHint } from "./gongmunOutline";
 
 /**
@@ -46,7 +47,8 @@ export interface GongmunFinishSpec {
   chapter?: { pt?: number; bold?: boolean; blankLineBefore?: boolean };
   /**
    * Report cover: remove the Seoul-style information box, recolor the title bars,
-   * restyle the lines under the title, and drop the title box repeated on page 2.
+   * restyle the lines under the title, drop the title box repeated on page 2, and
+   * put the institution's logo at the bottom of the cover.
    */
   cover?: {
     removeInfoBox?: boolean;
@@ -54,6 +56,7 @@ export interface GongmunFinishSpec {
     barColors?: readonly [string, string];
     linePt?: number;
     lineBold?: boolean;
+    logo?: CoverLogo;
   };
   /**
    * Plain paragraphs of the legal family in order (gongmunOutline.ts). Each moves to
@@ -69,11 +72,24 @@ export interface GongmunFinishSpec {
   fitFrames?: boolean;
 }
 
+/**
+ * A logo drawn at the bottom of the cover (3.0.0): a picture from coverLogoData.ts,
+ * centred on the paper and anchored to it, so it stays in place however long the
+ * title runs. Sizes are millimetres; `bottomMm` is the paper's lower edge to the logo.
+ */
+export interface CoverLogo {
+  key: string;
+  widthMm: number;
+  bottomMm: number;
+}
+
 export interface FinishedXml {
   section: string;
   header: string;
   /** Operations that found nothing to change (for tests and diagnostics). */
   missed: string[];
+  /** Cover logos placed in the section; their pictures go into the package. */
+  logos?: string[];
 }
 
 // i18n-data-begin: Kordoc's own marker glyphs, cover labels, and colors matched in its XML
@@ -694,7 +710,52 @@ function restyleChapters(section: string, styles: HeaderStyles, chapter: Gongmun
   return result;
 }
 
-function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinishSpec["cover"], missed: string[]): string {
+const HU_PER_MM = 7200 / 25.4;
+/** Picture ids from 9 490 000: after Kordoc's own pictures (9 400 000 up) and frames. */
+const COVER_LOGO_PIC_ID = 9_490_001;
+
+export function coverLogoItemId(key: string): string {
+  return `hanmark_logo_${key.replace(/[^A-Za-z0-9]/g, "_")}`;
+}
+
+/** Kordoc's picture XML with the position of a logo anchored to the paper. */
+function coverLogoPicXml(logo: CoverLogo): string | null {
+  const data = COVER_LOGO_DATA[logo.key];
+  if (!data) return null;
+  const w = Math.round(logo.widthMm * HU_PER_MM);
+  const h = Math.round((w * data.height) / data.width);
+  const id = COVER_LOGO_PIC_ID;
+  return (
+    `<hp:pic id="${id}" zOrder="1" numberingType="PICTURE" textWrap="IN_FRONT_OF_TEXT" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" href="" groupLevel="0" instid="${id}" reverse="0" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core">` +
+    `<hp:offset x="0" y="0"/><hp:orgSz width="${w}" height="${h}"/><hp:curSz width="${w}" height="${h}"/><hp:flip horizontal="0" vertical="0"/>` +
+    `<hp:rotationInfo angle="0" centerX="${Math.floor(w / 2)}" centerY="${Math.floor(h / 2)}" rotateimage="1"/>` +
+    `<hp:renderingInfo><hc:transMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/><hc:scaMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/><hc:rotMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/></hp:renderingInfo>` +
+    `<hp:imgRect><hc:pt0 x="0" y="0"/><hc:pt1 x="${w}" y="0"/><hc:pt2 x="${w}" y="${h}"/><hc:pt3 x="0" y="${h}"/></hp:imgRect>` +
+    `<hp:imgClip left="0" right="${w}" top="0" bottom="${h}"/><hp:inMargin left="0" right="0" top="0" bottom="0"/><hp:imgDim dimwidth="${w}" dimheight="${h}"/>` +
+    `<hc:img binaryItemIDRef="${coverLogoItemId(logo.key)}" bright="0" contrast="0" effect="REAL_PIC" alpha="0"/><hp:effects/>` +
+    `<hp:sz width="${w}" widthRelTo="ABSOLUTE" height="${h}" heightRelTo="ABSOLUTE" protect="0"/>` +
+    `<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="0" allowOverlap="1" holdAnchorAndSO="0" vertRelTo="PAPER" horzRelTo="PAPER" vertAlign="BOTTOM" horzAlign="CENTER" vertOffset="${Math.round(logo.bottomMm * HU_PER_MM)}" horzOffset="0"/>` +
+    `<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:shapeComment>HanMark cover logo</hp:shapeComment></hp:pic>`
+  );
+}
+
+/**
+ * Anchors the logo to the first empty paragraph after the title frame: that one is
+ * on the cover page whatever follows it.
+ */
+function placeCoverLogo(region: string, logo: CoverLogo): string | null {
+  const pic = coverLogoPicXml(logo);
+  if (!pic) return null;
+  const frameEnd = region.indexOf("</hp:tbl>");
+  const empty = /<hp:run charPrIDRef="\d+"><hp:t><\/hp:t><\/hp:run>/g;
+  empty.lastIndex = frameEnd < 0 ? 0 : frameEnd;
+  const at = empty.exec(region);
+  if (!at) return null;
+  const runOpen = at[0].indexOf("<hp:t>");
+  return region.slice(0, at.index) + at[0].slice(0, runOpen) + pic + at[0].slice(runOpen) + region.slice(at.index + at[0].length);
+}
+
+function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinishSpec["cover"], missed: string[], logos: string[] = []): string {
   if (!cover) return section;
   const bodyStart = section.search(/<hp:p\b[^>]*\bpageBreak="1"/);
   if (bodyStart < 0) {
@@ -756,12 +817,23 @@ function finishCover(section: string, styles: HeaderStyles, cover: GongmunFinish
       missed.push("cover.removeBodyTitle");
     }
   }
+
+  if (cover.logo) {
+    const placed = placeCoverLogo(region, cover.logo);
+    if (placed) {
+      region = placed;
+      logos.push(cover.logo.key);
+    } else {
+      missed.push("cover.logo");
+    }
+  }
   return region + rest;
 }
 
 export function finishGongmunXml(sectionXml: string, headerXml: string, spec: GongmunFinishSpec): FinishedXml {
   const styles = new HeaderStyles(headerXml);
   const missed: string[] = [];
+  const logos: string[] = [];
   let section = sectionXml;
   section = alignParagraphs(section, styles, spec.paragraphs, missed);
   section = spaceClosing(section, styles, spec.closing, missed);
@@ -769,10 +841,26 @@ export function finishGongmunXml(sectionXml: string, headerXml: string, spec: Go
   section = recolorTableHeaders(section, styles, spec.tableHeader, missed);
   section = restyleTitle(section, styles, spec.title, missed);
   section = restyleChapters(section, styles, spec.chapter, missed);
-  section = finishCover(section, styles, spec.cover, missed);
+  section = finishCover(section, styles, spec.cover, missed, logos);
   // Last, so frames are fitted to their final text and fonts.
   section = fitFrames(section, styles, spec.fitFrames);
-  return { section, header: styles.xml, missed };
+  return { section, header: styles.xml, missed, ...(logos.length ? { logos } : {}) };
+}
+
+/** Adds each placed logo's picture and its manifest entry to the package. */
+async function addCoverLogos(zip: JSZip, keys: readonly string[]): Promise<void> {
+  const manifestEntry = zip.file("Contents/content.hpf");
+  if (!manifestEntry || !keys.length) return;
+  let manifest = await manifestEntry.async("text");
+  for (const key of new Set(keys)) {
+    const data = COVER_LOGO_DATA[key];
+    const itemId = coverLogoItemId(key);
+    if (!data || manifest.includes(`id="${itemId}"`)) continue;
+    const href = `BinData/${itemId}.png`;
+    zip.file(href, new Uint8Array(Buffer.from(data.png, "base64")));
+    manifest = manifest.replace("</opf:manifest>", () => `<opf:item id="${itemId}" href="${href}" media-type="image/png" isEmbeded="1"/></opf:manifest>`);
+  }
+  zip.file("Contents/content.hpf", manifest);
 }
 
 const SECTION_ENTRY = /^Contents\/section\d+\.xml$/;
@@ -784,13 +872,16 @@ export async function finishGongmunHwpx(data: ArrayBuffer, spec: GongmunFinishSp
   if (!headerEntry) return { data, missed: ["header"] };
   let header = await headerEntry.async("text");
   const missed: string[] = [];
+  const logos: string[] = [];
   const sections = Object.keys(zip.files).filter((name) => SECTION_ENTRY.test(name)).sort();
   for (const name of sections) {
     const finished = finishGongmunXml(await zip.file(name)!.async("text"), header, spec);
     header = finished.header;
     missed.push(...finished.missed);
+    logos.push(...(finished.logos ?? []));
     zip.file(name, finished.section);
   }
   zip.file("Contents/header.xml", header);
+  await addCoverLogos(zip, logos);
   return { data: await zip.generateAsync({ type: "arraybuffer" }), missed };
 }

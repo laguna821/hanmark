@@ -706,7 +706,7 @@ export const en: MessageTable = {
     "Hallym Gothic 11 pt, numbered sections (1.) with • and - items, navy table headers, and centered page numbers.",
   "gongmun.builtin.hallymAicr.name": "Hallym University AI Convergence Research Institute report",
   "gongmun.builtin.hallymAicr.desc":
-    "A cover with blue and teal rules, Human Myeongjo, numbered sections and subsections with ○, -, and · items, and page numbers.",
+    "A cover with blue and teal rules and the university emblem at the bottom, Human Myeongjo, numbered sections and subsections with ○, -, and · items, and page numbers.",
   "gongmun.fileName.official": "Draft letter",
   "gongmun.fileName.report": "Report",
   "gongmun.fileName.plan": "Plan",

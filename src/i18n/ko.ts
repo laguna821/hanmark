@@ -631,7 +631,7 @@ export const ko = {
   "gongmun.builtin.hallymIlsong.name": "한림대 일송자유교양대학 (회의록·회의자료)",
   "gongmun.builtin.hallymIlsong.desc": "한림고딕체 11pt, '1.' 절 제목과 •·- 항목, 남색 머리행 표, 가운데 쪽 번호.",
   "gongmun.builtin.hallymAicr.name": "한림대 AI융합연구원 보고서",
-  "gongmun.builtin.hallymAicr.desc": "파랑·청록 선 표지, 휴먼명조, '1.' 제목 → '1)' 소제목 → ○·-·· 본문, 쪽 번호.",
+  "gongmun.builtin.hallymAicr.desc": "파랑·청록 선과 아래쪽 한림대 상징이 있는 표지, 휴먼명조, '1.' 제목 → '1)' 소제목 → ○·-·· 본문, 쪽 번호.",
   // Short form names written into exported file names ("{note} - {form}.hwpx"), in the note's language.
   "gongmun.fileName.official": "기안문",
   "gongmun.fileName.report": "보고서",

@@ -101,7 +101,15 @@ export const BUILTIN_GONGMUN_STYLES: readonly BuiltinGongmunStyle[] = [
     finish: {
       markers: { box0: NUMBERED_PAREN },
       chapter: { pt: 13, bold: true },
-      cover: { removeInfoBox: true, removeBodyTitle: true, barColors: [AICR_BLUE, AICR_TEAL], linePt: 15, lineBold: false }
+      cover: {
+        removeInfoBox: true,
+        removeBodyTitle: true,
+        barColors: [AICR_BLUE, AICR_TEAL],
+        linePt: 15,
+        lineBold: false,
+        // The university emblem centred at the bottom of the cover (assets/cover-logos).
+        logo: { key: "hallym-emblem", widthMm: 29.4, bottomMm: 32 }
+      }
     },
     quietEngineNotes: [SUMMARY_BOX_NOTE],
     // The form's cover shows the full date ("2025. 11. 00").

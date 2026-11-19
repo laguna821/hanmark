@@ -161,6 +161,11 @@ crate (Apache-2.0).
   `scripts/gen-form-templates.mjs`. The underlying form layout is a statutory
   Korean public form.
 - **hayro PDF engine** — see "hayro (PDF engine, WebAssembly)" above.
+- **Hallym University emblem** — the university's own mark, used on the cover of
+  the built-in Hallym AI Convergence Research Institute report look. Kept as SVG
+  and PNG in `assets/cover-logos` and embedded (base64) in
+  `src/io/coverLogoData.ts`. It is not covered by HanMark's license; use it only
+  for Hallym University documents.
 
 #### Test fixture (not part of `main.js`)
 
@@ -353,6 +358,9 @@ Kordoc이 만든 그대로 `third-party-licenses/kordoc-4.25.0/hayro-pdf.txt`에
   바꾸지 않고 `src/io/formTemplateData.ts`에 base64로 넣습니다. 서식 배치 자체는
   법령 부속 공공 서식입니다.
 - **hayro PDF 엔진** — 위 "hayro (PDF 엔진, WebAssembly)" 절을 보세요.
+- **한림대학교 상징** — 학교의 표지로, 내장 모양 "한림대 AI융합연구원 보고서" 표지에
+  씁니다. `assets/cover-logos`에 SVG·PNG로 두고 `src/io/coverLogoData.ts`에 base64로
+  넣습니다. HanMark 라이선스의 대상이 아니며 한림대학교 문서에만 쓰세요.
 
 #### 시험 자료 (`main.js`에 들어가지 않음)
 

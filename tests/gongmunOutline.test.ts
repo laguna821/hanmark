@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import JSZip from "jszip";
 import type { App, TFile } from "obsidian";
-import { validateHwpx } from "kordoc";
+import { renderHwpxToSvg, validateHwpx } from "kordoc";
 import { paragraphSignature, prepareGongmunMarkdown, usesLegalNumbering } from "../src/io/gongmunOutline";
 import { finishGongmunXml } from "../src/io/hwpxFinish";
 import { generateValidatedHwpx, type GenerateHwpxOptions } from "../src/io/kordocEngine";
@@ -321,5 +321,43 @@ describe("built-in Hallym institution styles", () => {
     // 1. chapter → 1) sub-heading → ○ body → - ; a list right under a chapter is body text (○).
     assert.deepEqual(markers(section), ["1)", "○", "-", "○"]);
     assert.match(section, /<hp:t>1\. 주요 추진 내용<\/hp:t>|>1\.<[\s\S]*?주요 추진 내용/u);
+  });
+
+  it("puts the Hallym University emblem at the bottom of the AICR cover, centred on the paper", async () => {
+    for (const title of ["AI 미디어 교육 연구 중간 보고서", "생성형 AI를 활용한 미디어 리터러시 교육 과정 개발과 현장 적용 효과에 관한 연구 중간 보고서"]) {
+      const note = `# ${title}\n\n## 주요 추진 내용\n\n- 적용함\n\n## 개선 사항\n\n- 연수 시간이 부족함\n`;
+      const generated = await generateValidatedHwpx(note, styleOptions("builtin:hallym-aicr"));
+      assert.equal(generated.validation.ok, true);
+      const zip = await JSZip.loadAsync(generated.data);
+      const manifest = await zip.file("Contents/content.hpf")!.async("string");
+      assert.match(manifest, /<opf:item id="hanmark_logo_hallym_emblem" href="BinData\/hanmark_logo_hallym_emblem\.png" media-type="image\/png" isEmbeded="1"\/>/u);
+      const png = await zip.file("BinData/hanmark_logo_hallym_emblem.png")!.async("uint8array");
+      assert.deepEqual([...png.slice(1, 4)], [0x50, 0x4e, 0x47]);
+      const { section } = await sectionAndHeader(generated.data);
+      const cover = section.slice(0, section.search(/<hp:p\b[^>]*\bpageBreak="1"/u));
+      const pic = /<hp:pic\b[\s\S]*?<\/hp:pic>/u.exec(cover)?.[0] ?? "";
+      assert.match(pic, /binaryItemIDRef="hanmark_logo_hallym_emblem"/u, "the logo is on the cover");
+      assert.match(pic, /vertRelTo="PAPER" horzRelTo="PAPER" vertAlign="BOTTOM" horzAlign="CENTER"/u);
+      assert.match(pic, /<hp:sz width="8334"/u, "29.4 mm wide");
+      assert.equal(section.split("hanmark_logo_hallym_emblem").length, 2, "one logo, on the cover only");
+      // Drawn on page 1 below the date, and the cover stays one page.
+      const rendered = await renderHwpxToSvg(generated.data, { reflow: true });
+      assert.equal(rendered.pageCount, 2);
+      assert.equal(rendered.stats.images, 1);
+      const image = rendered.regions.find((region) => region.type === "image");
+      assert.equal(image?.page, 1, title);
+      const box = image!.regions[0];
+      assert.ok(Math.abs(box.x + box.width / 2 - rendered.width / 2) < 1, "centred on the paper");
+      assert.ok(box.y > 841.89 * 0.6 && box.y + box.height < 841.89 - 80, `bottom third: ${box.y}`);
+    }
+  });
+
+  it("leaves other covers without a logo", async () => {
+    const generated = await generateValidatedHwpx("# 보고\n\n## 배경\n\n- 내용\n", {
+      gongmun: resolveGongmunOptions({ preset: "gaejosik" }),
+      gongmunTitle: "보고"
+    });
+    const zip = await JSZip.loadAsync(generated.data);
+    assert.ok(!Object.keys(zip.files).some((name) => name.startsWith("BinData/")));
   });
 });
